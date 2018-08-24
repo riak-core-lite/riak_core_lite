@@ -1,3 +1,8 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2007-2014 Basho Technologies, Inc.
+%% Copyright (c) 2018 Workday, Inc.
+%%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
 %% except in compliance with the License.  You may obtain
@@ -11,8 +16,9 @@
 %% KIND, either express or implied.  See the License for the
 %% specific language governing permissions and limitations
 %% under the License.
+%%
+%% -------------------------------------------------------------------
 
-%% Copyright (c) 2007-2012 Basho Technologies, Inc.  All Rights Reserved.
 -module(riak_core_handoff_manager).
 -behaviour(gen_server).
 
@@ -46,7 +52,8 @@
          set_recv_data/2,
          kill_handoffs/0,
          kill_handoffs_in_direction/1,
-         handoff_change_enabled_setting/2
+         handoff_change_enabled_setting/2,
+         get_num_transfers/2
         ]).
 
 -include("riak_core_handoff.hrl").
@@ -154,6 +161,9 @@ remove_exclusion(Module, Index) ->
 get_exclusions(Module) ->
     gen_server:call(?MODULE, {get_exclusions, Module}, infinity).
 
+get_num_transfers(Direction, Type) ->
+    gen_server:call(?MODULE, {get_num_transfers, Direction, Type}).
+
 
 %%%===================================================================
 %%% Callbacks
@@ -235,7 +245,10 @@ handle_call({kill_in_direction, Direction}, _From, State=#state{handoffs=HS}) ->
     Kill = [H || H=#handoff_status{direction=D} <- HS, D =:= Direction],
     _ = [erlang:exit(Pid, max_concurrency) ||
          #handoff_status{transport_pid=Pid} <- Kill],
-    {reply, ok, State}.
+    {reply, ok, State};
+
+handle_call({get_num_transfers, Direction, Type}, _From, State=#state{handoffs=HS}) ->
+    {reply, length(find_handoffs(HS, Direction, Type)), State}.
 
 handle_cast({del_exclusion, {Mod, Idx}}, State=#state{excl=Excl}) ->
     Excl2 = sets:del_element({Mod, Idx}, Excl),
@@ -255,7 +268,7 @@ handle_cast({status_update, ModSrcTgt, StatsUpdate}, State=#state{handoffs=HS}) 
             lager:error("status_update for non-existing handoff ~p", [ModSrcTgt]),
             {noreply, State};
         HO ->
-            Stats2 = update_stats(StatsUpdate, HO#handoff_status.stats),
+            Stats2 = update_stats(StatsUpdate, HO),
             HO2 = HO#handoff_status{stats=Stats2},
             HS2 = lists:keyreplace(ModSrcTgt, #handoff_status.mod_src_tgt, HS, HO2),
             {noreply, State#state{handoffs=HS2}}
@@ -580,8 +593,10 @@ receive_handoff (SSLOpts) ->
             }
     end.
 
-update_stats(StatsUpdate, Stats) ->
+update_stats(StatsUpdate, #handoff_status{type=Type, stats=Stats}) ->
     #ho_stats{last_update=LU, objs=Objs, bytes=Bytes}=StatsUpdate,
+    update_riak_core_stat(Type, objects, Objs),
+    update_riak_core_stat(Type, bytes, Bytes),
     Stats2 = dict:update_counter(objs, Objs, Stats),
     Stats3 = dict:update_counter(bytes, Bytes, Stats2),
     dict:store(last_update, LU, Stats3).
@@ -650,6 +665,25 @@ handoff_disable(inbound) ->
 handoff_disable(outbound) ->
     application:set_env(riak_core, disable_outbound_handoff, true),
     kill_handoffs_in_direction(outbound).
+
+%% @private
+find_handoffs(HS, Direction, Type) ->
+    lists:filter(
+        fun(#handoff_status{direction=D, type=T}) ->
+            Direction =:= D andalso Type =:= T
+        end,
+        HS
+    ).
+
+%% @private
+update_riak_core_stat(Type, Moniker, Value) ->
+    Key = list_to_atom(
+        atom_to_list(Type) ++
+        "_handoff_" ++
+        atom_to_list(Moniker) ++
+        "_sent"
+    ),
+    riak_core_stat:update(Key, Value).
 
 %%%===================================================================
 %%% Tests
