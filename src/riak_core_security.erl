@@ -496,7 +496,7 @@ authenticate(Username, Password, ConnInfo) ->
                             %% pull the password out of the userdata
                             case lookup("password", UserData) of
                                 undefined ->
-                                    lager:warning("User ~p is configured for "
+                                    logger:warning("User ~p is configured for "
                                                   "password authentication, but has "
                                                   "no password", [Username]),
                                     {error, missing_password};
@@ -536,7 +536,7 @@ authenticate(Username, Password, ConnInfo) ->
                                                           auth_mods, []),
                             case proplists:get_value(Source, AuthMods) of
                                 undefined ->
-                                    lager:warning("User ~p is configured with unknown "
+                                    logger:warning("User ~p is configured with unknown "
                                                   "authentication source ~p",
                                                   [Username, Source]),
                                     {error, unknown_source};

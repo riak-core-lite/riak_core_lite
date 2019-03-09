@@ -98,7 +98,7 @@ handle_cast({value, Value, TS}, State=#state{awaiting=Awaiting,
                                              value=OldValue}) ->
     case Value of
         {error, Reason} ->
-            lager:debug("stat calc failed: ~p ~p", [Reason]),
+            logger:debug("stat calc failed: ~p ~p", [Reason]),
             Reply = maybe_tag_stale(OldValue),
             _ = [gen_server:reply(From, Reply) || From <- Awaiting],
             %% update the timestamp so as not to flood the failing 
@@ -126,7 +126,7 @@ handle_info({'EXIT', _FromPid, Reason}, State=#state{active=undefined,
     {noreply, State};
 handle_info(timeout, State=#state{active=Pid, awaiting=Awaiting, value=Value}) ->
     %% kill the pid, causing the above clause to be processed
-    lager:debug("killed delinquent stats process ~p", [Pid]),
+    logger:debug("killed delinquent stats process ~p", [Pid]),
     exit(Pid, kill),
     %% let the cache get staler, tag so people can detect
     _ = [gen_server:reply(From, maybe_tag_stale(Value)) || From <- Awaiting],

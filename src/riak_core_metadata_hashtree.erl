@@ -207,7 +207,7 @@ handle_info({'DOWN', BuildRef, process, _Pid, normal}, State=#state{built=BuildR
     State1 = build_done(State),
     {noreply, State1};
 handle_info({'DOWN', BuildRef, process, _Pid, Reason}, State=#state{built=BuildRef}) ->
-    lager:error("building tree failed: ~p", [Reason]),
+    logger:error("building tree failed: ~p", [Reason]),
     State1 = build_error(State),
     {noreply, State1};
 handle_info({'DOWN', LockRef, process, _Pid, _Reason}, State=#state{lock={_, LockRef}}) ->

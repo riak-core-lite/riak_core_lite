@@ -138,7 +138,7 @@ handle_call(_Req, _From, State) ->
 handle_cast({update, Arg}, State) ->
     case exometer:update([prefix(), ?APP, update_metric(Arg)], update_value(Arg)) of
         {error, not_found} ->
-            lager:debug("~p not found on update.", [Arg]);
+            logger:debug("~p not found on update.", [Arg]);
         ok ->
             ok
     end,

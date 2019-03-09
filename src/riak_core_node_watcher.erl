@@ -284,13 +284,13 @@ handle_call(services, _From, State) ->
 handle_call(suspend_healths, _From, State = #state{healths_enabled=false}) ->
     {reply, already_disabled, State};
 handle_call(suspend_healths, _From, State = #state{healths_enabled=true}) ->
-    lager:info("suspending all health checks"),
+    logger:info("suspending all health checks"),
     Healths = all_health_fsms(suspend, State#state.health_checks),
     {reply, ok, update_avsn(State#state{health_checks = Healths, healths_enabled = false})};
 handle_call(resume_healths, _From, State = #state{healths_enabled=true}) ->
     {reply, already_enabled, State};
 handle_call(resume_healths, _From, State = #state{healths_enabled=false}) ->
-    lager:info("resuming all health checks"),
+    logger:info("resuming all health checks"),
     Healths = all_health_fsms(resume, State#state.health_checks),
     {reply, ok, update_avsn(State#state{health_checks = Healths, healths_enabled = true})}.
 
@@ -708,11 +708,11 @@ health_fsm(checking, {result, Pid, Cause}, Service, #health_check{checking_pid =
 
 health_fsm(checking, {'EXIT', Pid, Cause}, Service, #health_check{checking_pid = Pid} = InCheck)
   when Cause =/= normal ->
-    lager:error("health check process for ~p error'ed:  ~p", [Service, Cause]),
+    logger:error("health check process for ~p error'ed:  ~p", [Service, Cause]),
     Fails = InCheck#health_check.callback_failures + 1,
     if
         Fails == InCheck#health_check.max_callback_failures ->
-            lager:error("health check callback for ~p failed too "
+            logger:error("health check callback for ~p failed too "
                         "many times, disabling.", [Service]),
             {down, suspend, InCheck#health_check{checking_pid = undefined,
                                                  callback_failures = Fails}};

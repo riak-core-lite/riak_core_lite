@@ -290,7 +290,7 @@ graft({PKey, Context}) ->
         undefined ->
             %% There would have to be a serious error in implementation to hit this case.
             %% Catch if here b/c it would be much harder to detect
-            lager:error("object not found during graft for key: ~p", [PKey]),
+            logger:error("object not found during graft for key: ~p", [PKey]),
             {error, {not_found, PKey}};
          Obj ->
             graft(Context, Obj)

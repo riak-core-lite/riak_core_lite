@@ -81,7 +81,7 @@ init([Service, LocalVN, RemoteVN, IndexN, LocalTree, Manager, VNode]) ->
                    vnode=VNode,
                    service=Service},
     gen_fsm_compat:send_event(self(), start_exchange),
-    lager:debug("Starting exchange: ~p", [LocalVN]),
+    logger:debug("Starting exchange: ~p", [LocalVN]),
     {ok, prepare_exchange, State}.
 
 handle_event(_Event, StateName, State) ->
@@ -153,22 +153,22 @@ update_trees(start_exchange, State=#state{local=LocalVN,
                                           local_tree=LocalTree,
                                           remote_tree=RemoteTree,
                                           index_n=IndexN}) ->
-    lager:debug("Sending to ~p", [LocalVN]),
-    lager:debug("Sending to ~p", [RemoteVN]),
+    logger:debug("Sending to ~p", [LocalVN]),
+    logger:debug("Sending to ~p", [RemoteVN]),
 
     update_request(LocalTree, LocalVN, IndexN),
     update_request(RemoteTree, RemoteVN, IndexN),
     {next_state, update_trees, State};
 
 update_trees({not_responsible, VNodeIdx, IndexN}, State) ->
-    lager:debug("VNode ~p does not cover preflist ~p", [VNodeIdx, IndexN]),
+    logger:debug("VNode ~p does not cover preflist ~p", [VNodeIdx, IndexN]),
     send_exchange_status({not_responsible, VNodeIdx, IndexN}, State),
     {stop, normal, State};
 update_trees({tree_built, _, _}, State) ->
     Built = State#state.built + 1,
     case Built of
         2 ->
-            lager:debug("Moving to key exchange"),
+            logger:debug("Moving to key exchange"),
             {next_state, key_exchange, State, 0};
         _ ->
             {next_state, update_trees, State#state{built=Built}}
@@ -183,8 +183,8 @@ key_exchange(timeout, State=#state{local=LocalVN,
                                    index_n=IndexN,
                                    vnode=VNode,
                                    service=Service}) ->
-    lager:debug("Starting key exchange between ~p and ~p", [LocalVN, RemoteVN]),
-    lager:debug("Exchanging hashes for preflist ~p", [IndexN]),
+    logger:debug("Starting key exchange between ~p and ~p", [LocalVN, RemoteVN]),
+    logger:debug("Exchanging hashes for preflist ~p", [IndexN]),
 
     TmpDir = tmp_dir(),
     {NA, NB, NC} = Now = WriteLog = erlang:timestamp(),
@@ -212,7 +212,7 @@ key_exchange(timeout, State=#state{local=LocalVN,
                 (start_exchange_segments, _Segments) ->
                      ok;
                 (_X, _Y) ->
-                     lager:error("~s LINE ~p: ~p ~p", [?MODULE, ?LINE, _X, _Y]),
+                     logger:error("~s LINE ~p: ~p ~p", [?MODULE, ?LINE, _X, _Y]),
                      ok
              end,
 
@@ -248,7 +248,7 @@ key_exchange(timeout, State=#state{local=LocalVN,
             %% likely to be nearby on disk of block N+1.
             StartTime = erlang:timestamp(),
             ok = sort_disk_log(LogFile1, LogFile2),
-            lager:debug("~s:key_exchange: sorting time = ~p seconds\n",
+            logger:debug("~s:key_exchange: sorting time = ~p seconds\n",
                         [?MODULE, timer:now_diff(erlang:timestamp(), StartTime) / 1000000]),
             {ok, ReadLog} = open_disk_log(Now, LogFile2, read_only),
             FoldRes =
@@ -262,12 +262,12 @@ key_exchange(timeout, State=#state{local=LocalVN,
                     Complete = true,
                     ok;
                true ->
-                    lager:error("~s:key_exchange: Count ~p /= FoldRes ~p\n",
+                    logger:error("~s:key_exchange: Count ~p /= FoldRes ~p\n",
                                 [?MODULE, Count, FoldRes]),
                     send_exchange_status(failed, State),
                     Complete = false
             end,
-            lager:info("Repaired ~b keys during active anti-entropy exchange "
+            logger:info("Repaired ~b keys during active anti-entropy exchange "
                        "of ~p between ~p and ~p",
                        [Count, IndexN, LocalVN, RemoteVN])
     end,
@@ -294,7 +294,7 @@ read_repair_keydiff(VNode, LocalVN, RemoteVN, {Bucket, Key, _Reason}) ->
     %%       spammy. Should this just be removed? We can always use
     %%       redbug to trace read_repair_keydiff when needed. Of course,
     %%       users can't do that.
-    %% lager:debug("Anti-entropy forced read repair: ~p/~p", [Bucket, Key]),
+    %% logger:debug("Anti-entropy forced read repair: ~p/~p", [Bucket, Key]),
     VNode:aae_repair(Bucket, Key),
     %% Force vnodes to update AAE tree in case read repair wasn't triggered
     riak_core_aae_vnode:rehash(VNode:master(), [LocalVN, RemoteVN], Bucket, Key),
@@ -334,7 +334,7 @@ as_event(F) ->
 do_timeout(State=#state{local=LocalVN,
                         remote=RemoteVN,
                         index_n=IndexN}) ->
-    lager:info("Timeout during exchange between (local) ~p and (remote) ~p, "
+    logger:info("Timeout during exchange between (local) ~p and (remote) ~p, "
                "(preflist) ~p", [LocalVN, RemoteVN, IndexN]),
     send_exchange_status({timeout, RemoteVN, IndexN}, State),
     {stop, normal, State#state{timer=undefined}}.
@@ -416,7 +416,7 @@ fold_disk_log({Cont, Terms}, Fun, Acc, DiskLog) ->
     Acc2 = try
                lists:foldl(Fun, Acc, Terms)
            catch X:Y ->
-                   lager:error("~s:fold_disk_log: caught ~p ~p @ ~p\n",
+                   logger:error("~s:fold_disk_log: caught ~p ~p @ ~p\n",
                                [?MODULE, X, Y, erlang:get_stacktrace()]),
                    Acc
            end,
@@ -428,7 +428,7 @@ fold_disk_log({Cont, Terms}, Fun, Acc, DiskLog) ->
     Acc2 = try
                lists:foldl(Fun, Acc, Terms)
            catch X:Y:Stack ->
-                   lager:error("~s:fold_disk_log: caught ~p ~p @ ~p\n",
+                   logger:error("~s:fold_disk_log: caught ~p ~p @ ~p\n",
                                [?MODULE, X, Y, Stack]),
                    Acc
            end,

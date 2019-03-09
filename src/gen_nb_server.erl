@@ -175,6 +175,6 @@ listen_on(CallbackModule, IpAddrStr, Port) ->
         {ok, IpAddr} ->
             listen_on(CallbackModule, IpAddr, Port);
         Err ->
-            lager:critical("Cannot start listener for ~p on invalid address ~p:~p", [CallbackModule, IpAddrStr, Port]),
+            logger:critical("Cannot start listener for ~p on invalid address ~p:~p", [CallbackModule, IpAddrStr, Port]),
             Err
     end.

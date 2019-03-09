@@ -65,11 +65,11 @@ handle_call({set_dist_buf_sizes, SndBuf, RecBuf}, _From, State) ->
      || {_Node, Port} <- erlang:system_info(dist_ctrl)],
     {reply, ok, State#state{sndbuf=SndBuf, recbuf=RecBuf}};
 handle_call(Msg, _From, State) ->
-    lager:warning("unknown call message received: ~p", [Msg]),
+    logger:warning("unknown call message received: ~p", [Msg]),
     {noreply, State}.
 
 handle_cast(Msg, State) ->
-    lager:warning("unknown cast message received: ~p", [Msg]),
+    logger:warning("unknown cast message received: ~p", [Msg]),
     {noreply, State}.
 
 
@@ -78,7 +78,7 @@ handle_info({nodeup, Node, _InfoList}, #state{sndbuf=SndBuf,
     DistCtrl = erlang:system_info(dist_ctrl),
     case proplists:get_value(Node, DistCtrl) of
         undefined ->
-            lager:error("Could not get dist for ~p\n~p\n", [Node, DistCtrl]),
+            logger:error("Could not get dist for ~p\n~p\n", [Node, DistCtrl]),
             {noreply, State};
         Port ->
             ok = set_port_buffers(Port, SndBuf, RecBuf),
@@ -88,7 +88,7 @@ handle_info({nodedown, _Node, _InfoList}, State) ->
     %% don't think we need to do anything here
     {noreply, State};
 handle_info(Msg, State) ->
-    lager:warning("unknown info message received: ~p", [Msg]),
+    logger:warning("unknown info message received: ~p", [Msg]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->

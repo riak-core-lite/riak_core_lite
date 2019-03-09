@@ -184,11 +184,11 @@ set_debug(Enabled) ->
                riak_core_exchange_fsm],
     case Enabled of
         true ->
-            [lager:trace_console([{module, Mod}]) || Mod <- Modules];
+            [logger:trace_console([{module, Mod}]) || Mod <- Modules];
         false ->
             [begin
-                 {ok, Trace} = lager:trace_console([{module, Mod}]),
-                 lager:stop_trace(Trace)
+                 {ok, Trace} = logger:trace_console([{module, Mod}]),
+                 logger:stop_trace(Trace)
              end || Mod <- Modules]
     end,
     ok.
@@ -242,7 +242,7 @@ init([Service, VNode]) ->
         ok ->
             ok;
         {error, DiagProps} ->
-            _ = [lager:error("aae_throttle_limits/anti_entropy.throttle.limits "
+            _ = [logger:error("aae_throttle_limits/anti_entropy.throttle.limits "
                          "list fails this test: ~p\n", [Check]) ||
                 {Check, false} <- DiagProps],
             error(invalid_aae_throttle_limits)
@@ -358,7 +358,7 @@ handle_info({'DOWN', _, _, Pid, Status}, #state{vnode_status_pid=Pid}=State) ->
             State2 = query_and_set_aae_throttle3(RES, State#state{vnode_status_pid=undefined}),
             {noreply, State2};
         Else ->
-            lager:error("query_and_set_aae_throttle error: ~p",[Else]),
+            logger:error("query_and_set_aae_throttle error: ~p",[Else]),
             {noreply, State}
     end;
 handle_info({'DOWN', Ref, _, Obj, Status}, State) ->
@@ -397,7 +397,7 @@ settings() ->
         {off, Opts} ->
             {false, Opts};
         X ->
-            lager:warning("Invalid setting for riak_core/anti_entropy: ~p", [X]),
+            logger:warning("Invalid setting for riak_core/anti_entropy: ~p", [X]),
             application:set_env(riak_core, anti_entropy, {off, []}),
             {false, []}
     end.
@@ -486,7 +486,7 @@ maybe_clear_exchange(Ref, Status, State) ->
         false ->
             State;
         {value, {Idx,Ref,_Pid}, Exchanges} ->
-            lager:debug("Untracking exchange: ~p :: ~p", [Idx, Status]),
+            logger:debug("Untracking exchange: ~p :: ~p", [Idx, Status]),
             State#state{exchanges=Exchanges}
     end.
 
@@ -569,7 +569,7 @@ do_exchange_status(_Pid, LocalVN, RemoteVN, IndexN, Reply, State) ->
         ok ->
             State;
         {remote, anti_entropy_disabled} ->
-            lager:warning("Active anti-entropy is disabled on ~p", [RemoteNode]),
+            logger:warning("Active anti-entropy is disabled on ~p", [RemoteNode]),
             State;
         _ ->
             State2 = requeue_exchange(LocalIdx, RemoteIdx, IndexN, State),
@@ -626,7 +626,7 @@ start_exchange(LocalVN, {RemoteIdx, IndexN}, Ring, State) ->
             end
     catch
         error:{badmatch,_} ->
-            lager:warning("ignoring exchange to non-existent index: ~p", [RemoteIdx]),
+            logger:warning("ignoring exchange to non-existent index: ~p", [RemoteIdx]),
             {ok, State}
     end.
 
@@ -773,7 +773,7 @@ requeue_exchange(LocalIdx, RemoteIdx, IndexN, State) ->
         true ->
             State;
         false ->
-            lager:debug("Requeue: ~p", [{LocalIdx, RemoteIdx, IndexN}]),
+            logger:debug("Requeue: ~p", [{LocalIdx, RemoteIdx, IndexN}]),
             Exchanges = State#state.exchange_queue ++ [Exchange],
             State#state{exchange_queue=Exchanges}
     end.
@@ -824,7 +824,7 @@ set_aae_throttle_limits(Limits) ->
                                       Lim >= 0
                           end, Limits)} of
         {{-1, _}, true} ->
-            lager:info("Setting AAE throttle limits: ~p\n", [Limits]),
+            logger:info("Setting AAE throttle limits: ~p\n", [Limits]),
             application:set_env(riak_core, aae_throttle_limits, Limits),
             ok;
         {Else1, Else2} ->
@@ -883,11 +883,11 @@ query_and_set_aae_throttle3({result, {MaxNds, BadNds}},
     State#state{last_throttle=NewThrottle}.
 
 perhaps_log_throttle_change(Last, New, kill_switch) when Last /= New ->
-    _ = lager:info("Changing AAE throttle from ~p -> ~p msec/key, "
+    _ = logger:info("Changing AAE throttle from ~p -> ~p msec/key, "
                    "based on kill switch on local node",
                    [Last, New]);
 perhaps_log_throttle_change(Last, New, {WorstVMax, WorstNode}) when Last /= New ->
-    _ = lager:info("Changing AAE throttle from ~p -> ~p msec/key, "
+    _ = logger:info("Changing AAE throttle from ~p -> ~p msec/key, "
                    "based on maximum vnode mailbox size ~p from ~p",
                    [Last, New, WorstVMax, WorstNode]);
 perhaps_log_throttle_change(_, _, _) ->

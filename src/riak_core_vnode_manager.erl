@@ -317,7 +317,7 @@ handle_call({xfer_complete, ModSrcTgt}, _From, State) ->
     ModPartition = {Mod, Partition},
     case get_repair(ModPartition, Repairs) of
         none ->
-            lager:error("Received xfer_complete for non-existing repair: ~p",
+            logger:error("Received xfer_complete for non-existing repair: ~p",
                         [ModPartition]),
             {reply, ok, State};
         #repair{minus_one_xfer=MOX, plus_one_xfer=POX}=R ->
@@ -328,7 +328,7 @@ handle_call({xfer_complete, ModSrcTgt}, _From, State) ->
                          POX2 = POX#xfer_status{status=complete},
                          R#repair{plus_one_xfer=POX2};
                     true ->
-                         lager:error("Received xfer_complete for "
+                         logger:error("Received xfer_complete for "
                                      "non-existing xfer: ~p", [ModSrcTgt])
                  end,
 
@@ -392,7 +392,7 @@ create_repair(Pairs, ModPartition, FilterModFun, Mod, Partition, Repairs, State)
                      plus_one_xfer = POXStatus},
     Repairs2 = Repairs ++ [Repair],
     State2 = State#state{repairs = Repairs2},
-    lager:debug("add repair ~p", [ModPartition]),
+    logger:debug("add repair ~p", [ModPartition]),
     {reply, {ok, Pairs}, State2}.
 
 %% @private
@@ -427,7 +427,7 @@ handle_cast(maybe_start_vnodes, State) ->
     {noreply, State2};
 
 handle_cast({kill_repairs, Reason}, State) ->
-    lager:warning("Killing all repairs: ~p", [Reason]),
+    logger:warning("Killing all repairs: ~p", [Reason]),
     kill_repairs(State#state.repairs, Reason),
     {noreply, State#state{repairs=[]}};
 
@@ -540,9 +540,8 @@ ensure_vnodes_started(Ring) ->
                   try
                       riak_core_ring_handler:ensure_vnodes_started(Ring)
                   catch
-                      ?_exception_(T, R, StackToken) ->
-                          StackTrace = ?_get_stacktrace_(StackToken),
-                          lager:error("~p", [{T, R, StackTrace}])
+                      T:R ->
+                          logger:error("~p", [{T, R, erlang:get_stacktrace()}])
                   end
           end).
 -else.
@@ -552,7 +551,7 @@ ensure_vnodes_started(Ring) ->
                       riak_core_ring_handler:ensure_vnodes_started(Ring)
                   catch
                       T:R:Stack ->
-                          lager:error("~p", [{T, R, Stack}])
+                          logger:error("~p", [{T, R, Stack}])
                   end
           end).
 -endif.
@@ -626,13 +625,13 @@ get_vnode(IdxList, Mod, State) ->
     StartFun =
         fun(Idx) ->
                 ForwardTo = get_forward(Mod, Idx, State),
-                lager:debug("Will start VNode for partition ~p", [Idx]),
+                logger:debug("Will start VNode for partition ~p", [Idx]),
                 {ok, Pid} =
                     riak_core_vnode_sup:start_vnode(Mod, Idx, ForwardTo),
                 register_vnode_stats(Mod, Idx, Pid),
-                lager:debug("Started VNode, waiting for initialization to complete ~p, ~p ", [Pid, Idx]),
+                logger:debug("Started VNode, waiting for initialization to complete ~p, ~p ", [Pid, Idx]),
                 ok = riak_core_vnode:wait_for_init(Pid),
-                lager:debug("VNode initialization ready ~p, ~p", [Pid, Idx]),
+                logger:debug("VNode initialization ready ~p, ~p", [Pid, Idx]),
                 {Idx, Pid}
         end,
     MaxStart = app_helper:get_env(riak_core, vnode_parallel_start,

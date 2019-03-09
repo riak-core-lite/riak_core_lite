@@ -420,7 +420,7 @@ query_resource(Resource, Types) ->
                   ignore |
                   {stop, term()}.
 init([]) ->
-    lager:debug("Background Manager starting up."),
+    logger:debug("Background Manager starting up."),
     State = #state{info_table=?BG_INFO_ETS_TABLE,
                    entry_table=?BG_ENTRY_ETS_TABLE,
                    enabled=true,
@@ -603,7 +603,7 @@ do_handle_call_exception(Function, Args, State) ->
     try apply(Function, Args)
     catch
         Error ->
-            lager:error("Exception: ~p in function ~p", [Error, Function]),
+            logger:error("Exception: ~p in function ~p", [Error, Function]),
             {reply, Error, State}
     end.
 

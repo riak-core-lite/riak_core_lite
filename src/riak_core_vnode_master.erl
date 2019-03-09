@@ -227,7 +227,7 @@ handle_cast({wait_for_service, Service}, State) ->
         undefined ->
             ok;
         _ ->
-            lager:debug("Waiting for service: ~p", [Service]),
+            logger:debug("Waiting for service: ~p", [Service]),
             riak_core:wait_for_service(Service)
     end,
     {noreply, State};

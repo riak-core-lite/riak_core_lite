@@ -32,8 +32,8 @@
 -define(HARNESS, (rt:config(rt_harness))).
 
 %% JFW: hack until we can get this to play nicely with rebar:
-log_info(Message) -> lager:log(info, self(), Message).
-log_info(Message, Params) -> lager:log(info, self(), Message, Params).
+log_info(Message) -> logger:log(info, self(), Message).
+log_info(Message, Params) -> logger:log(info, self(), Message, Params).
 
 go() -> 
     go(1, {10000, 1000}).

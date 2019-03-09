@@ -44,7 +44,7 @@ start_set_net_ticktime_daemon(Node, Time, true) ->
         Dirs = rpc:call(Node, code, get_path, []),
         case lists:member(EbinDir, Dirs) of
             false ->
-                lager:info("start_set_net_ticktime_daemon: adding to code path "
+                logger:info("start_set_net_ticktime_daemon: adding to code path "
                            "for node ~p\n", [Node]),
                 rpc:call(Node, code, add_pathz, [EbinDir]);
             true ->
@@ -59,7 +59,7 @@ start_set_net_ticktime_daemon(Node, Time, true) ->
                         try
                             register(?REGNAME, self()),
                             %% If we get here, we are the one daemon process
-                            lager:info("start_set_net_ticktime_daemon: started "
+                            logger:info("start_set_net_ticktime_daemon: started "
                                        "changing net_ticktime on ~p to ~p\n",
                                  [Node, Time]),
                             _ = riak_core_rand:seed(os:timestamp()),
@@ -69,7 +69,7 @@ start_set_net_ticktime_daemon(Node, Time, true) ->
                         end
                 end);
 start_set_net_ticktime_daemon(Node, _Time, false) ->
-    lager:info("Not starting tick daemon on ~p. Capability unsupported. "
+    logger:info("Not starting tick daemon on ~p. Capability unsupported. "
                "Some nodes in the Riak cluster do not have ~p loaded\n",
                [Node, ?MODULE]),
     ok.
@@ -94,7 +94,7 @@ stop_set_net_ticktime_daemon(Node, true) ->
             error
     end;
 stop_set_net_ticktime_daemon(Node, false) ->
-    lager:info("Not stopping tick daemon on ~p. Capability unsupported\n", [Node]),
+    logger:info("Not stopping tick daemon on ~p. Capability unsupported\n", [Node]),
     ok.
 
 async_start_set_net_ticktime_daemons(Time, Nodes) ->
@@ -112,7 +112,7 @@ async_start_set_net_ticktime_daemons(Time, Nodes) ->
 set_net_ticktime_daemon_loop(Time, Count) ->
     case set_net_ticktime(Time) of
         unchanged ->
-            lager:info("start_set_net_ticktime_daemon: finished "
+            logger:info("start_set_net_ticktime_daemon: finished "
                        "changing net_ticktime on ~p to ~p\n", [node(), Time]),
             exit(normal);
         _ ->

@@ -237,7 +237,7 @@ handle_cast({rejoin, RingIn}, State) ->
             case riak_core:join(node(), OtherNode, true, true) of
                 ok -> ok;
                 {error, Reason} ->
-                    lager:error("Could not rejoin cluster: ~p", [Reason]),
+                    logger:error("Could not rejoin cluster: ~p", [Reason]),
                     ok
             end,
             {noreply, State};
@@ -348,13 +348,13 @@ do_log_membership_changes([], [{NewNode, NewStatus}|New]) ->
     do_log_membership_changes([], New).
 
 log_node_changed(Node, Old, New) ->
-    lager:info("'~s' changed from '~s' to '~s'~n", [Node, Old, New]).
+    logger:info("'~s' changed from '~s' to '~s'~n", [Node, Old, New]).
 
 log_node_added(Node, New) ->
-    lager:info("'~s' joined cluster with status '~s'~n", [Node, New]).
+    logger:info("'~s' joined cluster with status '~s'~n", [Node, New]).
 
 log_node_removed(Node, Old) ->
-    lager:info("'~s' removed from cluster (previously: '~s')~n", [Node, Old]).
+    logger:info("'~s' removed from cluster (previously: '~s')~n", [Node, Old]).
 
 remove_from_cluster(Ring, ExitingNode) ->
     remove_from_cluster(Ring, ExitingNode, riak_core_rand:rand_seed()).

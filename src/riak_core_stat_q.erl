@@ -80,7 +80,7 @@ stat_return({error,not_found}) -> unavailable;
 stat_return({ok, Value}) -> Value.
 
 log_error(StatName, ErrClass, ErrReason) ->
-    lager:warning("Failed to calculate stat ~p with ~p:~p", [StatName, ErrClass, ErrReason]).
+    logger:warning("Failed to calculate stat ~p with ~p:~p", [StatName, ErrClass, ErrReason]).
 
 %% some crazy people put funs in gauges (exometer has a 'function' metric)
 %% so that they can have a consistent interface

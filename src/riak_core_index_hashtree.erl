@@ -252,7 +252,7 @@ init([Service, Index, VNPid, VNode, Opts]) ->
         undefined ->
             case riak_core_entropy_manager:enabled() of
                 true ->
-                    lager:warning("Neither riak_core/anti_entropy_data_dir or "
+                    logger:warning("Neither riak_core/anti_entropy_data_dir or "
                                   "riak_core/platform_data_dir are defined. "
                                   "Disabling active anti-entropy."),
                     riak_core_entropy_manager:disable(Service);
@@ -280,7 +280,7 @@ init([Service, Index, VNPid, VNode, Opts]) ->
             %% If vnode is empty, mark tree as built without performing fold
             case VNEmpty of
                 true ->
-                    lager:debug("[AAE:~s] Built empty tree for ~p",
+                    logger:debug("[AAE:~s] Built empty tree for ~p",
                                 [Service, Index]),
                     gen_server:cast(self(), build_finished);
                 _ ->
@@ -309,7 +309,7 @@ handle_call(get_trees, _From, #state{trees=Trees}=State) ->
     {reply, Trees, State};
 
 handle_call({update_tree, Id}, From, State) ->
-    lager:debug("[AAE:~s] Updating tree: (vnode)=~p (preflist)=~p",
+    logger:debug("[AAE:~s] Updating tree: (vnode)=~p (preflist)=~p",
                 [State#state.service, State#state.index, Id]),
     apply_tree(Id,
                fun(Tree) ->
@@ -352,7 +352,7 @@ handle_call(clear, _From, State) ->
 
 handle_call(expire, _From, State) ->
     State2 = State#state{expired=true},
-    lager:info("[AAE:~s] Manually expired tree: ~p",
+    logger:info("[AAE:~s] Manually expired tree: ~p",
                [State#state.service, State#state.index]),
     {reply, ok, State2};
 
@@ -447,7 +447,7 @@ determine_data_root() ->
             case application:get_env(riak_core, platform_data_dir) of
                 {ok, PlatformRoot} ->
                     Root = filename:join(PlatformRoot, "anti_entropy"),
-                    lager:warning("Config riak_core/anti_entropy_data_dir is "
+                    logger:warning("Config riak_core/anti_entropy_data_dir is "
                                   "missing. Defaulting to: ~p", [Root]),
                     application:set_env(riak_core, anti_entropy_data_dir, Root),
                     Root;
@@ -523,7 +523,7 @@ maybe_throttle_build(RObjBin, Limit, Wait, Acc) when is_binary(RObjBin) ->
     ObjSize = byte_size(RObjBin),
     Acc2 = Acc + ObjSize,
     if (Limit =/= 0) andalso (Acc2 > Limit) ->
-            lager:debug("[AAE] Throttling build for ~b ms", [Wait]),
+            logger:debug("[AAE] Throttling build for ~b ms", [Wait]),
             timer:sleep(Wait),
             0;
        true ->
@@ -602,7 +602,7 @@ do_new_tree(Id, State=#state{service = Service, trees=Trees, path=Path}) ->
 
 -spec do_get_lock(any(), pid(), state()) -> {not_built | ok | already_locked, state()}.
 do_get_lock(_, _, State) when State#state.built /= true ->
-    lager:debug("[AAE:~s] Not built: ~p :: ~p",
+    logger:debug("[AAE:~s] Not built: ~p :: ~p",
                 [State#state.service, State#state.index, State#state.built]),
     {not_built, State};
 do_get_lock(_Type, Pid, State=#state{lock=undefined}) ->
@@ -610,7 +610,7 @@ do_get_lock(_Type, Pid, State=#state{lock=undefined}) ->
     State2 = State#state{lock=Ref},
     {ok, State2};
 do_get_lock(_, _, State) ->
-    lager:debug("[AAE:~s] Already locked: ~p",
+    logger:debug("[AAE:~s] Already locked: ~p",
                 [State#state.service, State#state.index]),
     {already_locked, State}.
 
@@ -649,7 +649,7 @@ apply_tree(Id, Fun, State=#state{trees=Trees}) ->
 
 -spec do_build_finished(state()) -> state().
 do_build_finished(State=#state{service=Service, index=Index, built=_Pid}) ->
-    lager:debug("[AAE:~s] Finished build: ~p", [Service, Index]),
+    logger:debug("[AAE:~s] Finished build: ~p", [Service, Index]),
     {_,Tree0} = hd(State#state.trees),
     BuildTime = get_build_time(Tree0),
     _ = hashtree:write_meta(<<"built">>, <<1>>, Tree0),
@@ -781,7 +781,7 @@ handle_unexpected_key(Id, Key, State=#state{index=Partition}) ->
             %% TODO: We should probably remove these warnings before final
             %%       release, as reducing N will result in a ton of log/console
             %%       spam.
-            %% lager:warning("Object ~p encountered during fold over partition "
+            %% logger:warning("Object ~p encountered during fold over partition "
             %%               "~p, but key does not hash to an index handled by "
             %%               "this partition", [Key, Partition]),
             State;
@@ -794,14 +794,14 @@ handle_unexpected_key(Id, Key, State=#state{index=Partition}) ->
             %% N to 4, and the object now maps to preflist '{<index>, 4}' which
             %% may not have an existing hashtree if there were previously no
             %% objects with N=4.
-            lager:info("[AAE:~s] Partition/tree ~p/~p does not exist to hold object ~p",
+            logger:info("[AAE:~s] Partition/tree ~p/~p does not exist to hold object ~p",
                        [State#state.service, Partition, Id, Key]),
             case State#state.built of
                 true ->
                     %% If the tree is already built, clear the tree to trigger
                     %% a rebuild that will re-distribute objects into the
                     %% proper hashtrees based on current N values.
-                    lager:info("[AAE:~s] Clearing tree to trigger future rebuild",
+                    logger:info("[AAE:~s] Clearing tree to trigger future rebuild",
                               [State#state.service]),
                     clear_tree(State);
                 _ ->
@@ -830,7 +830,7 @@ do_compare(Id, Remote, AccFun, Acc, From, State) ->
     case orddict:find(Id, State#state.trees) of
         error ->
             %% This case shouldn't happen, but might as well safely handle it.
-            lager:warning("[AAE] Tried to compare nonexistent tree "
+            logger:warning("[AAE] Tried to compare nonexistent tree "
                           "(vnode)=~p (preflist)=~p", [State#state.index, Id]),
             gen_server:reply(From, []);
         {ok, Tree} ->
@@ -859,7 +859,7 @@ maybe_expire(State=#state{lock=undefined, built=true, expired=false}) ->
     %% Need to convert from millsec to microsec
     case (Expire =/= never) andalso (Diff > (Expire * 1000)) of
         true ->
-            lager:debug("[AAE:~s] Tree expired: ~p",
+            logger:debug("[AAE:~s] Tree expired: ~p",
                         [State#state.service, State#state.index]),
             State#state{expired=true};
         false ->
@@ -870,7 +870,7 @@ maybe_expire(State) ->
 
 -spec clear_tree(state()) -> state().
 clear_tree(State=#state{index=Index}) ->
-    lager:info("[AAE:~s] Clearing tree: ~p", [State#state.service, Index]),
+    logger:info("[AAE:~s] Clearing tree: ~p", [State#state.service, Index]),
     IndexNs = responsible_preflists(State),
     State2 = destroy_trees(State),
     State3 = init_trees(IndexNs, State2#state{trees=orddict:new()}),
@@ -909,14 +909,14 @@ build_or_rehash(Self, Locked, Type, #state{vnode=VNode, service=Service,
                                            index=Index, trees=Trees}) ->
     case {Locked, Type} of
         {true, build} ->
-            lager:info("[AAE:~s] Starting tree build: ~p", [Service, Index]),
+            logger:info("[AAE:~s] Starting tree build: ~p", [Service, Index]),
             fold_keys(VNode, Index, Self, has_index_tree(Trees)),
-            lager:info("[AAE:~s] Finished tree build: ~p", [Service, Index]),
+            logger:info("[AAE:~s] Finished tree build: ~p", [Service, Index]),
             gen_server:cast(Self, build_finished);
         {true, rehash} ->
-            lager:debug("[AAE:~s] Starting tree rehash: ~p", [Service, Index]),
+            logger:debug("[AAE:~s] Starting tree rehash: ~p", [Service, Index]),
             _ = [hashtree:rehash_tree(T) || {_,T} <- Trees],
-            lager:debug("[AAE:~s] Finished tree rehash: ~p", [Service, Index]),
+            logger:debug("[AAE:~s] Finished tree rehash: ~p", [Service, Index]),
             gen_server:cast(Self, build_finished);
         _ ->
             gen_server:cast(Self, build_failed)

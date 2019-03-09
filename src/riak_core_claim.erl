@@ -191,11 +191,11 @@ wants_claim_v3(Ring, _Node) ->
     %% running claim not the metadata.
     case riak_core_ring:get_meta(claimed, Ring) of
         {ok, {claim_v3, Wants}} ->
-            lager:debug("WantsClaim3(~p) no.  Current ring claimed for ~p\n", 
+            logger:debug("WantsClaim3(~p) no.  Current ring claimed for ~p\n", 
                         [_Node, Wants]),
             no;
         {ok, {claim_v3, CurWants}} ->
-            lager:debug("WantsClaim3(~p) yes.  Current ring claimed for "
+            logger:debug("WantsClaim3(~p) yes.  Current ring claimed for "
                         "different wants\n~p\n",
                         [_Node, CurWants]),
             {yes, 1};
@@ -205,7 +205,7 @@ wants_claim_v3(Ring, _Node) ->
             case app_helper:get_env(riak_core, force_reclaim, false) of
                 true ->
                     application:unset_env(riak_core, force_reclaim),
-                    lager:info("Forced rerun of claim algorithm - "
+                    logger:info("Forced rerun of claim algorithm - "
                                "unsetting force_reclaim"),
                     {yes, 1};
                 false ->
@@ -219,11 +219,11 @@ wants_claim_v3(Ring, _Node) ->
                     Diffs = lists:sum([abs(Diff) || {_, Diff} <- Deltas]),
                     case Diffs of
                         0 ->
-                            lager:debug("WantsClaim3(~p) no.  All wants met.\n", 
+                            logger:debug("WantsClaim3(~p) no.  All wants met.\n", 
                                         [_Node]),
                             no;
                         _ ->
-                            lager:debug("WantsClaim3(~p) yes - ~p.\n"
+                            logger:debug("WantsClaim3(~p) yes - ~p.\n"
                                         "Does not meet wants - diffs ~p\n",
                                         [_Node, Diffs, Deltas]),
                             {yes, Diffs}
@@ -486,8 +486,8 @@ choose_claim_v3(Ring, _ClaimNode, Params) ->
     Q = riak_core_ring:num_partitions(Ring),
     TN = proplists:get_value(target_n_val, Params, ?DEF_TARGET_N),
     Wants = wants(Ring),
-    lager:debug("Claim3 started: S=~p Q=~p TN=~p\n", [S, Q, TN]),
-    lager:debug("       wants: ~p\n", [Wants]),
+    logger:debug("Claim3 started: S=~p Q=~p TN=~p\n", [S, Q, TN]),
+    logger:debug("       wants: ~p\n", [Wants]),
     {Partitions, Owners} = lists:unzip(riak_core_ring:all_owners(Ring)),
 
     %% Seed the random number generator for predictable results
@@ -504,7 +504,7 @@ choose_claim_v3(Ring, _ClaimNode, Params) ->
             ok
     end,
 
-    lager:debug("Claim3 metrics: ~p\n", [NewMetrics]),
+    logger:debug("Claim3 metrics: ~p\n", [NewMetrics]),
     %% Build a new ring from it
     NewRing = lists:foldl(fun({_P, OldOwn, OldOwn}, R0) ->
                                   R0;
@@ -543,8 +543,8 @@ claim_v3(Wants, Owners, Params) ->
         true ->
             NIs = build_nis(Wants, Owners),
 
-            lager:debug("claim3 - NIs\n",[]),
-            _ = [lager:debug("  ~p\n", [NI]) || NI <- NIs],
+            logger:debug("claim3 - NIs\n",[]),
+            _ = [logger:debug("  ~p\n", [NI]) || NI <- NIs],
 
             %% Generate plans that resolve violations and overloads
             Plans = lists:usort(make_plans(Trials, NIs, Q, TN)),
@@ -556,13 +556,13 @@ claim_v3(Wants, Owners, Params) ->
                 0 ->
                     New;
                 _ ->
-                    lager:debug("claimv3: Could not make plan without violations, diversifying\n",
+                    logger:debug("claimv3: Could not make plan without violations, diversifying\n",
                                 []),
                    %% If could not build ring without violations, diversify it
                     claim_diversify(Wants, Owners, Params)
             end;
         false ->
-            lager:debug("claimv3: Not enough nodes to run (have ~p need ~p), diagonalized\n",
+            logger:debug("claimv3: Not enough nodes to run (have ~p need ~p), diagonalized\n",
                         [length(Claiming), TN+1]),
             claim_diagonal(Wants, Owners, Params)
     end.
@@ -1009,7 +1009,7 @@ evaluate_plans(Plans, Wants, Q, TN) ->
                             OM = {_Owners, Metrics} = score_plan(Plan, Wants, Q, TN),
                             case better_plan(Metrics, RunningMetrics) of
                                 true ->
-                                    lager:debug("Claim3: Trial ~p found better plan: ~p\n",
+                                    logger:debug("Claim3: Trial ~p found better plan: ~p\n",
                                                 [Trial, Metrics]),
                                     {Trial + 1, OM};
                                 _ ->

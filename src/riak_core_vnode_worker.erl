@@ -64,7 +64,7 @@ init([Module, VNodeIndex, WorkerArgs, WorkerProps, Caller]) ->
     {ok, #state{module=Module, modstate=WorkerState}}.
 
 handle_call(Event, _From, State) ->
-    lager:debug("Vnode worker received synchronous event: ~p.", [Event]),
+    logger:debug("Vnode worker received synchronous event: ~p.", [Event]),
     {reply, ok, State}.
 
 handle_cast({work, Work, WorkFrom, Caller},

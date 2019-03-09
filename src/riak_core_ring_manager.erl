@@ -252,7 +252,7 @@ do_write_ringfile(Ring, FN) ->
         ok = riak_core_util:replace_file(FN, term_to_binary(Ring))
     catch
         _:Err ->
-            lager:error("Unable to write ring to \"~s\" - ~p\n", [FN, Err]),
+            logger:error("Unable to write ring to \"~s\" - ~p\n", [FN, Err]),
             {error,Err}
     end.
 
@@ -357,18 +357,18 @@ reload_ring(live) ->
         {ok, RingFile} ->
             case riak_core_ring_manager:read_ringfile(RingFile) of
                 {error, Reason} ->
-                    lager:critical("Failed to read ring file: ~p",
-                                   [lager:posix_error(Reason)]),
+                    logger:critical("Failed to read ring file: ~p",
+                                   [logger:posix_error(Reason)]),
                     throw({error, Reason});
                 Ring ->
                     Ring
             end;
         {error, not_found} ->
-            lager:warning("No ring file available."),
+            logger:warning("No ring file available."),
             riak_core_ring:fresh();
         {error, Reason} ->
-            lager:critical("Failed to load ring file: ~p",
-                           [lager:posix_error(Reason)]),
+            logger:critical("Failed to load ring file: ~p",
+                           [logger:posix_error(Reason)]),
             throw({error, Reason})
     end.
 
@@ -418,7 +418,7 @@ handle_call({ring_trans, Fun, Args}, _From, State=#state{raw_ring=Ring}) ->
         {ignore, Reason} ->
             {reply, {not_changed, Reason}, State};
         Other ->
-            lager:error("ring_trans: invalid return value: ~p",
+            logger:error("ring_trans: invalid return value: ~p",
                                    [Other]),
             {reply, not_changed, State}
     end;
@@ -456,7 +456,7 @@ handle_cast(write_ringfile, State=#state{raw_ring=Ring}) ->
 handle_info(inactivity_timeout, State) ->
     case is_stable_ring(State) of
         {true,DeltaMS} ->
-            lager:debug("Promoting ring after ~p", [DeltaMS]),
+            logger:debug("Promoting ring after ~p", [DeltaMS]),
             promote_ring(),
             State2 = State#state{inactivity_timer=undefined},
             {noreply, State2};
@@ -509,13 +509,13 @@ run_fixups([{App, Fixup}|T], BucketName, BucketProps) ->
         {ok, NewBucketProps} ->
             NewBucketProps;
         {error, Reason} ->
-            lager:error("Error while running bucket fixup module "
+            logger:error("Error while running bucket fixup module "
                 "~p from application ~p on bucket ~p: ~p", [Fixup, App,
                     BucketName, Reason]),
             BucketProps
     catch
         What:Why ->
-            lager:error("Crash while running bucket fixup module "
+            logger:error("Crash while running bucket fixup module "
                 "~p from application ~p on bucket ~p : ~p:~p", [Fixup, App,
                     BucketName, What, Why]),
             BucketProps

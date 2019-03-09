@@ -77,7 +77,7 @@ hashtree_test_() ->
      end,
      [{timeout, 60,
        fun() ->
-              lager:info("Any warnings should be investigated.  No lager output expected.\n"),
+              logger:info("Any warnings should be investigated.  No lager output expected.\n"),
               ?assert(eqc:quickcheck(?QC_OUT(eqc:testing_time(29,
                                                               hashtree_eqc:prop_correct()))))
       end
