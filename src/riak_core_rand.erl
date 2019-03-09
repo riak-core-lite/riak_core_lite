@@ -18,10 +18,6 @@
 %% algorithm for all call here.
 -define(ALGO, exsplus).
 
-%%%===================================================================
-%%% New (r19+) rand style functions
-%%%===================================================================
--ifdef(rand).
 uniform() ->
     rand:uniform().
 
@@ -60,31 +56,6 @@ seed(Seed) ->
 
 rand_bytes(Size) ->
     crypto:strong_rand_bytes(Size).
-
--else.
-%%%===================================================================
-%%% Old (r18) random style functions
-%%%===================================================================
-
-uniform() ->
-    random:uniform().
-
-uniform(N) ->
-    random:uniform(N).
-
-uniform_s(N, State) ->
-    random:uniform_s(N, State).
-
-seed() ->
-    random:seed().
-
-seed({A, B, C}) ->
-    random:seed({A, B, C}).
-
-rand_bytes(Size) ->
-    crypto:strong_rand(Size).
-
--endif.
 
 %%%===================================================================
 %%% General functions

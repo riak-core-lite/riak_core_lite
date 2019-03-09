@@ -133,13 +133,8 @@
 -export([compare2/4]).
 -export([multi_select_segment/3, safe_decode/1]).
 
--ifdef(namespaced_types).
 -type hashtree_dict() :: dict:dict().
 -type hashtree_array() :: array:array().
--else.
--type hashtree_dict() :: dict().
--type hashtree_array() :: array().
--endif.
 
 -define(ALL_SEGMENTS, ['*', '*']).
 -define(BIN_TO_INT(B), list_to_integer(binary_to_list(B))).
@@ -642,7 +637,6 @@ get_bucket(Level, Bucket, State) ->
 %%% Internal functions
 %%%===================================================================
 
--ifdef(new_hash).
 md5(Bin) ->
     crypto:hash(md5, Bin).
 
@@ -659,25 +653,6 @@ esha_update(Ctx, Bin) ->
 
 esha_final(Ctx) ->
     crypto:hash_final(Ctx).
--else.
-md5(Bin) ->
-    crypto:md5(Bin).
-
--ifdef(TEST).
-esha(Bin) ->
-    crypto:sha(Bin).
--endif.
-
-esha_init() ->
-    crypto:sha_init().
-
-esha_update(Ctx, Bin) ->
-    crypto:sha_update(Ctx, Bin).
-
-esha_final(Ctx) ->
-    crypto:sha_final(Ctx).
-
--endif.
 
 -spec set_bucket(integer(), integer(), any(), hashtree()) -> hashtree().
 set_bucket(Level, Bucket, Val, State) ->

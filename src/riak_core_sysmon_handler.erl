@@ -180,9 +180,9 @@ format_pretty_proc_or_port_info(PidOrPort, Acf) ->
             Res ->
                 Res
         end
-    catch ?_exception_(X, Y, StackToken) ->
+    catch Type:Reason:Stacktrace ->
         {"Pid ~w, ~W ~W at ~w\n",
-            [PidOrPort, X, 20, Y, 20, ?_get_stacktrace_(StackToken)]}
+            [PidOrPort, Type, 20, Reason, 20, Stacktrace]}
     end.
 -else.
 format_pretty_proc_or_port_info(PidOrPort, Acf) ->
