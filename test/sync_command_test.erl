@@ -96,5 +96,4 @@ stop_servers(_Pid) ->
     riak_core_test_util:stop_pid(riak_core_vnode_sup),
     riak_core_test_util:stop_pid(riak_core_ring_manager),
     application:stop(exometer),
-    application:stop(lager),
     application:stop(goldrush).

@@ -327,7 +327,6 @@ file_is_readable(FileName) ->
             Err
     end.
 
-%% borrowed from lager, with modifications
 posix_error(Error) ->
     case erl_posix_msg:message(Error) of
         "unknown POSIX error" -> lists:flatten(io_lib:format("~p", [Error]));

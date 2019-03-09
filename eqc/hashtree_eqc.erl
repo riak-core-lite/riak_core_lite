@@ -61,23 +61,19 @@ runfor([DurationMinsStr]) ->
 hashtree_test_() ->
     {setup,
      fun() ->
-             application:set_env(lager, handlers, [{lager_console_backend, info}]),
              application:ensure_started(syntax_tools),
              application:ensure_started(compiler),
              application:ensure_started(goldrush),
-             application:ensure_started(lager)
      end,
      fun(_) ->
-             application:stop(lager),
              application:stop(goldrush),
              application:stop(compiler),
              application:stop(syntax_tools),
-             application:unload(lager),
              delete_ets()
      end,
      [{timeout, 60,
        fun() ->
-              logger:info("Any warnings should be investigated.  No lager output expected.\n"),
+              logger:info("Any warnings should be investigated.  No logger output expected.\n"),
               ?assert(eqc:quickcheck(?QC_OUT(eqc:testing_time(29,
                                                               hashtree_eqc:prop_correct()))))
       end

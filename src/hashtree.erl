@@ -462,7 +462,7 @@ update_tree(Segments, State=#state{next_rebuild=NextRebuild, width=Width,
             %% the upper trees.  Alternative is to crash here, but that would
             %% lose updates and is the action taken on repair anyway.
             %% Save the customer some pain by doing that now and log.
-            %% Enable lager debug tracing with logger:trace_file(hashtree, "/tmp/ht.trace"
+            %% Enable logging debug tracing with logger:trace_file(hashtree, "/tmp/ht.trace"
             %% to get the detailed segment information.
             logger:warning("Incremental AAE hash was unable to find all required data, "
                           "forcing full rebuild of ~p", [State#state.path]),
