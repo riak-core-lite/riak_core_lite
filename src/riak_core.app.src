@@ -3,7 +3,7 @@
      {vsn,"3.1.0"},
      {modules,[]},
      {registered,[]},
-     {included_applications,[riak_ensemble,chash]},
+     {included_applications,[chash]},
      {applications,
          [kernel,stdlib,gen_fsm_compat,sasl,crypto,riak_sysmon,os_mon,
           basho_stats,eleveldb,pbkdf2,poolboy,exometer_core,clique,folsom]},
