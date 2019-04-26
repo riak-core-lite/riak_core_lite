@@ -60,7 +60,6 @@ simple_worker_pool() ->
     timer:sleep(1200),
 
     %% make sure we got all the expected responses
-
     [ ?assertEqual(true, receive_result(N)) || N <- lists:seq(1, 10)],
     unlink(Pool),
     riak_core_vnode_worker_pool:stop(Pool, normal).
@@ -85,13 +84,8 @@ simple_noreply_worker_pool() ->
 
 pool_test_() ->
     {setup,
-        fun() ->
-          %% #5 silence log output for test case
-                error_logger:tty(false)
-        end,
-        fun(_) ->
-                error_logger:tty(true)
-        end,
+        fun() -> error_logger:tty(false) end,
+        fun(_) -> error_logger:tty(true) end,
         [
             fun simple_worker_pool/0,
             fun simple_noreply_worker_pool/0

@@ -99,14 +99,12 @@
     update/2,
     get/1,
     reset/1,
-    fold/2,
-    iterator/0,
     itr_next/1,
     itr_done/1,
     itr_value/1,
     itr_close/1,
     property_hash/2,
-    property_hash/3, all_n/0]).
+    property_hash/3]).
 
 -export_type([bucket_type/0]).
 -type bucket_type()       :: binary().
@@ -161,27 +159,6 @@ common_defaults() ->
      {postcommit, []},
      {chash_keyfun, {riak_core_util, chash_std_keyfun}}].
 
-%% @doc When creating a Time Series table, set the replication property
-%% defaults to other values than for normal KV bucket types.  Naturally
-%% let the user override any default values (per RTS-1469)
-%% The `ddl` property contains the TS table DDL, so denotes a
-%% time series bucket type.
--spec ts_defaults(bucket_type_props()) -> bucket_type_props().
-ts_defaults(Props) ->
-    case proplists:is_defined(ddl, Props) of
-        true ->
-            ts_specific_defaults();
-        _ -> []
-    end.
-
-ts_specific_defaults() ->
-    [{allow_mult, false},
-     {dvv_enabled, false},
-     {dw, one},
-     {last_write_wins, true},
-     {r, one},
-     {rw, one}].
-
 
 %% @doc Create the type. The type is not activated (available to nodes) at this time. This
 %% function may be called arbitrarily many times if the claimant does not change between
@@ -189,44 +166,28 @@ ts_specific_defaults() ->
 %% are not valid. Properties not provided will be taken from those returned by
 %% @see defaults/0.
 -spec create(bucket_type(), bucket_type_props()) -> ok | {error, term()}.
-create(?DEFAULT_TYPE, _Props) ->
-    {error, default_type};
-create(BucketType, Props) when is_binary(BucketType) ->
-    Props1 = riak_core_bucket_props:merge(Props,
-        riak_core_bucket_props:merge(ts_defaults(Props), defaults())),
-    ?IF_CAPABLE(riak_core_claimant:create_bucket_type(BucketType, Props1),
-                {error, not_capable}).
+create(<<"default">>, _Props) ->
+    {error, default_type}.
 
 %% @doc Returns the state the type is in.
--spec status(bucket_type()) -> undefined | created | ready | active.
-status(?DEFAULT_TYPE) ->
-    active;
-status(BucketType) when is_binary(BucketType) ->
-    ?IF_CAPABLE(riak_core_claimant:bucket_type_status(BucketType), undefined).
+-spec status(bucket_type()) -> active.
+status(?DEFAULT_TYPE) -> active.
 
 %% @doc Activate the type. This will succeed only if the type is in the `ready' state. Otherwise,
 %% an error is returned.
 -spec activate(bucket_type()) -> ok | {error, undefined | not_ready}.
-activate(?DEFAULT_TYPE) ->
-    ok;
-activate(BucketType) when is_binary(BucketType) ->
-    ?IF_CAPABLE(riak_core_claimant:activate_bucket_type(BucketType), {error, undefined}).
+activate(?DEFAULT_TYPE) -> ok.
 
 %% @doc Update an existing bucket type. Updates may only be performed
 %% on active types. Properties not provided will keep their existing
 %% values.
 -spec update(bucket_type(), bucket_type_props()) -> ok | {error, term()}.
-update(?DEFAULT_TYPE, _Props) ->
-    {error, no_default_update}; %% default props are in the app.config
-update(BucketType, Props) when is_binary(BucketType)->
-    ?IF_CAPABLE(riak_core_claimant:update_bucket_type(BucketType, Props), {error, not_capable}).
+update(?DEFAULT_TYPE, _Props) -> {error, no_default_update}. %% default props are in the app.config
 
 %% @doc Return the properties associated with the given bucket type.
 -spec get(bucket_type()) -> undefined | bucket_type_props().
 get(<<"default">>) ->
-    riak_core_bucket_props:defaults();
-get(BucketType) when is_binary(BucketType) ->
-    riak_core_claimant:get_bucket_type(BucketType, undefined).
+    riak_core_bucket_props:defaults().
 
 %% @doc Reset the properties of the bucket. This only affects properties that
 %% can be set using {@link update/2} and can only be performed on an active
@@ -238,60 +199,6 @@ get(BucketType) when is_binary(BucketType) ->
 reset(BucketType) ->
     update(BucketType, defaults()).
 
-%% @doc iterate over bucket types and find any active buckets.
--spec all_n() -> riak_core_bucket:nval_set().
-all_n() ->
-    riak_core_bucket_type:fold(fun bucket_type_prop_nval_fold/2, ordsets:new()).
-
-%% @private
--spec bucket_type_prop_nval_fold({bucket_type(), riak_core_bucket:properties()},
-        riak_core_bucket:nval_set()) -> riak_core_bucket:nval_set().
-bucket_type_prop_nval_fold({_BType, BProps}, Accum) ->
-    case riak_core_bucket:get_value(active, BProps) of
-        true ->
-            bucket_prop_nval_fold(BProps, Accum);
-        _ ->
-            Accum
-    end.
-
--spec bucket_prop_nval_fold(riak_core_bucket:properties(), riak_core_bucket:nval_set()) ->
-    riak_core_bucket:nval_set().
-bucket_prop_nval_fold(BProps, Accum) ->
-    case riak_core_bucket:get_value(n_val, BProps) of
-        undefined ->
-            Accum;
-        NVal ->
-            ordsets:add_element(NVal, Accum)
-    end.
-
-%% @doc Fold over all bucket types, storing result in accumulator
--spec fold(fun(({bucket_type(), bucket_type_props()}, any()) -> any()),
-           Accumulator::any()) ->
-    any().
-fold(Fun, Accum) ->
-    fold(iterator(), Fun, Accum).
-
--spec fold(
-    riak_core_metadata:iterator(),
-    fun(({bucket_type(), bucket_type_props()}, any()) -> any()),
-    any()
-) ->
-    any().
-fold(It, Fun, Accum) ->
-    case riak_core_bucket_type:itr_done(It) of
-        true ->
-            riak_core_bucket_type:itr_close(It),
-            Accum;
-        _ ->
-            NewAccum = Fun(itr_value(It), Accum),
-            fold(riak_core_bucket_type:itr_next(It), Fun, NewAccum)
-    end.
-
-%% @doc Return an iterator that can be used to walk through all existing bucket types
-%% and their properties
--spec iterator() -> riak_core_metadata:iterator().
-iterator() ->
-    riak_core_claimant:bucket_type_iterator().
 
 %% @doc Advance the iterator to the next bucket type. itr_done/1 should always be called
 %% before this function

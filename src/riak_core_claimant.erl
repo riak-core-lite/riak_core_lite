@@ -21,8 +21,6 @@
 -module(riak_core_claimant).
 -behaviour(gen_server).
 
--include("riak_core_bucket_type.hrl").
-
 %% API
 -export([start_link/0]).
 -export([leave_member/1,
@@ -34,16 +32,8 @@
          plan/0,
          commit/0,
          clear/0,
-         ring_changed/2,
-         pending_close/2,
-         create_bucket_type/2,
-         update_bucket_type/2,
-         bucket_type_status/1,
-         activate_bucket_type/1,
-         get_bucket_type/2,
-         get_bucket_type/3,
-         bucket_type_iterator/0,
-         set_node_location/2]).
+         ring_changed/2
+]).
 -export([reassign_indices/1]). % helpers for claim sim
 
 %% gen_server callbacks
@@ -187,61 +177,6 @@ clear() ->
 ring_changed(Node, Ring) ->
     internal_ring_changed(Node, Ring).
 
-%% @see riak_core_bucket_type:create/2
--spec create_bucket_type(riak_core_bucket_type:bucket_type(), [{atom(), any()}]) ->
-                                ok | {error, term()}.
-create_bucket_type(BucketType, Props) ->
-    gen_server:call(claimant(), {create_bucket_type, BucketType, Props}, infinity).
-
-%% @see riak_core_bucket_type:status/1
--spec bucket_type_status(riak_core_bucket_type:bucket_type()) ->
-                                undefined | created | ready | active.
-bucket_type_status(BucketType) ->
-    gen_server:call(claimant(), {bucket_type_status, BucketType}, infinity).
-
-%% @see riak_core_bucket_type:activate/1
--spec activate_bucket_type(riak_core_bucket_type:bucket_type()) ->
-                                  ok | {error, undefined | not_ready}.
-activate_bucket_type(BucketType) ->
-    gen_server:call(claimant(), {activate_bucket_type, BucketType}, infinity).
-
-%% @doc Lookup the properties for `BucketType'. If there are no properties or
-%% the type is inactive, the given `Default' value is returned.
--spec get_bucket_type(riak_core_bucket_type:bucket_type(), X) -> [{atom(), any()}] | X.
-get_bucket_type(BucketType, Default) ->
-    get_bucket_type(BucketType, Default, true).
-
-%% @doc Lookup the properties for `BucketType'. If there are no properties or
-%% the type is inactive and `RequireActive' is `true', the given `Default' value is
-%% returned.
--spec get_bucket_type(riak_core_bucket_type:bucket_type(), X, boolean()) ->
-                             [{atom(), any()}] | X.
-get_bucket_type(BucketType, Default, RequireActive) ->
-    %% we resolve w/ last-write-wins because conflicts only occur
-    %% during creation when the claimant is changed and create on a
-    %% new claimant happens before the original propogates. In this
-    %% case we want the newest create. Updates can also result in
-    %% conflicts so we choose the most recent as well.
-    case riak_core_metadata:get(?BUCKET_TYPE_PREFIX, BucketType,
-                                [{default, Default}]) of
-        Default -> Default;
-        Props -> maybe_filter_inactive_type(RequireActive, Default, Props)
-    end.
-
-%% @see riak_core_bucket_type:update/2
--spec update_bucket_type(riak_core_bucket_type:bucket_type(), [{atom(), any()}]) ->
-                                ok | {error, term()}.
-update_bucket_type(BucketType, Props) ->
-    gen_server:call(claimant(), {update_bucket_type, BucketType, Props}).
-
-%% @see riak_core_bucket_type:iterator/0
--spec bucket_type_iterator() -> riak_core_metadata:iterator().
-bucket_type_iterator() ->
-    riak_core_metadata:iterator(?BUCKET_TYPE_PREFIX, [{default, undefined},
-                                              {resolver, fun riak_core_bucket_props:resolve/2}]).
-
-
-
 %%%===================================================================
 %%% Claim sim helpers until refactor
 %%%===================================================================
@@ -259,14 +194,6 @@ stage(Node, Action) ->
 claimant() ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     {?MODULE, riak_core_ring:claimant(Ring)}.
-
-maybe_filter_inactive_type(false, _Default, Props) ->
-    Props;
-maybe_filter_inactive_type(true, Default, Props) ->
-    case type_active(Props) of
-        true -> Props;
-        false -> Default
-    end.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -299,47 +226,6 @@ handle_call(plan, _From, State) ->
 handle_call(commit, _From, State) ->
     {Reply, State2} = commit_staged(State),
     {reply, Reply, State2};
-
-handle_call({create_bucket_type, BucketType, Props0}, _From, State) ->
-    Existing = get_bucket_type(BucketType, undefined, false),
-    case can_create_type(BucketType, Existing, Props0) of
-        {ok, Props} ->
-            InactiveProps = lists:keystore(active, 1, Props, {active, false}),
-            ClaimedProps = lists:keystore(claimant, 1, InactiveProps, {claimant, node()}),
-            riak_core_metadata:put(?BUCKET_TYPE_PREFIX, BucketType, ClaimedProps),
-            {reply, ok, State};
-        Error ->
-            {reply, Error, State}
-    end;
-
-handle_call({update_bucket_type, BucketType, Props0}, _From, State) ->
-    Existing = get_bucket_type(BucketType, [], false),
-    case can_update_type(BucketType, Existing, Props0) of
-        {ok, Props} ->
-            MergedProps = riak_core_bucket_props:merge(Props, Existing),
-            riak_core_metadata:put(?BUCKET_TYPE_PREFIX, BucketType, MergedProps),
-            {reply, ok, State};
-        Error ->
-            {reply, Error, State}
-    end;
-
-handle_call({bucket_type_status, BucketType}, _From, State) ->
-    Existing = get_bucket_type(BucketType, undefined, false),
-    Reply = get_type_status(BucketType, Existing),
-    {reply, Reply, State};
-
-handle_call({activate_bucket_type, BucketType}, _From, State) ->
-    Existing = get_bucket_type(BucketType, undefined, false),
-    Status = get_type_status(BucketType, Existing),
-    Reply = maybe_activate_type(BucketType, Status, Existing),
-    {reply, Reply, State};
-
-handle_call({pending_close, Ring, RingID}, _From, State) ->
-    State2 = tick(Ring, RingID, State),
-    {reply, ok, State2};
-
-handle_call(stop, _From, State) ->
-    {stop, normal, ok, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -716,116 +602,6 @@ do_maybe_force_ring_update(Ring) ->
             ok
     end.
 
-%% @private
-can_create_type(BucketType, undefined, Props) ->
-    riak_core_bucket_props:validate(create, {BucketType, undefined}, undefined, Props);
-can_create_type(BucketType, Existing, Props) ->
-    Active = type_active(Existing),
-    Claimed = node() =:= type_claimant(Existing),
-    case {Active, Claimed} of
-        %% if type is not active and this claimant has claimed it
-        %% then we can re-create the type.
-        {false, true} -> riak_core_bucket_props:validate(create, {BucketType, undefined},
-                                                         Existing, Props);
-        {true, _} -> {error, already_active};
-        {_, false} -> {error, not_claimed}
-    end.
-
-%% @private
-can_update_type(_BucketType, undefined, _Props) ->
-    {error, undefined};
-can_update_type(BucketType, Existing, Props) ->
-    case type_active(Existing) of
-        true -> riak_core_bucket_props:validate(update, {BucketType, undefined},
-                                                Existing, Props);
-        false -> {error, not_active}
-    end.
-
-%% @private
-get_type_status(_BucketType, undefined) ->
-    undefined;
-get_type_status(BucketType, Props) ->
-    case type_active(Props) of
-        true  ->
-            active;
-        false ->
-            Is_ddl_compiled = is_ddl_compiled(get_remote_ddl_compiled_status(BucketType, Props)),
-            is_type_ready(
-                Props, get_type_status(BucketType), 
-                Is_ddl_compiled)
-    end.
-
-%%
-all_members() ->
-    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
-    riak_core_ring:all_members(Ring).
-
-%% @private
--spec get_type_status(BucketType::binary()) ->
-    {AllProps::[any()], BadNodes::[node()]}.
-get_type_status(BucketType) ->
-    rpc:multicall(all_members(),
-                  riak_core_metadata,
-                  get, [?BUCKET_TYPE_PREFIX, BucketType, [{default, []}]]).
-
-%%
-get_remote_ddl_compiled_status(BucketType, Props) ->
-    case proplists:get_value(ddl, Props) of
-        undefined ->
-            no_ddl_to_compile;
-        DDL ->
-            rpc:multicall(all_members(),
-                          riak_core_metadata_evt_sup,
-                          is_type_compiled, [BucketType, DDL])
-    end.
-
-%% Checks if the result of the call to is_type_compiled across the cluster.
-is_ddl_compiled(no_ddl_to_compile) ->
-    true;
-is_ddl_compiled({_, BadNodes}) when BadNodes =/= [] ->
-    false;
-is_ddl_compiled({Results, _}) ->
-    lists:all(fun(E) -> E == true end, Results).
-
-%% Check if this nodes and other nodes in the cluster have the same properties
-%% for a bucket type.
--spec is_type_ready(Props::[proplists:property()],
-                    TypeReadyRpcResult::{[term()], [node()]},
-                    IsDDLCompiled::boolean()) -> created | ready.
-is_type_ready(_,_,false) ->
-    created;
-is_type_ready(Props, {AllProps, BadNodes}, _) ->
-    SortedProps = lists:ukeysort(1, Props),
-    %% P may be a {badrpc, ...} in addition to a list of properties when there are older nodes involved
-    DiffProps = [P || P <- AllProps, (not is_list(P) orelse lists:ukeysort(1, P) =/= SortedProps)],
-    case {DiffProps, BadNodes} of
-        {[], []} -> ready;
-        % unreachable nodes may or may not have correct value, so we assume
-        % they dont
-        {_,_} -> created
-    end.
-
-%% @private
-maybe_activate_type(_BucketType, undefined, _Props) ->
-    {error, undefined};
-maybe_activate_type(_BucketType, created, _Props) ->
-    {error, not_ready};
-maybe_activate_type(_BucketType, active, _Props) ->
-    ok;
-maybe_activate_type(BucketType, ready, Props) ->
-    ActiveProps = lists:keystore(active, 1, Props, {active, true}),
-    riak_core_metadata:put(?BUCKET_TYPE_PREFIX, BucketType, ActiveProps).
-
-%% @private
-type_active(Props) ->
-    {active, true} =:= lists:keyfind(active, 1, Props).
-
-%% @private
-type_claimant(Props) ->
-    case lists:keyfind(claimant, 1, Props) of
-        {claimant, Claimant} -> Claimant;
-        false -> undefined
-    end.
 
 %% =========================================================================
 %% Claimant rebalance/reassign logic
@@ -993,6 +769,7 @@ change({abort_resize, _Node}, Ring) ->
 change({{set_location, Location}, Node}, Ring) ->
     riak_core_ring:set_node_location(Node, Location, Ring).
 
+%%noinspection ErlangUnboundVariable
 internal_ring_changed(Node, CState) ->
     {Changed, CState5} = do_claimant(Node, CState, fun log/2),
     inform_removed_nodes(Node, CState, CState5),
@@ -1454,79 +1231,3 @@ log(_, _) ->
 %% EUnit tests
 %% ===================================================================
 
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-is_type_ready_empty_test() ->
-    ?assertEqual(
-        ready,
-        is_type_ready([], {[], []}, true)
-    ).
-
-is_type_ready_same_props_1_test() ->
-    P = [{a,1}],
-    ?assertEqual(
-        ready,
-        is_type_ready(P, {[P], []}, true)
-    ).
-
-is_type_ready_same_props_2_test() ->
-    P = [{a,1}],
-    ?assertEqual(
-        ready,
-        is_type_ready(P, {[P, P, P], []}, true)
-    ).
-
-is_type_ready_same_props_3_test() ->
-    P = [{b,2}, {a,1}, {c,3}],
-    ?assertEqual(
-        ready,
-        is_type_ready(P, {[P, P, P], []}, true)
-    ).
-
-is_type_ready_different_props_1_test() ->
-    ?assertEqual(
-        created,
-        is_type_ready([{a,1}], {[[{a,2}]], []}, true)
-    ).
-
-is_type_ready_different_props_2_test() ->
-    P = [{a,1}],
-    ?assertEqual(
-        created,
-        is_type_ready(P, {[P, [{a,2}]], []}, true)
-    ).
-
-is_type_ready_bad_nodes_test() ->
-    P = [{b,2}, {a,1}, {c,3}],
-    ?assertEqual(
-        created,
-        is_type_ready(P, {[P], ['riak@localhost']}, true)
-    ).
-
-is_ddl_compiled_1_test() ->
-    ?assertEqual(
-        true,
-        is_ddl_compiled(no_ddl_to_compile)
-    ).
-
-is_ddl_compiled_2_test() ->
-    ?assertEqual(
-        false,
-        is_ddl_compiled({[true], [a_node]})
-    ).
-
-is_ddl_compiled_3_test() ->
-    ?assertEqual(
-        true,
-        is_ddl_compiled({[true], []})
-    ).
-
-is_ddl_compiled_4_test() ->
-    ?assertEqual(
-        false,
-        is_ddl_compiled({[true, false], []})
-    ).
-
-
--endif.
