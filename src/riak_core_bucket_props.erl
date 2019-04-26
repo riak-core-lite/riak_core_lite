@@ -36,7 +36,7 @@ merge(Overriding, Other) ->
 
 
 -spec validate(create | update,
-               {riak_core_bucket_type:bucket_type(), undefined | binary()} | binary(),
+               {riak_core_bucket:bucket_type(), undefined | binary()} | binary(),
                undefined | [{atom(), any()}],
                [{atom(), any()}]) -> {ok, [{atom(), any()}]} | {error, [{atom(), atom()}]}.
 validate(CreateOrUpdate, Bucket, ExistingProps, BucketProps) ->

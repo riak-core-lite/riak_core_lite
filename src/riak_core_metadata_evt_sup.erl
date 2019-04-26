@@ -32,8 +32,6 @@
 -export([swap_notification_handler/3]).
 -export([sync_notify/2]).
 
--include("riak_core_bucket_type.hrl").
-
 -define(TABLE, ?MODULE).
 -define(CHILD_ID, riak_core_metadata_evt).
 
@@ -76,8 +74,8 @@ sync_notify(FullPrefix, Key) ->
 %% This should only be called if the bucket type has the ddl property.
 -spec is_type_compiled(BucketType :: binary(), DDL :: term()) -> boolean().
 is_type_compiled(BucketType, DDL) when is_binary(BucketType) ->
-    case ets:lookup(?TABLE, ?BUCKET_TYPE_PREFIX) of
-        [{?BUCKET_TYPE_PREFIX, Pid}] ->
+    case ets:lookup(?TABLE, {core, bucket_types}) of
+        [{{core, bucket_types}, Pid}] ->
             Handlers = gen_event:which_handlers(Pid),
             Req = {is_type_compiled, [BucketType, DDL]},
             Results = [gen_event:call(Pid, H, Req) || H <- Handlers],

@@ -44,7 +44,7 @@
 -type properties() :: [property()].
 
 -type riak_core_ring() :: riak_core_ring:riak_core_ring().
--type bucket_type()  :: riak_core_bucket_type:bucket_type().
+-type bucket_type()  :: binary().
 -type nval_set() :: ordsets:ordset(pos_integer()).
 -type bucket() :: binary() | {bucket_type(), binary()}.
 
