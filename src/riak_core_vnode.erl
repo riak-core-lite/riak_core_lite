@@ -1,5 +1,7 @@
+%% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.
+%% Copyright (c) 2018 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -541,7 +543,10 @@ active(unregistered, State=#state{mod=Mod, index=Index}) ->
                 [Index, Mod]),
     {stop, normal, State#state{handoff_target=none,
                                handoff_type=undefined,
-                               pool_pid=undefined}}.
+                               pool_pid=undefined}};
+active(Other, State=#state{index=Index}) ->
+    lager:info("Vnode for patition ~p received unexpected message ~p", [Index, Other]),
+    continue(State).
 
 active(_Event, _From, State) ->
     Reply = ok,
