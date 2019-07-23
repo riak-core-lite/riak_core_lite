@@ -29,7 +29,7 @@
          get_apl_ann_with_pnum/1,
          get_primary_apl/3, get_primary_apl/4,
          get_primary_apl_chbin/4,
-         first_up/2, offline_owners/1, offline_owners/2, offline_owners/3
+         first_up/2, offline_owners/1, offline_owners/2
         ]).
 
 -export_type([preflist/0, preflist_ann/0, preflist_with_pnum_ann/0]).
@@ -174,13 +174,13 @@ offline_owners(Service) ->
     {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
     offline_owners(Service, CHBin).
 
-offline_owners(Service, CHBin) ->
-    offline_owners(Service, CHBin, []).
-
-offline_owners(Service, CHBin, OtherDownNodes) ->
+offline_owners(Service, CHBin) when is_atom(Service) ->
     UpSet = ordsets:from_list(riak_core_node_watcher:nodes(Service)),
+    offline_owners(UpSet, CHBin);
+offline_owners(UpSet, CHBin) when is_list(UpSet) ->
+    %% UpSet is an ordset of available nodes
     DownVNodes = chashbin:to_list_filter(fun({_Index, Node}) ->
-                                                 (not is_up(Node, UpSet) or lists:member(Node,OtherDownNodes))
+                                                 not is_up(Node, UpSet)
                                          end, CHBin),
     DownVNodes.
 

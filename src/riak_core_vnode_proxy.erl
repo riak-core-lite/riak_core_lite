@@ -20,7 +20,7 @@
 -export([start_link/2, init/1, reg_name/2, reg_name/3, call/2, call/3, cast/2,
          unregister_vnode/3, command_return_vnode/2, overloaded/1]).
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
--export([soft_load_mailbox_check/2]).
+
 -include("riak_core_vnode.hrl").
 
 -compile({nowarn_deprecated_function, 
@@ -42,8 +42,6 @@
                 check_request          :: undefined | sent | ignore
                }).
 
-%% NOTE: changed down to 50 for gh1661 soft-limits on vnode mailbox
--define(DEFAULT_CHECK_REQUEST_INTERVAL, 50).
 -define(DEFAULT_CHECK_INTERVAL, 5000).
 -define(DEFAULT_OVERLOAD_THRESHOLD, 10000).
 
@@ -69,7 +67,7 @@ init([Parent, RegName, Mod, Index]) ->
                                   ?DEFAULT_CHECK_INTERVAL),
     RequestInterval = app_helper:get_env(riak_core,
                                          vnode_check_request_interval,
-                                         ?DEFAULT_CHECK_REQUEST_INTERVAL),
+                                         Interval div 2),
     Threshold = app_helper:get_env(riak_core,
                                    vnode_overload_threshold,
                                    ?DEFAULT_OVERLOAD_THRESHOLD),
@@ -170,10 +168,6 @@ handle_call(overloaded, _From, State=#state{check_mailbox=Mailbox,
                                             check_threshold=Threshold}) ->
     Result = (Mailbox > Threshold),
     {reply, Result, State};
-handle_call(mailbox_size, _From, State=#state{check_mailbox=Mailbox,
-					      check_request_interval=CRI}) ->
-    Result = soft_load_mailbox_check(Mailbox, CRI),
-    {reply, Result, State};
 handle_call(_Msg, _From, State) ->
     {reply, ok, State}.
 
@@ -196,11 +190,6 @@ handle_cast({vnode_proxy_pong, Ref, Msgs}, State=#state{check_request=RequestSta
                        State
                end,
     {noreply, NewState};
-handle_cast({mailbox_size, From, Tag}, State=#state{check_mailbox=Mailbox,
-					      check_request_interval=CRI}) ->
-    Result = soft_load_mailbox_check(Mailbox, CRI),
-    From ! {mbox, {Tag, Result}},
-    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -324,13 +313,6 @@ send_proxy_ping(Pid, MailboxSizeAfterPing) ->
     Pid ! {'$vnode_proxy_ping', self(), Ref, MailboxSizeAfterPing},
     Ref.
 
-%% @private moved into it's own function for call and cast (and for
-%% intercepting in riak-test)
-soft_load_mailbox_check(MBox, Interval) when MBox < Interval *2 ->
-    {ok, MBox, Interval};
-soft_load_mailbox_check(MBox, Interval) ->
-    {soft_loaded, MBox, Interval}.
-
 -ifdef(TEST).
 
 update_msg_counter() ->
@@ -379,6 +361,7 @@ overload_test_() ->
     {timeout, 900, {foreach,
      fun() ->
              VnodePid = spawn(fun fake_loop/0),
+             meck:unload(),
              meck:new(riak_core_vnode_manager, [passthrough]),
              meck:expect(riak_core_vnode_manager, get_vnode_pid,
                          fun(_Index, fakemod) -> {ok, VnodePid};
@@ -394,8 +377,8 @@ overload_test_() ->
              {VnodePid, ProxyPid}
      end,
      fun({VnodePid, ProxyPid}) ->
-             meck:unload(riak_core_vnode_manager),
-             meck:unload(fakemod),
+             unlink(VnodePid),
+             unlink(ProxyPid),
              exit(VnodePid, kill),
              exit(ProxyPid, kill)
      end,

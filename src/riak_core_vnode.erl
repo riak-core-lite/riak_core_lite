@@ -54,7 +54,6 @@
          trigger_delete/1,
          core_status/1,
          handoff_error/3]).
--export([queue_work/4]).
 
 -include("stacktrace.hrl").
 
@@ -136,6 +135,34 @@
     ok.
 
 -callback delete(ModState::term()) -> {ok, NewModState::term()}.
+
+%% This commands are not executed inside the VNode, instead they are
+%% part of the vnode_proxy contract.
+%%
+%% The vnode_proxy will drop requests in an overload situation, when
+%% his happens one of the two handle_overload_* commands in the
+%% vnode module is called. This call happens **from the vnode proxy**
+%%
+%% These calls are wrapped in a catch() meaning that when they don't
+%% exist they will quietly fail. However the catch is hugely expensive
+%% leading to the sitaution that when there already is a overload
+%% the vnode proxy gets even worst overloaded.
+%%
+%% This is pretty bad since the proxy is supposed to protect against
+%% exactly this overload.
+%%
+%% So yea sorry, you're going to be forced to implement them, if nothing
+%% else just nop them out.
+%%
+%% BUT DO NOT call expensive functions from them there is a special hell
+%% for people doing that! (it's called overflowing message queue hell and is
+%% really nasty!)
+-callback handle_overload_command(Request::term(), Sender::sender(),
+                                  Idx::partition()) ->
+    ok.
+
+-callback handle_overload_info(Request::term(), Idx::partition()) ->
+    ok.
 
 %% handle_exit/3 is an optional behaviour callback that can be implemented.
 %% It will be called in the case that a process that is linked to the vnode
@@ -242,36 +269,22 @@ do_init(State = #state{index=Index, mod=Mod, forward=Forward}) ->
         {error, Reason} ->
             {error, Reason};
         _ ->
-            ModState0 = 
-                case lists:keyfind(pool, 1, Props) of
-                    {pool, WorkerMod, PoolSize, WorkerArgs}=PoolConfig ->
-                        lager:info("Starting vnode worker pool " ++ 
-                                        "~p with size of ~p~n",
-                                    [WorkerMod, PoolSize]),
-                        {ok, PoolPid} =
-                            riak_core_vnode_worker_pool:start_link(WorkerMod,
-                                                                PoolSize,
-                                                                Index,
-                                                                WorkerArgs,
-                                                                worker_props),
-                        % If the vnode Module requires access to the vnode worker 
-                        % pool, it should export a function add_vnode_pool/2
-                        case erlang:function_exported(Mod, add_vnode_pool, 2) of
-                            true ->
-                                lager:info("Adding vnode_pool ~w to ~w state",
-                                            [PoolPid, Mod]),
-                                Mod:add_vnode_pool(PoolPid, ModState);
-                            false ->
-                                ModState
-                        end;
-                    _ ->
-                        PoolPid = PoolConfig = undefined,
-                        ModState
-                end,
+            case lists:keyfind(pool, 1, Props) of
+                {pool, WorkerModule, PoolSize, WorkerArgs}=PoolConfig ->
+                    lager:debug("starting worker pool ~p with size of ~p~n",
+                                [WorkerModule, PoolSize]),
+                    {ok, PoolPid} = riak_core_vnode_worker_pool:start_link(WorkerModule,
+                                                                       PoolSize,
+                                                                       Index,
+                                                                       WorkerArgs,
+                                                                       worker_props);
+                _ ->
+                    PoolPid = PoolConfig = undefined
+            end,
             riak_core_handoff_manager:remove_exclusion(Mod, Index),
             Timeout = app_helper:get_env(riak_core, vnode_inactivity_timeout, ?DEFAULT_TIMEOUT),
-            Timeout2 = Timeout + rand:uniform(Timeout),
-            State2 = State#state{modstate=ModState0, inactivity_timeout=Timeout2,
+            Timeout2 = Timeout + riak_core_rand:uniform(Timeout),
+            State2 = State#state{modstate=ModState, inactivity_timeout=Timeout2,
                                  pool_pid=PoolPid, pool_config=PoolConfig},
             lager:debug("vnode :: ~p/~p :: ~p~n", [Mod, Index, Forward]),
             State3 = mod_set_forwarding(Forward, State2),
@@ -387,15 +400,6 @@ vnode_command(Sender, Request, State=#state{mod=Mod,
             %% the result is sent back to 'From'
             riak_core_vnode_worker_pool:handle_work(Pool, Work, From),
             continue(State, NewModState);
-        {PoolName, Work, From, NewModState} ->
-            %% dispatch some work to the node worker pool
-            %% the result is sent back to 'From'
-            %% The node worker pool stops too many vnodes from running
-            %% the fold concurrently
-            %% If a node_worker_pool has not been setup under the given name
-            %% then it will fallback to the vnode worker pool
-            queue_work(PoolName, Work, From, Pool),
-            continue(State, NewModState);
         {stop, Reason, NewModState} ->
             {stop, Reason, State#state{modstate=NewModState}}
     end.
@@ -432,15 +436,6 @@ vnode_coverage(Sender, Request, KeySpaces, State=#state{index=Index,
             %% the result is sent back to 'From'
             riak_core_vnode_worker_pool:handle_work(Pool, Work, From),
             continue(State, NewModState);
-        {PoolName, Work, From, NewModState} ->
-            %% dispatch some work to the node worker pool
-            %% the result is sent back to 'From'
-            %% The node worker pool stops too many vnodes from running
-            %% the fold concurrently
-            %% If a node_worker_pool has not been setup under the given name
-            %% then it will fallback to the vnode worker pool
-            queue_work(PoolName, Work, From, Pool),
-            continue(State, NewModState);
         {stop, Reason, NewModState} ->
             {stop, Reason, State#state{modstate=NewModState}}
     end.
@@ -465,7 +460,7 @@ vnode_handoff_command(Sender, Request, ForwardTo,
         {forward, NewModState} ->
             forward_request(HOType, Request, HOTarget, ForwardTo, Sender, State),
             continue(State, NewModState);
- 	{forward, NewReq, NewModState} ->
+        {forward, NewReq, NewModState} ->
             forward_request(HOType, NewReq, HOTarget, ForwardTo, Sender, State),
             continue(State, NewModState);
         {drop, NewModState} ->
@@ -929,6 +924,7 @@ handle_info(Info, StateName, State=#state{mod=Mod,modstate=ModState}) ->
             {next_state, StateName, State, State#state.inactivity_timeout}
     end.
 
+-ifndef('21.0').
 terminate(Reason, _StateName, #state{mod=Mod, modstate=ModState,
         pool_pid=Pool}) ->
     %% Shutdown if the pool is still alive and a normal `Reason' is
@@ -953,6 +949,32 @@ terminate(Reason, _StateName, #state{mod=Mod, modstate=ModState,
                 Mod:terminate(Reason, ModState)
         end
     end.
+-else.
+terminate(Reason, _StateName, #state{mod=Mod, modstate=ModState,
+                                     pool_pid=Pool}) ->
+    %% Shutdown if the pool is still alive and a normal `Reason' is
+    %% given - there could be a race on delivery of the unregistered
+    %% event and successfully shutting down the pool.
+    try
+        case is_pid(Pool) andalso is_process_alive(Pool) andalso ?normal_reason(Reason) of
+            true ->
+                riak_core_vnode_worker_pool:shutdown_pool(Pool, 60000);
+            _ ->
+                ok
+        end
+    catch C:T:Stack ->
+            lager:error("Error while shutting down vnode worker pool ~p:~p trace : ~p",
+                        [C, T, Stack])
+    after
+        case ModState of
+            %% Handoff completed, Mod:delete has been called, now terminate.
+            {deleted, ModState1} ->
+                Mod:terminate(Reason, ModState1);
+            _ ->
+                Mod:terminate(Reason, ModState)
+        end
+    end.
+-endif.
 
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
@@ -1101,22 +1123,6 @@ mod_set_forwarding(Forward, State=#state{mod=Mod, modstate=ModState}) ->
             State
     end.
 
-queue_work(PoolName, Work, From, VnodeWrkPool) ->
-    PoolName0 =
-        case PoolName of
-            queue -> riak_core_node_worker_pool:nwp();
-            PoolName -> PoolName
-        end,
-    case whereis(PoolName0) of
-        undefined ->
-            lager:info("Using vnode pool as ~w pool is not registered",
-                        [PoolName0]),
-            riak_core_stat:update({worker_pool, unregistered}),
-            riak_core_vnode_worker_pool:handle_work(VnodeWrkPool, Work, From);
-        _P ->
-            riak_core_node_worker_pool:handle_work(PoolName0, Work, From)
-    end.
-
 %% ===================================================================
 %% Test API
 %% ===================================================================
@@ -1138,34 +1144,28 @@ test_link(Mod, Index) ->
 current_state(Pid) ->
     gen_fsm:sync_send_all_state_event(Pid, current_state).
 
-pool_death_test_() ->
-    {timeout, 60, [
-                   fun() ->
-                           meck:new(test_vnode, [non_strict, no_link]),
-                           meck:expect(test_vnode, init, fun(_) -> {ok, [], [{pool, test_pool_mod, 1, []}]} end),
-                           meck:expect(test_vnode, terminate, fun(_, _) -> normal end),
-                           meck:new(test_pool_mod, [non_strict, no_link]),
-                           meck:expect(test_pool_mod, init_worker, fun(_, _, _) -> {ok, []} end),
+pool_death_test() ->
+    meck:unload(),
+    meck:new(test_vnode, [non_strict, no_link]),
+    meck:expect(test_vnode, init, fun(_) -> {ok, [], [{pool, test_pool_mod, 1, []}]} end),
+    meck:expect(test_vnode, terminate, fun(_, _) -> normal end),
+    meck:new(test_pool_mod, [non_strict, no_link]),
+    meck:expect(test_pool_mod, init_worker, fun(_, _, _) -> {ok, []} end),
 
-                           {ok, Pid} = ?MODULE:test_link(test_vnode, 0),
-                           unlink(Pid),
-                           {_, StateData1} = ?MODULE:current_state(Pid),
-                           PoolPid1 = StateData1#state.pool_pid,
-                           exit(PoolPid1, kill),
-                           wait_for_process_death(PoolPid1),
-                           ?assertNot(is_process_alive(PoolPid1)),
-                           wait_for_state_update(StateData1, Pid),
-                           {_, StateData2} = ?MODULE:current_state(Pid),
-                           PoolPid2 = StateData2#state.pool_pid,
-                           ?assertNot(PoolPid2 =:= undefined),
-                           exit(Pid, normal),
-                           wait_for_process_death(Pid),
-                           meck:validate(test_pool_mod),
-                           meck:validate(test_vnode),
-                           meck:unload(test_pool_mod),
-                           meck:unload(test_vnode)
-                   end
-                  ]}.
+    {ok, Pid} = ?MODULE:test_link(test_vnode, 0),
+    {_, StateData1} = ?MODULE:current_state(Pid),
+    PoolPid1 = StateData1#state.pool_pid,
+    exit(PoolPid1, kill),
+    wait_for_process_death(PoolPid1),
+    ?assertNot(is_process_alive(PoolPid1)),
+    wait_for_state_update(StateData1, Pid),
+    {_, StateData2} = ?MODULE:current_state(Pid),
+    PoolPid2 = StateData2#state.pool_pid,
+    ?assertNot(PoolPid2 =:= undefined),
+    exit(Pid, normal),
+    wait_for_process_death(Pid),
+    meck:validate(test_pool_mod),
+    meck:validate(test_vnode).
 
 wait_for_process_death(Pid) ->
     wait_for_process_death(Pid, is_process_alive(Pid)).

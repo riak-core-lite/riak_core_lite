@@ -77,6 +77,16 @@ validate_core_prop(create, {_Bucket, undefined}, Existing, {claimant, Claimant})
 validate_core_prop(update, {_Bucket, _BucketName}, _Existing, {claimant, _Claimant}) ->
     %% cannot update claimant
     {claimant, "Cannot update claimant property"};
+validate_core_prop(update, {_Bucket, _BucketName}, _Existing, {ddl, _DDL}) ->
+    %% cannot update time series DDL
+    {ddl, "Cannot update time series data definition"};
+validate_core_prop(update, {_Bucket, _BucketName}, _Existing, {table_def, _DDL}) ->
+    %% cannot update time series DDL (or, if it slips past riak_kv_console,
+    %% the table_def SQL(ish) code that is parsed to make a DDL)
+    %%
+    %% Defining the table_def atom here also sidesteps occasional
+    %% errors from existing_atom functions
+    {ddl, "Cannot update time series data definition"};
 validate_core_prop(create, {_Bucket, undefined}, undefined, {active, false}) ->
     %% first creation call that sets active to false is always valid
     true;
@@ -168,8 +178,6 @@ resolve_prop({precommit, PC1}, {precommit, PC2}) ->
     resolve_hooks(PC1, PC2);
 resolve_prop({pw, PW1}, {pw, PW2}) ->
     max(PW1, PW2);
-resolve_prop({node_confirms, NodeConfirms1}, {node_confirms, NodeConfirms2}) ->
-    max(NodeConfirms1, NodeConfirms2);
 resolve_prop({r, R1}, {r, R2}) ->
     max(R1, R2);
 resolve_prop({rw, RW1}, {rw, RW2}) ->
@@ -208,7 +216,6 @@ simple_resolve_test() ->
               {pr,0},
               {precommit,[{a, b}]},
               {pw,0},
-              {node_confirms,0},
               {r,quorum},
               {rw,quorum},
               {small_vclock,50},
@@ -229,7 +236,6 @@ simple_resolve_test() ->
               {pr,1},
               {precommit,[{c, d}]},
               {pw,3},
-              {node_confirms,3},
               {r,3},
               {rw,3},
               {w,1},
@@ -249,7 +255,6 @@ simple_resolve_test() ->
                 {pr,1},
                 {precommit,[{a, b}, {c, d}]},
                 {pw,3},
-                {node_confirms,3},
                 {r,quorum},
                 {rw,quorum},
                 {small_vclock,50},

@@ -2,7 +2,7 @@
 %%
 %% riak_core: Core Riak Application
 %%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -84,11 +84,17 @@
          ring_trans/2,
          run_fixups/3,
          set_cluster_name/1,
-         stop/0,
          is_stable_ring/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
         terminate/2, code_change/3]).
+
+-ifdef(TEST).
+
+-export([stop/0]).
+
+-endif.
+
 
 -record(state, {
         mode,
@@ -222,7 +228,7 @@ force_update() ->
     ring_trans(
       fun(Ring, _) ->
               NewRing = riak_core_ring:update_member_meta(node(), Ring, node(),
-                                                          unused, os:timestamp()), %% normally, should be a vclock.
+                                                          unused, erlang:timestamp()),
               {new_ring, NewRing}
       end, []),
     ok.
@@ -322,10 +328,15 @@ prune_ringfiles() ->
             end
     end.
 
-
+-ifdef(TEST).
 %% @private (only used for test instances)
 stop() ->
-    gen_server:cast(?MODULE, stop).
+    try
+        gen_server:call(?MODULE, stop)
+    catch
+        exit:{noproc, _} -> ok
+    end.
+-endif.
 
 
 %% ===================================================================
@@ -335,9 +346,8 @@ stop() ->
 init([Mode]) ->
     setup_ets(Mode),
     Ring = reload_ring(Mode),
-    Ring2 = node_level_config(Ring),
-    State = set_ring(Ring2, #state{mode = Mode}),
-    riak_core_ring_events:ring_update(Ring2),
+    State = set_ring(Ring, #state{mode = Mode}),
+    riak_core_ring_events:ring_update(Ring),
     {ok, State}.
 
 reload_ring(test) ->
@@ -351,14 +361,7 @@ reload_ring(live) ->
                                    [lager:posix_error(Reason)]),
                     throw({error, Reason});
                 Ring ->
-                    %% Upgrade the ring data structure if necessary.
-                    case riak_core_ring:legacy_ring(Ring) of
-                        true ->
-                            lager:info("Upgrading legacy ring"),
-                            riak_core_ring:upgrade(Ring);
-                        false ->
-                            Ring
-                    end
+                    Ring
             end;
         {error, not_found} ->
             lager:warning("No ring file available."),
@@ -425,10 +428,10 @@ handle_call({set_cluster_name, Name}, _From, State=#state{raw_ring=Ring}) ->
     {reply, ok, State2};
 handle_call(is_stable_ring, _From, State) ->
     {IsStable, _DeltaMS} = is_stable_ring(State),
-    {reply, IsStable, State}.
+    {reply, IsStable, State};
 
-handle_cast(stop, State) ->
-    {stop,normal,State};
+handle_call(stop, _From, State) ->
+    {stop,normal, ok, State}.
 
 handle_cast({refresh_my_ring, ClusterName}, State) ->
     {ok, Ring} = get_my_ring(),
@@ -518,14 +521,6 @@ run_fixups([{App, Fixup}|T], BucketName, BucketProps) ->
             BucketProps
     end,
     run_fixups(T, BucketName, BP).
-
-%% Add node level configs to ring
--spec node_level_config(riak_core_ring:riak_core_ring()) -> riak_core_ring:riak_core_ring().
-node_level_config(Ring) ->
-    %% Check node participation in coverage queries and update ring
-    Node = node(),
-    ParticipateInCoverage = app_helper:get_env(riak_core,participate_in_coverage),
-    riak_core_ring:update_member_meta(Node, Ring, Node, participate_in_coverage, ParticipateInCoverage).
 
 set_ring(Ring, State) ->
     set_ring_global(Ring),
@@ -704,29 +699,37 @@ set_my_ring_test() ->
     cleanup_ets(test).
 
 refresh_my_ring_test() ->
-    setup_ets(test),
-    Core_Settings = [{ring_creation_size, 4},
-                     {ring_state_dir, "/tmp"},
-                     {cluster_name, "test"}],
-    [begin
-         put({?MODULE,AppKey}, app_helper:get_env(riak_core, AppKey)),
-         ok = application:set_env(riak_core, AppKey, Val)
-     end || {AppKey, Val} <- Core_Settings],
-    riak_core_ring_events:start_link(),
-    riak_core_ring_manager:start_link(test),
-    riak_core_claimant:start_link(),
-    riak_core_vnode_sup:start_link(),
-    riak_core_vnode_master:start_link(riak_core_vnode),
-    riak_core_test_util:setup_mockring1(),
-    ?assertEqual(ok, riak_core_ring_manager:refresh_my_ring()),
-    riak_core_ring_manager:stop(),
-    riak_core_claimant:stop(),
-    %% Cleanup the ring file created for this test
-    {ok, RingFile} = find_latest_ringfile(),
-    file:delete(RingFile),
-    [ok = application:set_env(riak_core, AppKey, get({?MODULE, AppKey}))
-     || {AppKey, _Val} <- Core_Settings],
-    ok.
+    {spawn, fun() ->
+        setup_ets(test),
+        Core_Settings = [{ring_creation_size, 4},
+                         {ring_state_dir, "/tmp"},
+                         {cluster_name, "test"}],
+        [begin
+             put({?MODULE,AppKey}, app_helper:get_env(riak_core, AppKey)),
+             ok = application:set_env(riak_core, AppKey, Val)
+         end || {AppKey, Val} <- Core_Settings],
+        stop_core_processes(),
+        riak_core_ring_events:start_link(),
+        riak_core_ring_manager:start_link(test),
+        riak_core_vnode_sup:start_link(),
+        riak_core_vnode_master:start_link(riak_core_vnode),
+        riak_core_test_util:setup_mockring1(),
+        ?assertEqual(ok, riak_core_ring_manager:refresh_my_ring()),
+        stop_core_processes(),
+        %% Cleanup the ring file created for this test
+        {ok, RingFile} = find_latest_ringfile(),
+        file:delete(RingFile),
+        [ok = application:set_env(riak_core, AppKey, get({?MODULE, AppKey}))
+         || {AppKey, _Val} <- Core_Settings],
+        ok
+    end
+    }.
+
+stop_core_processes() ->
+    riak_core_test_util:stop_pid(riak_core_ring_events),
+    riak_core_test_util:stop_pid(riak_core_ring_manager),
+    riak_core_test_util:stop_pid(riak_core_vnode_sup),
+    riak_core_test_util:stop_pid(riak_core_vnode_master).
 
 -define(TEST_RINGDIR, "ring_manager_eunit").
 -define(TEST_RINGFILE, (?TEST_RINGDIR ++ "/test.ring")).

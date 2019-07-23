@@ -20,9 +20,6 @@
 
 -behaviour(gen_server).
 
--compile({nowarn_deprecated_function, 
-            [{gen_fsm, send_all_state_event, 2}]}).
-
 -include("riak_core_vnode.hrl").
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -36,21 +33,18 @@
                                  {gen_server, pulse_gen_server}]}).
 -endif.
 
+-type mod_state() :: term().
+
 -record(state, {
         module :: atom(),
-        modstate :: any()
+        modstate :: mod_state()
     }).
 
--callback init_worker(VnodeIDx :: partition(),
-                        Args :: list(any()),
-                        Props :: list(tuple())) ->
-                            {ok, WorkerState :: any()}.
-
--callback handle_work(Work :: any(),
-                        From :: sender(),
-                        WorkerState :: any()) ->
-                            {noreply, UpdWorkerState :: any()} |
-                            {reply, Reply :: any(), UpdWorkerState :: any()}.
+-callback init_worker(partition(), Args :: term(), Props :: [{atom(), term()}]) ->
+    {ok, mod_state()}.
+-callback handle_work(Work :: term(), sender(), mod_state()) ->
+    {reply, Reply :: term(), mod_state()} |
+    {noreply, mod_state()}.
 
 start_link(Args) ->
     WorkerMod = proplists:get_value(worker_callback_mod, Args),
@@ -96,4 +90,3 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-

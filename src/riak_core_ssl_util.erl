@@ -33,7 +33,8 @@
          get_common_name/1,
          load_certs/1,
          parse_ciphers/1,
-         print_ciphers/1
+         print_ciphers/1,
+         new_ssl_accept/3
         ]).
 
 -ifdef(TEST).
@@ -77,7 +78,6 @@ maybe_use_ssl(App) ->
                 {App, get_my_common_name(app_helper:get_env(App, certfile,
                                                        undefined))}}},
         {verify, verify_peer},
-        {server_name_indication, disable},
         {fail_if_no_peer_cert, true},
         {secure_renegotiate, true} %% both sides are erlang, so we can force this
     ],
@@ -154,7 +154,7 @@ upgrade_server_to_ssl(Socket, App) ->
         false ->
             {error, no_ssl_config};
         Config ->
-            ssl_handshake(Socket, Config)
+            new_ssl_accept(Socket, Config, infinity)
     end.
 
 load_certs(undefined) ->
@@ -356,6 +356,27 @@ print_ciphers(CipherList) ->
     string:join([openssl_suite_name(Cipher) || Cipher <-
                                                           CipherList], ":").
 
+-ifdef(OTP_RELEASE).
+new_ssl_accept(ClientSocket, SSLOptions, Timeout) ->
+    case ssl:handshake(ClientSocket, SSLOptions, Timeout) of
+        {ok, SslClientSocket} ->
+            {ok, SslClientSocket};
+        {ok, SslClientSocket, _Ext} ->
+            {ok, SslClientSocket};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+-else.
+new_ssl_accept(ClientSocket, SSLOptions, Timeout) ->
+    case ssl:ssl_accept(ClientSocket, SSLOptions, Timeout) of
+        ok ->
+            {ok, ClientSocket};
+        {ok, ClientSocket} ->
+            {ok, ClientSocket};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+-endif.
 
 %% ===================================================================
 %% EUnit tests

@@ -40,6 +40,7 @@
          safe_rpc/5,
          rpc_every_member/4,
          rpc_every_member_ann/4,
+         count/2,
          keydelete/2,
          multi_keydelete/2,
          multi_keydelete/3,
@@ -73,15 +74,26 @@
          job_class_enabled/1,
          job_class_enabled/2,
          job_class_disabled_message/2,
-         report_job_request_disposition/6
+         report_job_request_disposition/6,
+         responsible_preflists/1,
+         responsible_preflists/2,
+         get_index_n/1,
+         preflist_siblings/1
         ]).
 
 -include("riak_core_vnode.hrl").
 
 -ifdef(TEST).
+-ifdef(EQC).
+-include_lib("eqc/include/eqc.hrl").
+-endif. %% EQC
 -include_lib("eunit/include/eunit.hrl").
 -export([counter_loop/1,incr_counter/1,decr_counter/1]).
--endif.
+-endif. %% TEST
+
+-type riak_core_ring() :: riak_core_ring:riak_core_ring().
+-type index() :: non_neg_integer().
+-type index_n() :: {index(), pos_integer()}.
 
 %% R14 Compatibility
 -compile({no_auto_import,[integer_to_list/2]}).
@@ -128,7 +140,7 @@ rfc1123_to_now(String) when is_list(String) ->
 %%      to the new directory.
 make_tmp_dir() ->
     TmpId = io_lib:format("riptemp.~p",
-                          [erlang:phash2({rand:uniform(),self()})]),
+                          [erlang:phash2({riak_core_rand:uniform(),self()})]),
     TempDir = filename:join("/tmp", TmpId),
     case filelib:is_dir(TempDir) of
         true -> make_tmp_dir();
@@ -209,7 +221,7 @@ integer_to_list(I0, Base, R0) ->
 	    integer_to_list(I1, Base, R1)
     end.
 
--ifndef(old_hash).
+-ifdef(new_hash).
 sha(Bin) ->
     crypto:hash(sha, Bin).
 
@@ -235,7 +247,7 @@ unique_id_62() ->
 %%         [{purge_response(), load_file_response()}]
 %% @type purge_response() = boolean()
 %% @type load_file_response() = {module, Module :: atom()}|
-%%                              {error, term()}
+%%                            2  {error, term()}
 %% @doc Ask each member node of the riak ring to reload the given
 %%      Module.  Return is a list of the results of code:purge/1
 %%      and code:load_file/1 on each node.
@@ -318,6 +330,18 @@ ensure_started(App) ->
 	    ok
     end.
 
+%% @doc Applies `Pred' to each element in `List', and returns a count of how many
+%% applications returned `true'.
+-spec count(fun((term()) -> boolean()), [term()]) -> non_neg_integer().
+count(Pred, List) ->
+    FoldFun = fun(E, A) ->
+                      case Pred(E) of
+                          false -> A;
+                          true -> A + 1
+                      end
+              end,
+    lists:foldl(FoldFun, 0, List).
+
 %% @doc Returns a copy of `TupleList' where the first occurrence of a tuple whose
 %% first element compares equal to `Key' is deleted, if there is such a tuple.
 %% Equivalent to `lists:keydelete(Key, 1, TupleList)'.
@@ -344,19 +368,22 @@ multi_keydelete(KeysToDelete, N, TupleList) ->
 
 %% @doc Function composition: returns a function that is the composition of
 %% `F' and `G'.
--spec compose(fun(), fun()) -> fun().
-compose(F, G) when is_function(F), is_function(G) ->
+-spec compose(F :: fun((B) -> C), G :: fun((A) -> B)) -> fun((A) -> C).
+compose(F, G) when is_function(F, 1), is_function(G, 1) ->
     fun(X) ->
         F(G(X))
     end.
 
 %% @doc Function composition: returns a function that is the composition of all
-%% functions in the `Funs' list.
--spec compose([fun()]) -> fun().
+%% functions in the `Funs' list. Note that functions are composed from right to
+%% left, so the final function in the `Funs' will be the first one invoked when
+%% invoking the composed function.
+-spec compose([fun((any()) -> any())]) -> fun((any()) -> any()).
 compose([Fun]) ->
     Fun;
-compose([Fun|Funs]) ->
-    lists:foldl(fun compose/2, Fun, Funs).
+compose(Funs) when is_list(Funs) ->
+    [Fun|Rest] = lists:reverse(Funs),
+    lists:foldl(fun compose/2, Fun, Rest).
 
 %% @doc Invoke function `F' over each element of list `L' in parallel,
 %%      returning the results in the same order as the input list.
@@ -609,7 +636,7 @@ orddict_delta(A, B) ->
 
 shuffle(L) ->
     N = 134217727, %% Largest small integer on 32-bit Erlang
-    L2 = [{rand:uniform(N), E} || E <- L],
+    L2 = [{riak_core_rand:uniform(N), E} || E <- L],
     L3 = [E || {_, E} <- lists:sort(L2)],
     L3.
 
@@ -848,6 +875,87 @@ report_job_request_disposition(false, Class, Mod, Func, Line, Client) ->
         "Request '~p' disabled from ~p", [Class, Client]).
 
 %% ===================================================================
+%% Preflist utility functions
+%% ===================================================================
+
+%% @doc Given a bucket/key, determine the associated preflist index_n.
+-spec get_index_n({binary(), binary()}) -> index_n().
+get_index_n({Bucket, Key}) ->
+    BucketProps = riak_core_bucket:get_bucket(Bucket),
+    N = proplists:get_value(n_val, BucketProps),
+    ChashKey = riak_core_util:chash_key({Bucket, Key}),
+    {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
+    Index = chashbin:responsible_index(ChashKey, CHBin),
+    {Index, N}.
+
+%% @doc Given an index, determine all sibling indices that participate in one
+%%      or more preflists with the specified index.
+-spec preflist_siblings(index()) -> [index()].
+preflist_siblings(Index) ->
+    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+    preflist_siblings(Index, Ring).
+
+%% @doc See {@link preflist_siblings/1}.
+-spec preflist_siblings(index(), riak_core_ring()) -> [index()].
+preflist_siblings(Index, Ring) ->
+    MaxN = determine_max_n(Ring),
+    preflist_siblings(Index, MaxN, Ring).
+
+-spec preflist_siblings(index(), pos_integer(), riak_core_ring()) -> [index()].
+preflist_siblings(Index, N, Ring) ->
+    IndexBin = <<Index:160/integer>>,
+    PL = riak_core_ring:preflist(IndexBin, Ring),
+    Indices = [Idx || {Idx, _} <- PL],
+    RevIndices = lists:reverse(Indices),
+    {Succ, _} = lists:split(N-1, Indices),
+    {Pred, _} = lists:split(N-1, tl(RevIndices)),
+    lists:reverse(Pred) ++ Succ.
+
+-spec responsible_preflists(index()) -> [index_n()].
+responsible_preflists(Index) ->
+    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+    responsible_preflists(Index, Ring).
+
+-spec responsible_preflists(index(), riak_core_ring()) -> [index_n()].
+responsible_preflists(Index, Ring) ->
+    AllN = determine_all_n(Ring),
+    responsible_preflists(Index, AllN, Ring).
+
+-spec responsible_preflists(index(), [pos_integer(),...], riak_core_ring())
+                           -> [index_n()].
+responsible_preflists(Index, AllN, Ring) ->
+    IndexBin = <<Index:160/integer>>,
+    PL = riak_core_ring:preflist(IndexBin, Ring),
+    Indices = [Idx || {Idx, _} <- PL],
+    RevIndices = lists:reverse(Indices),
+    lists:flatmap(fun(N) ->
+                          responsible_preflists_n(RevIndices, N)
+                  end, AllN).
+
+-spec responsible_preflists_n([index()], pos_integer()) -> [index_n()].
+responsible_preflists_n(RevIndices, N) ->
+    {Pred, _} = lists:split(N, RevIndices),
+    [{Idx, N} || Idx <- lists:reverse(Pred)].
+
+
+-spec determine_max_n(riak_core_ring()) -> pos_integer().
+determine_max_n(Ring) ->
+    lists:max(determine_all_n(Ring)).
+
+-spec determine_all_n(riak_core_ring()) -> [pos_integer(),...].
+determine_all_n(Ring) ->
+    Buckets = riak_core_ring:get_buckets(Ring),
+    BucketProps = [riak_core_bucket:get_bucket(Bucket, Ring) || Bucket <- Buckets],
+    Default = app_helper:get_env(riak_core, default_bucket_props),
+    DefaultN = proplists:get_value(n_val, Default),
+    AllN = lists:foldl(fun(Props, AllN) ->
+                               N = proplists:get_value(n_val, Props),
+                               ordsets:add_element(N, AllN)
+                       end, [DefaultN], BucketProps),
+    AllN.
+
+
+%% ===================================================================
 %% EUnit tests
 %% ===================================================================
 -ifdef(TEST).
@@ -946,8 +1054,22 @@ compose_test_() ->
     Upper = fun string:to_upper/1,
     Reverse = fun lists:reverse/1,
     Strip = fun(S) -> string:strip(S, both, $!) end,
-    Composed = compose([Upper, Reverse, Strip]),
-    ?_assertEqual("DLROW OLLEH", Composed("Hello world!")).
+    StripReverseUpper = compose([Upper, Reverse, Strip]),
+
+    Increment = fun(N) when is_integer(N) -> N + 1 end,
+    Double = fun(N) when is_integer(N) -> N * 2 end,
+    Square = fun(N) when is_integer(N) -> N * N end,
+    SquareDoubleIncrement = compose([Increment, Double, Square]),
+
+    CompatibleTypes = compose(Increment,
+                              fun(X) when is_list(X) -> list_to_integer(X) end),
+    IncompatibleTypes = compose(Increment,
+                                fun(X) when is_binary(X) -> binary_to_list(X) end),
+    [?_assertEqual("DLROW OLLEH", StripReverseUpper("Hello world!")),
+     ?_assertEqual(Increment(Double(Square(3))), SquareDoubleIncrement(3)),
+     ?_assertMatch(4, CompatibleTypes("3")),
+     ?_assertError(function_clause, IncompatibleTypes(<<"42">>)),
+     ?_assertError(function_clause, compose(fun(X, Y) -> {X, Y} end, fun(X) -> X end))].
 
 pmap_test_() ->
     Fgood = fun(X) -> 2 * X end,
@@ -1027,10 +1149,11 @@ bounded_pmap_test_() ->
 make_fold_req_test_() ->
     {setup,
      fun() ->
+             meck:unload(),
              meck:new(riak_core_capability, [passthrough])
      end,
      fun(_) ->
-             meck:unload(riak_core_capability)
+             ok
      end,
      [
       fun() ->
@@ -1049,7 +1172,7 @@ make_fold_req_test_() ->
                        end,
 
               meck:expect(riak_core_capability, get,
-                          fun(_, _) -> v1 end),
+                          fun({riak_core, fold_req_version}, _) -> v1 end),
               F_1         = make_fold_req(F_1),
               F_1         = make_fold_req(F_2),
               F_1         = make_fold_req(FoldFun, Acc0),
@@ -1057,12 +1180,16 @@ make_fold_req_test_() ->
               ok = Newest(),
 
               meck:expect(riak_core_capability, get,
-                          fun(_, _) -> v2 end),
+                          fun({riak_core, fold_req_version}, _) -> v2 end),
               F_2_default = make_fold_req(F_1),
               F_2         = make_fold_req(F_2),
               F_2_default = make_fold_req(FoldFun, Acc0),
               F_2         = make_fold_req(FoldFun, Acc0, Forw, Opts),
-              ok = Newest()
+              ok = Newest(),
+              %% It seems you could unload `meck' in the test teardown,
+              %% but that sometimes causes the eunit process to crash.
+              %% Instead, unload at end of test.
+              meck:unload()
       end
      ]
     }.
@@ -1083,5 +1210,14 @@ proxy_spawn_test() ->
         ok
     end.
 
--endif.
+-ifdef(EQC).
 
+count_test() ->
+    ?assert(eqc:quickcheck(prop_count_correct())).
+
+prop_count_correct() ->
+    ?FORALL(List, list(bool()),
+            count(fun(E) -> E end, List) =:= length([E || E <- List, E])).
+
+-endif. %% EQC
+-endif. %% TEST

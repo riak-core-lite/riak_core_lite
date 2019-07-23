@@ -43,12 +43,6 @@
 %% Field debugging
 -export([get_tab/0]).
 
--include("stacktrace.hrl").
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 -record(idxrec, {key, idx, mod, pid, monref}).
 -record(monrec, {monref, key}).
 
@@ -536,6 +530,7 @@ maybe_ensure_vnodes_started(Ring) ->
             ok
     end.
 
+-ifndef('21.0').
 ensure_vnodes_started(Ring) ->
     case riak_core_ring:check_lastgasp(Ring) of
         true ->
@@ -549,8 +544,18 @@ ensure_vnodes_started(Ring) ->
                           StackTrace = ?_get_stacktrace_(StackToken),
                           lager:error("~p", [{T, R, StackTrace}])
                   end
-            end)
-    end.
+          end).
+-else.
+ensure_vnodes_started(Ring) ->
+    spawn(fun() ->
+                  try
+                      riak_core_ring_handler:ensure_vnodes_started(Ring)
+                  catch
+                      T:R:Stack ->
+                          lager:error("~p", [{T, R, Stack}])
+                  end
+          end).
+-endif.
 
 schedule_management_timer() ->
     ManagementTick = app_helper:get_env(riak_core,

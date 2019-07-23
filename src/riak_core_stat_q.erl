@@ -27,8 +27,8 @@
 
 -module(riak_core_stat_q).
 
--compile(nowarn_export_all).
--compile(export_all).
+-export([get_stats/1, calculate_stats/1, get_stat/1, calc_stat/1,
+         stat_return/1, log_error/3, calc_gauge/1]).
 
 -export_type([path/0,
               stat_name/0]).

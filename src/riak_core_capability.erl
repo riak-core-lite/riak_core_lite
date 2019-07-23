@@ -109,6 +109,13 @@
 -define(ETS, riak_capability_ets).
 -define(CAPS, '$riak_capabilities').
 
+-ifdef(TEST).
+-compile(export_all).
+-type state() :: #state{}.
+-export_type([state/0]).
+
+-endif.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -156,6 +163,12 @@ get(Capability, Default) ->
         _:_ ->
             Default
     end.
+
+-ifdef(TEST).
+%% @doc Exported for testing - takes opaque state record and returns negotiated
+get_negotiated(State) ->
+    State#state.negotiated.
+-endif.
 
 %% @doc Return a list of all negotiated capabilities
 all() ->

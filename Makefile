@@ -1,27 +1,23 @@
-.PHONY: compile rel cover test dialyzer eqc
-REBAR=./rebar3
+DIALYZER_APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
+	public_key mnesia syntax_tools compiler
+PULSE_TESTS = worker_pool_pulse
 
-compile:
-	$(REBAR) compile
+.PHONY: deps test
+
+all: compile
+
+compile: deps
+	./rebar3 compile
 
 clean:
-	$(REBAR) clean
+	./rebar3 clean
 
-cover: 
-	$(REBAR) eunit --cover
-	$(REBAR) cover
+distclean: clean
 
-test: compile
-	$(REBAR) eunit
+# You should 'clean' before your first run of this target
+# so that deps get built with PULSE where needed.
+pulse:
+	./rebar compile -D PULSE
+	./rebar eunit -D PULSE skip_deps=true suite=$(PULSE_TESTS)
 
-dialyzer:
-	$(REBAR) dialyzer
-
-xref:
-	$(REBAR) xref
-
-eqc:
-	$(REBAR) as test eqc --testing_budget 120
-	$(REBAR) as eqc eunit
-
-check: test dialyzer xref
+include tools.mk

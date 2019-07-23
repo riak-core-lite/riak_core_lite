@@ -35,13 +35,13 @@
          terminate/2, code_change/3]).
 
 -record(state, {sock :: port() | undefined,
-                peer :: term() | undefined,
+                peer :: term(),
                 ssl_opts :: [] | list(),
                 tcp_mod :: atom(),
                 recv_timeout_len :: non_neg_integer(),
                 vnode_timeout_len :: non_neg_integer(),
                 partition :: non_neg_integer() | undefined,
-                vnode_mod = riak_kv_vnode :: module(),
+                vnode_mod = riak_kv_vnode:: module(),
                 vnode :: pid() | undefined,
                 count = 0 :: non_neg_integer()}).
 
@@ -81,10 +81,10 @@ init([SslOpts]) ->
 handle_call({set_socket, Socket0}, _From, State = #state{ssl_opts = SslOpts}) ->
     SockOpts = [{active, once}, {packet, 4}, {header, 1}],
     Socket = if SslOpts /= [] ->
-                     {ok, Skt} = ssl_handshake(Socket0, SslOpts, 30*1000),
-                     ok = ssl:setopts(Skt, SockOpts),
-                     Peer = safe_peername(Skt, ssl),
-                     Skt;
+                     {ok, NSkt} = riak_core_ssl_util:new_ssl_accept(Socket0, SslOpts, 30*1000),
+                     ok = ssl:setopts(NSkt, SockOpts),
+                     Peer = safe_peername(NSkt, ssl),
+                     NSkt;
                 true ->
                      ok = inet:setopts(Socket0, SockOpts),
                      Peer = safe_peername(Socket0, inet),
@@ -165,13 +165,27 @@ process_message(?PT_MSG_SYNC, _MsgData, State=#state{sock=Socket,
                                                      tcp_mod=TcpMod}) ->
     TcpMod:send(Socket, <<?PT_MSG_SYNC:8, "sync">>),
     State;
+
+process_message(?PT_MSG_VERIFY_NODE, ExpectedName, State=#state{sock=Socket,
+                                                                tcp_mod=TcpMod,
+                                                                peer=Peer}) ->
+    case binary_to_term(ExpectedName) of
+        _Node when _Node =:= node() ->
+            TcpMod:send(Socket, <<?PT_MSG_VERIFY_NODE:8>>),
+            State;
+        Node ->
+            lager:error("Handoff from ~p expects us to be ~s but we are ~s.",
+                        [Peer, Node, node()]),
+            exit({error, {wrong_node, Node}})
+    end;
+
 process_message(?PT_MSG_CONFIGURE, MsgData, State) ->
     ConfProps = binary_to_term(MsgData),
     State#state{vnode_mod=proplists:get_value(vnode_mod, ConfProps),
                 partition=proplists:get_value(partition, ConfProps)};
 process_message(_, _MsgData, State=#state{sock=Socket,
                                           tcp_mod=TcpMod}) ->
-    TcpMod:send(Socket, <<255:8,"unknown_msg">>),
+    TcpMod:send(Socket, <<?PT_MSG_UNKNOWN:8,"unknown_msg">>),
     State.
 
 handle_cast(_Msg, State) -> {noreply, State}.

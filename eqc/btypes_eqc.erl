@@ -25,7 +25,7 @@
 -include_lib("eqc/include/eqc_statem.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile([export_all, nowarn_export_all]).
+-compile(export_all).
 
 -type type_name() :: binary().
 -type type_active_status() :: boolean().
@@ -33,12 +33,27 @@
 -type type_prop_val()  :: boolean().
 
 -define(QC_OUT(P),
-    eqc:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
+        eqc:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
 
 -record(state, {
           %% a list of properties we have created
           types :: [{type_name(), type_active_status(), [{type_prop_name(), type_prop_val()}]}]
          }).
+
+btypes_test_() -> {
+        timeout, 120,
+        ?_test(?assert(
+            eqc:quickcheck(?QC_OUT(eqc:numtests(100, prop_btype_invariant())))))
+    }.
+
+run_eqc() ->
+    run_eqc(100).
+
+run_eqc(N) ->
+    eqc:quickcheck(eqc:numtests(N, prop_btype_invariant())).
+
+run_check() ->
+    eqc:check(prop_btype_invariant()).
 
 %% @doc Returns the state in which each test case starts. (Unless a different
 %%      initial state is supplied explicitly to, e.g. commands/2.)
@@ -299,12 +314,12 @@ props() ->
     fault_rate(1, 10, ?LET(Props, list(prop()), fault([immutable_core_prop() | Props], Props))).
 
 prop() ->
-    {gen_prop_name(), gen_prop_value()}.
+    {a_prop_name(), a_prop_value()}.
 
-gen_prop_name() ->
+a_prop_name() ->
     binary(10).
 
-gen_prop_value() ->
+a_prop_value() ->
     bool().
 
 immutable_core_prop() ->
@@ -323,71 +338,18 @@ weight(_S, _Cmd) -> 1.
 
 %% @doc the property
 prop_btype_invariant() ->
-    ?SETUP(
-       fun setup_cleanup/0,
-       ?FORALL(Cmds, commands(?MODULE),
-	       aggregate(command_names(Cmds),
-			 ?TRAPEXIT(
-			    try
-				os:cmd("rm -r ./btypes_eqc_meta"),
-				application:set_env(riak_core, claimant_tick, 4294967295),
-				application:set_env(riak_core, broadcast_lazy_timer, 4294967295),
-				application:set_env(riak_core, broadcast_exchange_timer, 4294967295),
-				application:set_env(riak_core, metadata_hashtree_timer, 4294967295),
-				stop_pid(riak_core_ring_events, whereis(riak_core_ring_events)),
-				stop_pid(riak_core_ring_manager, whereis(riak_core_ring_manager)),
-				{ok, RingEvents} = riak_core_ring_events:start_link(),
-				{ok, _RingMgr} = riak_core_ring_manager:start_link(test),
-				{ok, Claimant} = riak_core_claimant:start_link(),
-				{ok, MetaMgr} = riak_core_metadata_manager:start_link([{data_dir, "./btypes_eqc_meta"}]),
-				{ok, Hashtree} = riak_core_metadata_hashtree:start_link("./btypes_eqc_meta/trees"),
-				{ok, Broadcast} = riak_core_broadcast:start_link(),
-				{H, S, Res} = run_commands(?MODULE,Cmds),
-				stop_pid(riak_core_broadcast, Broadcast),
-				stop_pid(riak_core_metadata_hashtree, Hashtree),
-				stop_pid(riak_core_metadata_manager, MetaMgr),
-				stop_pid(riak_core_claimant, Claimant),
-				riak_core_ring_manager:stop(),
-				stop_pid(riak_core_ring_events2, RingEvents),
-				pretty_commands(?MODULE, Cmds, {H, S, Res},
-						Res == ok)
-			    after
-				os:cmd("rm -r ./btypes_eqc_meta")
-			    end
-			   )
-			)
-	      )
-       ).
-
-setup_cleanup() ->
-    meck:new(riak_core_capability, []),
-    meck:expect(
-        riak_core_capability, get,
-        fun({riak_core, bucket_types}) -> true;
-            (X) -> meck:passthrough([X])
-        end
-    ),
-    fun() ->
-        meck:unload(riak_core_capability)
-    end.
-
-stop_pid(_Tag, Other) when not is_pid(Other) ->
-    ok;
-stop_pid(Tag, Pid) ->
-    unlink(Pid),
-    exit(Pid, shutdown),
-    ok = wait_for_pid(Tag, Pid).
-
-wait_for_pid(Tag, Pid) ->
-    Mref = erlang:monitor(process, Pid),
-    receive
-        {'DOWN', Mref, process, _, _} ->
-            ok
-    after
-	5000 ->
-	    demonitor(Mref, [flush]),
-	    exit(Pid, kill),
-	    wait_for_pid(Tag, Pid)
-    end.
+    ?FORALL(Cmds, commands(?MODULE),
+            aggregate(command_names(Cmds),
+                      ?TRAPEXIT(
+                         begin
+                             {H, S, Res} =
+                                 bucket_eqc_utils:per_test_setup([],
+                                     fun() ->
+                                             run_commands(?MODULE,Cmds)
+                                     end),
+                             pretty_commands(?MODULE, Cmds, {H, S, Res},
+                                             Res == ok)
+                         end
+                        ))).
 
 -endif.

@@ -2,7 +2,7 @@
 %%
 %% riak_core: Core Riak Application
 %%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -79,7 +79,6 @@ stop() ->
 rejoin(Node, Ring) ->
     gen_server:cast({?MODULE, Node}, {rejoin, Ring}).
 
-
 %% @doc Gossip state to a random node in the ring.
 random_gossip(Ring) ->
     case riak_core_ring:random_other_active_node(Ring) of
@@ -116,7 +115,7 @@ recursive_gossip(Ring) ->
 
 random_recursive_gossip(Ring) ->
     Active = riak_core_ring:active_members(Ring),
-    RNode = lists:nth(rand:uniform(length(Active)), Active),
+    RNode = lists:nth(riak_core_rand:uniform(length(Active)), Active),
     recursive_gossip(Ring, RNode).
 
 %% ===================================================================
@@ -148,14 +147,12 @@ update_gossip_version(Ring) ->
             Ring2
     end.
 
-
 update_known_version(Node, {OtherRing, GVsns}) ->
     case riak_core_ring:get_member_meta(OtherRing, Node, gossip_vsn) of
         undefined ->
             case riak_core_ring:owner_node(OtherRing) of
                 Node ->
-                    %% Ring owner defaults to legacy gossip if unspecified.
-                    {OtherRing, orddict:store(Node, ?LEGACY_RING_VSN, GVsns)};
+                    {OtherRing, orddict:store(Node, ?CURRENT_RING_VSN, GVsns)};
                 _ ->
                     {OtherRing, GVsns}
             end;
@@ -237,14 +234,12 @@ handle_cast({rejoin, RingIn}, State) ->
     case SameCluster of
         true ->
             OtherNode = riak_core_ring:owner_node(OtherRing),
-            ok = 
-                case riak_core:join(false, node(), OtherNode, true, true) of
-                    ok ->
-                        ok;
-                    {error, Reason} ->
-                        lager:error("Could not rejoin cluster: ~p", [Reason]),
-                        ok
-                end,
+            case riak_core:join(node(), OtherNode, true, true) of
+                ok -> ok;
+                {error, Reason} ->
+                    lager:error("Could not rejoin cluster: ~p", [Reason]),
+                    ok
+            end,
             {noreply, State};
         false ->
             {noreply, State}
@@ -279,8 +274,6 @@ schedule_next_reset() ->
     erlang:send_after(Reset, ?MODULE, reset_tokens).
 
 reconcile(Ring0, [OtherRing0]) ->
-    %% Due to rolling upgrades and legacy gossip, a ring's cluster name
-    %% may be temporarily undefined. This is eventually fixed by the claimant.
     {Ring, OtherRing} = riak_core_ring:reconcile_names(Ring0, OtherRing0),
     Node = node(),
     OtherNode = riak_core_ring:owner_node(OtherRing),
@@ -364,7 +357,7 @@ log_node_removed(Node, Old) ->
     lager:info("'~s' removed from cluster (previously: '~s')~n", [Node, Old]).
 
 remove_from_cluster(Ring, ExitingNode) ->
-    remove_from_cluster(Ring, ExitingNode, rand:seed(exrop, os:timestamp())).
+    remove_from_cluster(Ring, ExitingNode, riak_core_rand:rand_seed()).
 
 remove_from_cluster(Ring, ExitingNode, Seed) ->
     % Get a list of indices owned by the ExitingNode...
@@ -421,7 +414,7 @@ attempt_simple_transfer(Seed, Ring, [{P, Exit}|Rest], TargetN, Exit, Idx, Last) 
                     target_n_fail;
                 Qualifiers ->
                     %% these nodes don't violate target_n forward
-                    {Rand, Seed2} = rand:uniform_s(length(Qualifiers), Seed),
+                    {Rand, Seed2} = riak_core_rand:uniform_s(length(Qualifiers), Seed),
                     Chosen = lists:nth(Rand, Qualifiers),
                     %% choose one, and do the rest of the ring
                     attempt_simple_transfer(

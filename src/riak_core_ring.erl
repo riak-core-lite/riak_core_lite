@@ -2,7 +2,7 @@
 %%
 %% riak_core: Core Riak Application
 %%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -55,8 +55,6 @@
          remove_meta/2]).
 
 -export([cluster_name/1,
-         legacy_ring/1,
-         legacy_reconcile/2,
          upgrade/1,
          downgrade/2,
          set_tainted/1,
@@ -101,6 +99,7 @@
          future_ring/1,
          disowning_indices/2,
          cancel_transfers/1,
+         legacy_reconcile/2,
          pending_changes/1,
          next_owner/1,
          next_owner/2,
@@ -153,21 +152,20 @@
 
 -define(CHSTATE, #chstate_v2).
 -record(chstate_v2, {
-    nodename :: term(),          % the Node responsible for this chstate
-    vclock   :: vclock:vclock() | undefined, % for this chstate object, entries are
-                                 % {Node, Ctr}
-    chring   :: chash:chash(),   % chash ring of {IndexAsInt, Node} mappings
-    meta     :: riak_core_dict() | undefined,
-                                 % dict of cluster-wide other data (primarily
-                                 % bucket N-value, etc)
-
-    clustername :: {term(), term()}|undefined,
-    next     :: [{integer(), term(), term(), [module()], awaiting | complete}],
-    members  :: [{node(), {member_status(), vclock:vclock(), [{atom(), term()}]}}],
-    claimant :: term()|undefined,
-    seen     :: [{term(), vclock:vclock()}],
-    rvsn     :: vclock:vclock()
-}).
+          nodename :: term(),          % the Node responsible for this chstate
+          vclock   :: vclock:vclock() | undefined, % for this chstate object, entries are
+                                                % {Node, Ctr}
+          chring   :: chash:chash() | undefined,   % chash ring of {IndexAsInt, Node} mappings
+          meta     :: riak_core_dict() | undefined,
+                                                % dict of cluster-wide other data (primarily
+                                                % bucket N-value, etc)
+          clustername :: {term(), term()} | undefined,
+          next     :: [{integer(), term(), term(), [module()], awaiting | complete}],
+          members  :: [{node(), {member_status(), vclock:vclock(), [{atom(), term()}]}}] | undefined,
+          claimant :: term(),
+          seen     :: [{term(), vclock:vclock()}] | undefined,
+          rvsn     :: vclock:vclock() | undefined
+         }).
 
 %% Legacy chstate
 -record(chstate, {
@@ -205,12 +203,6 @@
 %% ===================================================================
 %% Public API
 %% ===================================================================
-
-%% @doc Returns true if the given ring is a legacy ring.
-legacy_ring(#chstate{}) ->
-    true;
-legacy_ring(_) ->
-    false.
 
 %% @doc Upgrade old ring structures to the latest format.
 upgrade(Old=?CHSTATE{}) ->
@@ -258,9 +250,6 @@ downgrade(2,State=?CHSTATE{}) ->
 set_tainted(Ring) ->
     update_meta(riak_core_ring_tainted, true, Ring).
 
-check_tainted(#chstate{}, _Msg) ->
-    %% Legacy ring is never tainted
-    ok;
 check_tainted(Ring=?CHSTATE{}, Msg) ->
     Exit = app_helper:get_env(riak_core, exit_when_tainted, false),
     case {get_meta(riak_core_ring_tainted, Ring), Exit} of
@@ -408,7 +397,7 @@ fresh(RingSize, NodeName) ->
     VClock=vclock:increment(NodeName, vclock:fresh()),
     GossipVsn = riak_core_gossip:gossip_version(),
     ?CHSTATE{nodename=NodeName,
-             clustername={NodeName, os:timestamp()},
+             clustername={NodeName, erlang:timestamp()},
              members=[{NodeName, {valid, VClock, [{gossip_vsn, GossipVsn}]}}],
              chring=chash:fresh(RingSize, NodeName),
              next=[],
@@ -504,7 +493,7 @@ preflist(Key, State) -> chash:successors(Key, State?CHSTATE.chring).
 -spec random_node(State :: chstate()) -> Node :: term().
 random_node(State) ->
     L = all_members(State),
-    lists:nth(rand:uniform(length(L)), L).
+    lists:nth(riak_core_rand:uniform(length(L)), L).
 
 %% @doc Return a partition index not owned by the node executing this function.
 %%      If this node owns all partitions, return any index.
@@ -513,7 +502,7 @@ random_other_index(State) ->
     L = [I || {I,Owner} <- ?MODULE:all_owners(State), Owner =/= node()],
     case L of
         [] -> hd(my_indices(State));
-        _ -> lists:nth(rand:uniform(length(L)), L)
+        _ -> lists:nth(riak_core_rand:uniform(length(L)), L)
     end.
 
 -spec random_other_index(State :: chstate(), Exclude :: [term()]) -> chash:index_as_int() | no_indices.
@@ -523,7 +512,7 @@ random_other_index(State, Exclude) when is_list(Exclude) ->
               not lists:member(I, Exclude)],
     case L of
         [] -> no_indices;
-        _ -> lists:nth(rand:uniform(length(L)), L)
+        _ -> lists:nth(riak_core_rand:uniform(length(L)), L)
     end.
 
 %% @doc Return a randomly-chosen node from amongst the owners other than this one.
@@ -533,7 +522,7 @@ random_other_node(State) ->
         [] ->
             no_node;
         L ->
-            lists:nth(rand:uniform(length(L)), L)
+            lists:nth(riak_core_rand:uniform(length(L)), L)
     end.
 
 %% @doc Return a randomly-chosen active node other than this one.
@@ -543,7 +532,7 @@ random_other_active_node(State) ->
         [] ->
             no_node;
         L ->
-            lists:nth(rand:uniform(length(L)), L)
+            lists:nth(riak_core_rand:uniform(length(L)), L)
     end.
 
 %% @doc Incorporate another node's state into our view of the Riak world.
@@ -2104,11 +2093,12 @@ lasgasp_test() ->
 resize_xfer_test_() ->
     {setup,
      fun() ->
+             meck:unload(),
              meck:new(riak_core, [passthrough]),
              meck:expect(riak_core, vnode_modules,
                          fun() -> [{some_app, fake_vnode}, {other_app, other_vnode}] end)
      end,
-     fun(_) -> meck:unload(riak_core) end,
+     fun(_) -> meck:unload() end,
      fun test_resize_xfers/0}.
 
 test_resize_xfers() ->

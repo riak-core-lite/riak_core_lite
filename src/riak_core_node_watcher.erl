@@ -37,9 +37,15 @@
          node_up/0,
          node_down/0,
          services/0, services/1,
-         nodes/1,
-         avsn/0]).
+         nodes/1]).
 
+%% TEST API
+-ifdef(TEST).
+
+-export([avsn/0,
+         set_broadcast_module/2]).
+
+-endif.
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -147,7 +153,12 @@ services() ->
     gen_server:call(?MODULE, services, infinity).
 
 services(Node) ->
-    internal_get_services(Node).
+    case check_node_valid(Node) of
+        true ->
+            internal_get_services(Node);
+        _ ->
+            invalid_node
+    end.
 
 nodes(Service) ->
     internal_get_nodes(Service).
@@ -157,9 +168,15 @@ nodes(Service) ->
 %% Test API
 %% ===================================================================
 
+-ifdef(TEST).
+
 avsn() ->
     gen_server:call(?MODULE, get_avsn, infinity).
 
+set_broadcast_module(Module, Fn) ->
+    gen_server:call(?MODULE, {set_bcast_mod, Module, Fn}, infinity).
+
+-endif.
 
 %% ====================================================================
 %% gen_server callbacks
@@ -361,6 +378,11 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+check_node_valid(Node) ->
+    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+    Members = riak_core_ring:all_members(Ring),
+    lists:member(Node, Members).
 
 update_avsn(State) ->
     State#state { avsn = State#state.avsn + 1 }.

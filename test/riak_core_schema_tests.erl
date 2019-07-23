@@ -1,13 +1,14 @@
 -module(riak_core_schema_tests).
-
+-ifdef(SCHEMA_TESTS).
 -include_lib("eunit/include/eunit.hrl").
--compile([export_all, nowarn_export_all]).
+-compile(export_all).
 
 %% basic schema test will check to make sure that all defaults from
 %% the schema make it into the generated app.config
 basic_schema_test() ->
-    %% The defaults are defined in priv/riak_core.schema. it is the
+    %% The defaults are defined in ../priv/riak_core.schema. it is the
     %% file under test.
+    io:format(user, ">>>>>>> ~p~n", [file:consult("priv/riak_core.schema")]),
     Config = cuttlefish_unit:generate_templated_config(
                "priv/riak_core.schema", [], context()),
 
@@ -126,3 +127,4 @@ context() ->
         {platform_lib_dir , "./lib"},
         {platform_log_dir , "./log"}
     ].
+-endif.

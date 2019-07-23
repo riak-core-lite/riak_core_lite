@@ -120,31 +120,26 @@
 %% @doc The hardcoded defaults for all bucket types.
 -spec defaults() -> bucket_type_props().
 defaults() ->
-    v225_defaults() ++ custom_type_defaults().
-
-%% @private default propeties added for v2.2.5
--spec v225_defaults() -> bucket_type_props().
-v225_defaults() ->
-    [{node_confirms, 0}].
+    custom_type_defaults().
 
 %% @doc The hardcoded defaults for the legacy, default bucket
 %% type. These find their way into the `default_bucket_props'
 %% environment variable
 -spec defaults(default_type) -> bucket_type_props().
 defaults(default_type) ->
-    v225_defaults() ++ default_type_defaults().
+    default_type_defaults().
 
 default_type_defaults() ->
-    [{dvv_enabled, false},
-     {allow_mult, false}] ++
-        common_defaults().
+    common_defaults() ++
+        [{dvv_enabled, false},
+         {allow_mult, false}].
 
 custom_type_defaults() ->
-    %% @HACK dvv is a riak_kv only thing, yet there is nowhere else
-    %% to put it (except maybe fixups?)
-    [{dvv_enabled, true},
-     {allow_mult, true}] ++
-        common_defaults().
+    common_defaults() ++
+        %% @HACK dvv is a riak_kv only thing, yet there is nowhere else
+        %% to put it (except maybe fixups?)
+        [{dvv_enabled, true},
+         {allow_mult, true}].
 
 common_defaults() ->
     [{linkfun, {modfun, riak_kv_wm_link_walker, mapreduce_linkfun}},
@@ -166,8 +161,30 @@ common_defaults() ->
      {postcommit, []},
      {chash_keyfun, {riak_core_util, chash_std_keyfun}}].
 
+%% @doc When creating a Time Series table, set the replication property
+%% defaults to other values than for normal KV bucket types.  Naturally
+%% let the user override any default values (per RTS-1469)
+%% The `ddl` property contains the TS table DDL, so denotes a
+%% time series bucket type.
+-spec ts_defaults(bucket_type_props()) -> bucket_type_props().
+ts_defaults(Props) ->
+    case proplists:is_defined(ddl, Props) of
+        true ->
+            ts_specific_defaults();
+        _ -> []
+    end.
+
+ts_specific_defaults() ->
+    [{allow_mult, false},
+     {dvv_enabled, false},
+     {dw, one},
+     {last_write_wins, true},
+     {r, one},
+     {rw, one}].
+
+
 %% @doc Create the type. The type is not activated (available to nodes) at this time. This
-%% function may be called arbitratily many times if the claimant does not change between
+%% function may be called arbitrarily many times if the claimant does not change between
 %% calls and the type is not active. An error will also be returned if the properties
 %% are not valid. Properties not provided will be taken from those returned by
 %% @see defaults/0.
@@ -175,8 +192,9 @@ common_defaults() ->
 create(?DEFAULT_TYPE, _Props) ->
     {error, default_type};
 create(BucketType, Props) when is_binary(BucketType) ->
-    ?IF_CAPABLE(riak_core_claimant:create_bucket_type(BucketType,
-                                                      riak_core_bucket_props:merge(Props, defaults())),
+    Props1 = riak_core_bucket_props:merge(Props,
+        riak_core_bucket_props:merge(ts_defaults(Props), defaults())),
+    ?IF_CAPABLE(riak_core_claimant:create_bucket_type(BucketType, Props1),
                 {error, not_capable}).
 
 %% @doc Returns the state the type is in.
