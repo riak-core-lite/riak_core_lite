@@ -1,11 +1,13 @@
 language: erlang
 otp_release:
-  - 20.3.8
-  - 21.3
-  - 22.3
+  - 21.2
+install:
+  - make
+  - ./rebar3 update
 script:
-  - chmod u+x rebar3
-  - ./rebar3 do upgrade, compile, dialyzer, xref, eunit
+  - make test
+  - make dialyzer
 notifications:
-  slack:
-    secure: SE0EMU9HenZlLBuNg7l6WLMxJPkfyAEGgodvAqMEuQmICtrh1nV019D/A8ykejYYPPsJafWVOfypOSDrSHCndzXvEZvU8l45nJ6XLdUdrDYEmvcSqN3EqmVSsuf9H3g99bvKygXaY27MkTS5ixLil7PzybG+YpwMnQGcQxYo5Eg=
+  email: bieniusa@cs.uni-kl.de
+sudo: required
+dist: trusty
