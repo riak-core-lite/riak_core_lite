@@ -220,7 +220,7 @@ handle_call({service_up, Id, Pid, MFA, Options}, From, State) ->
 
     State2 = remove_health_check(Id, State1),
 
-    case app_helper:get_env(riak_core, enable_health_checks, true) of
+    case application:get_env(riak_core, enable_health_checks, true) of
         true ->
             %% install the health check
             CheckInterval = proplists:get_value(check_interval, Options,
@@ -425,7 +425,7 @@ schedule_broadcast(State) ->
             _ = erlang:cancel_timer(OldTref),
             ok
     end,
-    Interval = app_helper:get_env(riak_core, gossip_interval),
+    Interval = application:get_env(riak_core, gossip_interval, undefined),
     Tref = erlang:send_after(Interval, self(), broadcast),
     State#state { bcast_tref = Tref }.
 

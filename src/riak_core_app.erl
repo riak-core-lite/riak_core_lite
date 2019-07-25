@@ -32,10 +32,6 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    %% Don't add our system_monitor event handler here.  Instead, let
-    %% riak_core_sysmon_minder start it, because that process can act
-    %% on any handler crash notification, whereas we cannot.
-
     maybe_delay_start(),
     ok = validate_ring_state_directory_exists(),
     ok = safe_register_cluster_info(),
@@ -58,14 +54,14 @@ maybe_delay_start() ->
 
 validate_ring_state_directory_exists() ->
     riak_core_util:start_app_deps(riak_core),
-    RingStateDir = app_helper:get_env(riak_core, ring_state_dir),
+    RingStateDir = application:get_env(riak_core, ring_state_dir, undefined),
     case filelib:ensure_dir(filename:join(RingStateDir, "dummy")) of
         ok ->
             ok;
         {error, RingReason} ->
             logger:critical(
               "Ring state directory ~p does not exist, " "and could not be created: ~p",
-              [RingStateDir, logger:posix_error(RingReason)]),
+              [RingStateDir, riak_core_ssl_util:posix_error(RingReason)]),
             throw({error, invalid_ring_state_dir})
     end.
 
@@ -89,7 +85,6 @@ start_riak_core_sup() ->
             ok = add_ring_event_handler(),
 
             ok = register_capabilities(),
-            ok = init_cli_registry(),
             ok = riak_core_throttle:init(),
 
             riak_core_throttle:init(),
@@ -100,21 +95,16 @@ start_riak_core_sup() ->
     end.
 
 register_applications() ->
-    riak_core:register(riak_core, [{stat_mod, riak_core_stat},
-                                   {permissions, [get_bucket,
-                                                  set_bucket,
-                                                  get_bucket_type,
-                                                  set_bucket_type]}]),
+  %% STATS
+%%    riak_core:register(riak_core, [{stat_mod, riak_core_stat},
+%%                                   {permissions, [get_bucket,
+%%                                                  set_bucket,
+%%                                                  get_bucket_type,
+%%                                                  set_bucket_type]}]),
     ok.
 
 add_ring_event_handler() ->
     ok = riak_core_ring_events:add_guarded_handler(riak_core_ring_handler, []).
-
-init_cli_registry() ->
-    riak_core_cli_registry:load_schema(),
-    riak_core_cli_registry:register_node_finder(),
-    riak_core_cli_registry:register_cli(),
-    ok.
 
 register_capabilities() ->
     Capabilities = [[{riak_core, vnode_routing},

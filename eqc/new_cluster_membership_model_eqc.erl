@@ -1633,14 +1633,14 @@ handle_down_nodes(CState, Next) ->
     Next3.
 
 claim_until_balanced(Ring, Node) ->
-    %%{WMod, WFun} = app_helper:get_env(riak_core, wants_claim_fun),
+    %%{WMod, WFun} = application:get_env(riak_core, wants_claim_fun, undefined),
     {WMod, WFun} = {riak_core_claim, default_wants_claim},
     NeedsIndexes = apply(WMod, WFun, [Ring, Node]),
     case NeedsIndexes of
         no ->
             Ring;
         {yes, _NumToClaim} ->
-            %%{CMod, CFun} = app_helper:get_env(riak_core, choose_claim_fun),
+            %%{CMod, CFun} = application:get_env(riak_core, choose_claim_fun, undefined),
             {CMod, CFun} = {riak_core_claim, default_choose_claim},
             NewRing = CMod:CFun(Ring, Node),
             claim_until_balanced(NewRing, Node)
@@ -1714,7 +1714,7 @@ remove_from_cluster(Ring, ExitingNode) ->
     ExitRing.
 
 attempt_simple_transfer(Ring, Owners, ExitingNode) ->
-    %%TargetN = app_helper:get_env(riak_core, target_n_val),
+    %%TargetN = application:get_env(riak_core, target_n_val, undefined),
     TargetN = 3,
     attempt_simple_transfer(Ring, Owners,
                             TargetN,

@@ -79,8 +79,8 @@
 -define(DEF_TARGET_N, 4).
 
 claim(Ring) ->
-    Want = app_helper:get_env(riak_core, wants_claim_fun),
-    Choose = app_helper:get_env(riak_core, choose_claim_fun),
+    Want = application:get_env(riak_core, wants_claim_fun, undefined),
+    Choose = application:get_env(riak_core, choose_claim_fun, undefined),
     claim(Ring, Want, Choose).
 
 claim(Ring, Want, Choose) ->
@@ -90,8 +90,8 @@ claim(Ring, Want, Choose) ->
                 end, Ring, Members).
 
 claim_until_balanced(Ring, Node) ->
-    Want = app_helper:get_env(riak_core, wants_claim_fun),
-    Choose = app_helper:get_env(riak_core, choose_claim_fun),
+    Want = application:get_env(riak_core, wants_claim_fun, undefined),
+    Choose = application:get_env(riak_core, choose_claim_fun, undefined),
     claim_until_balanced(Ring, Node, Want, Choose).
 
 claim_until_balanced(Ring, Node, {WMod, WFun}=Want, Choose) ->
@@ -137,8 +137,7 @@ wants_claim_v1(Ring) ->
     wants_claim_v1(Ring, node()).
 
 %% @deprecated
-wants_claim_v1(Ring0, Node) ->
-    Ring = riak_core_ring:upgrade(Ring0),
+wants_claim_v1(Ring, Node) ->
     %% Calculate the expected # of partitions for a perfectly balanced ring. Use
     %% this expectation to determine the relative balance of the ring. If the
     %% ring isn't within +-2 partitions on all nodes, we need to rebalance.
@@ -202,7 +201,7 @@ wants_claim_v3(Ring, _Node) ->
         undefined ->
             %% First time through claim_until_balanced, check for override
             %% to recalculate.
-            case app_helper:get_env(riak_core, force_reclaim, false) of
+            case application:get_env(riak_core, force_reclaim, false) of
                 true ->
                     application:unset_env(riak_core, force_reclaim),
                     logger:info("Forced rerun of claim algorithm - "
@@ -238,7 +237,7 @@ default_choose_params() ->
 default_choose_params(Params) ->
     case proplists:get_value(target_n_val, Params) of
         undefined ->
-            TN = app_helper:get_env(riak_core, target_n_val, ?DEF_TARGET_N),
+            TN = application:get_env(riak_core, target_n_val, ?DEF_TARGET_N),
             [{target_n_val, TN} | Params];
         _->
             Params
@@ -252,9 +251,8 @@ choose_claim_v1(Ring) ->
 choose_claim_v1(Ring0, Node) ->
     choose_claim_v1(Ring0, Node, []).
 
-choose_claim_v1(Ring0, Node, Params0) ->
+choose_claim_v1(Ring, Node, Params0) ->
     Params = default_choose_params(Params0),
-    Ring = riak_core_ring:upgrade(Ring0),
     TargetN = proplists:get_value(target_n_val, Params),
     case meets_target_n(Ring, TargetN) of
         {true, TailViolations} ->
@@ -416,7 +414,7 @@ increase_keeps([{Node, Own, Delta} | Rest], N, Max, Acc) when Delta < 0 ->
                    true -> 1;
                    false -> 0
                end,
-    increase_keeps(Rest, N+Additive, Max, [{Node, Own, Delta+Additive} | Acc]);
+    increase_keeps(Rest, N+Additive, Max, [{Node, Own+Delta+Additive} | Acc]);
 increase_keeps([NodeDelta | Rest], N, Max, Acc) ->
     increase_keeps(Rest, N, Max, [NodeDelta | Acc]).
 
@@ -477,7 +475,7 @@ choose_claim_v3(Ring) ->
     choose_claim_v3(Ring, node()).
 
 choose_claim_v3(Ring, ClaimNode) ->
-    Params = [{target_n_val, app_helper:get_env(riak_core, target_n_val, 
+    Params = [{target_n_val, application:get_env(riak_core, target_n_val,
                                                 ?DEF_TARGET_N)}],
     choose_claim_v3(Ring, ClaimNode, Params).
 
@@ -609,10 +607,8 @@ claim_diagonal(Wants, Owners, Params) ->
                        node(),
                        integer()) ->
                               riak_core_ring:riak_core_ring().
-sequential_claim(Ring0, Node, TargetN) ->
-    Ring = riak_core_ring:upgrade(Ring0),
-    OrigNodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
-    Nodes = get_nodes_by_location(OrigNodes, Ring),
+sequential_claim(Ring, Node, TargetN) ->
+    Nodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
     NodeCount = length(Nodes),
     RingSize = riak_core_ring:num_partitions(Ring),
 
@@ -673,7 +669,7 @@ build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, _Acc=[
     NodeCount = length(Nodes),
     LastSegLength = (RingSize rem NodeCount) + Shortfall,
     NewSeq = lists:sublist(Nodes, 1, LastSegLength),
-    build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, [NewSeq]);
+    build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, NewSeq);
 build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, Acc) ->
     %% Build rest of list, subtracting minimum of MinFetchesPerSeq, Shortfall 
     %% or (NodeCount - NodeCounter) each time
@@ -693,10 +689,8 @@ backfill_ring(RingSize, Nodes, Remaining, Acc) ->
     backfill_ring(RingSize, Nodes, Remaining - 1, [Nodes | Acc]).
 
 
-claim_rebalance_n(Ring0, Node) ->
-    Ring = riak_core_ring:upgrade(Ring0),
-    OrigNodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
-    Nodes = get_nodes_by_location(OrigNodes, Ring),
+claim_rebalance_n(Ring, Node) ->
+    Nodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
     Zipped = diagonal_stripe(Ring, Nodes),
 
     lists:foldl(fun({P, N}, Acc) ->
@@ -723,8 +717,7 @@ random_choose_claim(Ring) ->
 random_choose_claim(Ring, Node) ->
     random_choose_claim(Ring, Node, []).
 
-random_choose_claim(Ring0, Node, _Params) ->
-    Ring = riak_core_ring:upgrade(Ring0),
+random_choose_claim(Ring, Node, _Params) ->
     riak_core_ring:transfer_node(riak_core_ring:random_other_index(Ring),
                                  Node, Ring).
 
@@ -846,7 +839,7 @@ find_violations(Ring, TargetN) ->
 %% @private
 %%
 %% @doc Counts up the number of partitions owned by each node.
--spec get_counts([node()], riak_core_ring:riak_core_ring()) ->
+-spec get_counts([node()], [{integer(),_}]) ->
                         [{node(), non_neg_integer()}].
 get_counts(Nodes, Ring) ->
     Empty = [{Node, 0} || Node <- Nodes],

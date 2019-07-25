@@ -62,13 +62,13 @@ init([Parent, RegName, Mod, Index]) ->
     erlang:register(RegName, self()),
     proc_lib:init_ack(Parent, {ok, self()}),
 
-    Interval = app_helper:get_env(riak_core,
+    Interval = application:get_env(riak_core,
                                   vnode_check_interval,
                                   ?DEFAULT_CHECK_INTERVAL),
-    RequestInterval = app_helper:get_env(riak_core,
+    RequestInterval = application:get_env(riak_core,
                                          vnode_check_request_interval,
                                          Interval div 2),
-    Threshold = app_helper:get_env(riak_core,
+    Threshold = application:get_env(riak_core,
                                    vnode_overload_threshold,
                                    ?DEFAULT_OVERLOAD_THRESHOLD),
 
@@ -278,7 +278,8 @@ handle_proxy(Msg, State=#state{check_counter=Counter,
                            check_request=RequestState2}}.
 
 handle_overload(Msg, #state{mod=Mod, index=Index}) ->
-    riak_core_stat:update(dropped_vnode_requests),
+    %% STATS
+    %riak_core_stat:update(dropped_vnode_requests),
     case Msg of
         {'$gen_event', ?VNODE_REQ{sender=Sender, request=Request}} ->
             catch(Mod:handle_overload_command(Request, Sender, Index));

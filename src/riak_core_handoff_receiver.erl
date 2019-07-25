@@ -75,8 +75,8 @@ init([SslOpts]) ->
                 tcp_mod  = if SslOpts /= [] -> ssl;
                               true          -> gen_tcp
                            end,
-                recv_timeout_len = app_helper:get_env(riak_core, handoff_receive_timeout, ?RECV_TIMEOUT),
-                vnode_timeout_len = app_helper:get_env(riak_core, handoff_receive_vnode_timeout, ?VNODE_TIMEOUT)}}.
+                recv_timeout_len = application:get_env(riak_core, handoff_receive_timeout, ?RECV_TIMEOUT),
+                vnode_timeout_len = application:get_env(riak_core, handoff_receive_vnode_timeout, ?VNODE_TIMEOUT)}}.
 
 handle_call({set_socket, Socket0}, _From, State = #state{ssl_opts = SslOpts}) ->
     SockOpts = [{active, once}, {packet, 4}, {header, 1}],

@@ -64,11 +64,11 @@ setup_simple() ->
             {vnode_rolling_start, 0}],
     error_logger:tty(false),
     _ = [begin
-        Old = app_helper:get_env(riak_core, AppKey),
+        Old = application:get_env(riak_core, AppKey, undefined),
         ok = application:set_env(riak_core, AppKey, Val),
         {AppKey, Old}
      end || {AppKey, Val} <- Vars],
-    exometer:start(),
+    %exometer:start(),
     riak_core_ring_events:start_link(),
     riak_core_ring_manager:start_link(test),
     riak_core_vnode_proxy_sup:start_link(),
@@ -95,5 +95,5 @@ stop_servers(_Pid) ->
     riak_core_test_util:stop_pid(riak_core_ring_events),
     riak_core_test_util:stop_pid(riak_core_vnode_sup),
     riak_core_test_util:stop_pid(riak_core_ring_manager),
-    application:stop(exometer),
+    %application:stop(exometer),
     application:stop(goldrush).

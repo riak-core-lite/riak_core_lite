@@ -95,7 +95,7 @@ init([WorkerMod, PoolSize, VNodeIndex, WorkerArgs, WorkerProps, Opts]) ->
             {worker_args, [VNodeIndex, WorkerArgs, WorkerProps, self()]},
             {worker_callback_mod, WorkerMod},
             {size, PoolSize}, {max_overflow, 0}]),
-    DfltStrategy = app_helper:get_env(riak_core, queue_worker_strategy, fifo),
+    DfltStrategy = application:get_env(riak_core, queue_worker_strategy, fifo),
     State = case proplists:get_value(strategy, Opts, DfltStrategy) of
                 fifo ->
                      #state{
@@ -232,7 +232,7 @@ handle_info(_Info, StateName, State) ->
 
 terminate(_Reason, _StateName, #state{pool=Pool}) ->
     %% stop poolboy
-    gen_fsm_compat:sync_send_all_state_event(Pool, stop),
+    poolboy:stop(Pool),
     ok.
 
 code_change(_OldVsn, StateName, State, _Extra) ->

@@ -79,7 +79,7 @@ setup_simple() ->
             %% race condition with `all_nodes'.
             {vnode_rolling_start, 0}],
     OldVars = [begin
-                   Old = app_helper:get_env(riak_core, AppKey),
+                   Old = application:get_env(riak_core, AppKey, undefined),
                    ok = application:set_env(riak_core, AppKey, Val),
                    {AppKey, Old}
                end || {AppKey, Val} <- Vars],

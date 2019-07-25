@@ -455,7 +455,7 @@ record_seen_index(Ring, Shrinking, NValMap, DefaultN, Mod, Src, Key, Seen) ->
     end.
 
 get_concurrency_limit () ->
-    app_helper:get_env(riak_core,handoff_concurrency,?HANDOFF_CONCURRENCY).
+    application:get_env(riak_core,handoff_concurrency,?HANDOFF_CONCURRENCY).
 
 %% true if handoff_concurrency (inbound + outbound) hasn't yet been reached
 handoff_concurrency_limit_reached () ->

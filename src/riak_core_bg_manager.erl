@@ -922,13 +922,13 @@ do_query(Resource, Types) ->
 %%      setting is not false; defaults to true.
 -spec use_bg_mgr() -> boolean().
 use_bg_mgr() ->
-    app_helper:get_env(riak_core, use_background_manager, true).
+    application:get_env(riak_core, use_background_manager, true).
 
 %% @doc Return true iff both the global configuration switch is on (see @link use_bg_mgr/0)
 %%      the setting of the supplied Dependency/Key is not false. Defaults to true.
 -spec use_bg_mgr(atom(), atom()) -> boolean().
 use_bg_mgr(Dependency, Key) ->
-    use_bg_mgr() andalso app_helper:get_env(Dependency, Key, true).
+    use_bg_mgr() andalso application:get_env(Dependency, Key, true).
 
 maybe_create_ets() ->
     TableSpecs = [

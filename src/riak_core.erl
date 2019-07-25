@@ -24,7 +24,7 @@
          leave/0, remove_from_cluster/1]).
 -export([vnode_modules/0, health_check/1]).
 -export([register/1, register/2, bucket_fixups/0, bucket_validators/0]).
--export([stat_mods/0]).
+-export([stat_mods/0, stat_prefix/0]).
 
 -export([add_guarded_event_handler/3, add_guarded_event_handler/4]).
 -export([delete_guarded_event_handler/3]).
@@ -124,7 +124,6 @@ standard_join(Node, Ring, Rejoin, Auto) ->
         {_, _, false} ->
             {error, different_ring_sizes};
         _ ->
-            GossipVsn = riak_core_gossip:gossip_version(),
             Ring2 = riak_core_ring:add_member(node(), Ring,
                                               node()),
             Ring3 = riak_core_ring:set_owner(Ring2, node()),
@@ -133,7 +132,7 @@ standard_join(Node, Ring, Rejoin, Auto) ->
                                                   Ring3,
                                                   node(),
                                                   gossip_vsn,
-                                                  GossipVsn),
+                                                  2),
             {_, Ring5} = riak_core_capability:update_ring(Ring4),
             Ring6 = maybe_auto_join(Auto, node(), Ring5),
             riak_core_ring_manager:set_my_ring(Ring6),
@@ -309,7 +308,10 @@ register_mod(App, Module, Type) when is_atom(Type) ->
         vnode_modules ->
             riak_core_vnode_proxy_sup:start_proxies(Module);
         stat_mods ->
-            riak_core_stats_sup:start_server(Module);
+            %% STATS
+%%            riak_core_stats_sup:start_server(Module);
+            logger:warning("Metric collection disabled"),
+            ok;
         _ ->
             ok
     end,
@@ -436,3 +438,6 @@ wait_for_service(Service, Elapsed) ->
             timer:sleep(?WAIT_POLL_INTERVAL),
             wait_for_service(Service, Elapsed + ?WAIT_POLL_INTERVAL)
     end.
+
+stat_prefix() ->
+    application:get_env(riak_core, stat_prefix, riak).

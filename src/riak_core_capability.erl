@@ -270,7 +270,7 @@ capability_info(Supported, Default, Legacy) ->
     #capability{supported=Supported, default=Default, legacy=Legacy}.
 
 schedule_tick() ->
-    Tick = app_helper:get_env(riak_core,
+    Tick = application:get_env(riak_core,
                               capability_tick,
                               10000),
     erlang:send_after(Tick, ?MODULE, tick).

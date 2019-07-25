@@ -456,7 +456,7 @@ handle_info(management_tick, State0) ->
                 State2#state{repairs=[]}
         end,
 
-    MaxStart = app_helper:get_env(riak_core, vnode_rolling_start,
+    MaxStart = application:get_env(riak_core, vnode_rolling_start,
                                   ?DEFAULT_VNODE_ROLLING_START),
     State4 = State3#state{vnode_start_tokens=MaxStart},
     State5 = maybe_start_vnodes(Ring, State4),
@@ -530,18 +530,30 @@ maybe_ensure_vnodes_started(Ring) ->
             ok
     end.
 
+-ifndef('21.0').
 ensure_vnodes_started(Ring) ->
     spawn(fun() ->
                   try
                       riak_core_ring_handler:ensure_vnodes_started(Ring)
                   catch
-                      T:R:Stack ->
-                          logger:error("~p", [{T, R, Stack}])
+                    Type:Reason:Stacktrace ->
+                      logger:error("~p", [{Type, Reason, Stacktrace}])
                   end
           end).
+-else.
+ensure_vnodes_started(Ring) ->
+    spawn(fun() ->
+                  try
+                      riak_core_ring_handler:ensure_vnodes_started(Ring)
+                  catch
+                    Type:Reason:Stacktrace ->
+                      logger:error("~p", [{Type, Reason, Stacktrace}])
+                  end
+          end).
+-endif.
 
 schedule_management_timer() ->
-    ManagementTick = app_helper:get_env(riak_core,
+    ManagementTick = application:get_env(riak_core,
                                         vnode_management_timer,
                                         10000),
     erlang:send_after(ManagementTick, ?MODULE, management_tick).
@@ -558,7 +570,7 @@ trigger_ownership_handoff(Transfers, Mods, Ring, State) ->
     ok.
 
 limit_ownership_handoff(Transfers, IsResizing) ->
-    Limit = app_helper:get_env(riak_core,
+    Limit = application:get_env(riak_core,
                                forced_ownership_handoff,
                                ?DEFAULT_OWNERSHIP_TRIGGER),
     limit_ownership_handoff(Limit, Transfers, IsResizing).
@@ -618,7 +630,7 @@ get_vnode(IdxList, Mod, State) ->
                 logger:debug("VNode initialization ready ~p, ~p", [Pid, Idx]),
                 {Idx, Pid}
         end,
-    MaxStart = app_helper:get_env(riak_core, vnode_parallel_start,
+    MaxStart = application:get_env(riak_core, vnode_parallel_start,
                                   ?DEFAULT_VNODE_ROLLING_START),
     Pairs = Started ++ riak_core_util:pmap(StartFun, NotStarted, MaxStart),
     %% Return Pids in same order as input
@@ -1041,8 +1053,12 @@ kill_repair(Repair, Reason) ->
                                         {Mod, undefined, Partition},
                                         Reason).
 
-register_vnode_stats(Mod, Index, Pid) ->
-    riak_core_stat:register_vnode_stats(Mod, Index, Pid).
+register_vnode_stats(_Mod, _Index, _Pid) ->
+  %% STATS
+    %riak_core_stat:register_vnode_stats(Mod, Index, Pid).
+  ok.
 
-unregister_vnode_stats(Mod, Index) ->
-    riak_core_stat:unregister_vnode_stats(Mod, Index).
+unregister_vnode_stats(_Mod, _Index) ->
+  %% STATS
+    %riak_core_stat:unregister_vnode_stats(Mod, Index).
+  ok.

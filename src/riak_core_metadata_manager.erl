@@ -312,7 +312,7 @@ graft(Context, Obj) ->
 %% @doc Trigger an exchange
 -spec exchange(node()) -> {ok, pid()} | {error, term()}.
 exchange(Peer) ->
-    Timeout = app_helper:get_env(riak_core, metadata_exchange_timeout, 60000),
+    Timeout = application:get_env(riak_core, metadata_exchange_timeout, 60000),
     case riak_core_metadata_exchange_fsm:start(Peer, Timeout) of
         {ok, Pid} ->
             {ok, Pid};

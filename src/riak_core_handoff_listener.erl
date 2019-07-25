@@ -35,8 +35,8 @@
          }).
 
 start_link() ->
-    PortNum = app_helper:get_env(riak_core, handoff_port),
-    IpAddr = app_helper:get_env(riak_core, handoff_ip),
+    PortNum = application:get_env(riak_core, handoff_port, undefined),
+    IpAddr = application:get_env(riak_core, handoff_ip, undefined),
     SslOpts = riak_core_handoff_sender:get_handoff_ssl_options(),
     gen_nb_server:start_link(?MODULE, IpAddr, PortNum, [IpAddr, PortNum, SslOpts]).
 
@@ -80,7 +80,8 @@ new_connection(Socket, State = #state{ssl_opts = SslOpts}) ->
             ok = riak_core_handoff_receiver:set_socket(Pid, Socket),
             {ok, State};
         {error, _Reason} ->
-            riak_core_stat:update(rejected_handoffs),
+          %% STATS
+%%            riak_core_stat:update(rejected_handoffs),
             gen_tcp:close(Socket),
             {ok, State}
     end.

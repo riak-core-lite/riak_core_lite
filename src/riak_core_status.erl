@@ -135,8 +135,8 @@ ring_status() ->
 get_rings() ->
     {RawRings, Down} = riak_core_util:rpc_every_member(
                          riak_core_ring_manager, get_my_ring, [], 30000),
-    RawRings2 = [riak_core_ring:upgrade(R) || {ok, R} <- RawRings],
-    Rings = orddict:from_list([{riak_core_ring:owner_node(R), R} || R <- RawRings2]),
+%%    RawRings2 = [R || {ok, R} <- RawRings],
+    Rings = orddict:from_list([{riak_core_ring:owner_node(R), R} || R <- RawRings]),
     {lists:sort(Down), Rings}.
 
 %% Produce a hash of the 'chash' portion of the ring

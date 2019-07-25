@@ -34,7 +34,8 @@
          load_certs/1,
          parse_ciphers/1,
          print_ciphers/1,
-         new_ssl_accept/3
+         new_ssl_accept/3,
+         posix_error/1
         ]).
 
 -ifdef(TEST).
@@ -70,18 +71,18 @@ openssl_suite_name(Cipher) ->
 
 maybe_use_ssl(App) ->
     SSLOpts = [
-        {certfile, app_helper:get_env(App, certfile, undefined)},
-        {keyfile, app_helper:get_env(App, keyfile, undefined)},
-        {cacerts, load_certs(app_helper:get_env(App, cacertdir, undefined))},
-        {depth, app_helper:get_env(App, ssl_depth, 1)},
+        {certfile, application:get_env(App, certfile, undefined)},
+        {keyfile, application:get_env(App, keyfile, undefined)},
+        {cacerts, load_certs(application:get_env(App, cacertdir, undefined))},
+        {depth, application:get_env(App, ssl_depth, 1)},
         {verify_fun, {fun verify_ssl/3,
-                {App, get_my_common_name(app_helper:get_env(App, certfile,
+                {App, get_my_common_name(application:get_env(App, certfile,
                                                        undefined))}}},
         {verify, verify_peer},
         {fail_if_no_peer_cert, true},
         {secure_renegotiate, true} %% both sides are erlang, so we can force this
     ],
-    case app_helper:get_env(App, ssl_enabled, false) == true of
+    case application:get_env(App, ssl_enabled, false) == true of
         false ->
             %% not all the SSL options are configured, use TCP
             false;
@@ -236,7 +237,7 @@ verify_ssl(Cert, valid_peer, {App, MyCommonName}) ->
                 "certificate's common name: ~p", [CommonName]),
             {fail, duplicate_common_name};
         _ ->
-            ACL = app_helper:get_env(App, peer_common_name_acl, "*"),
+            ACL = application:get_env(App, peer_common_name_acl, "*"),
             case validate_common_name(CommonName, ACL) of
                 {true, Filter} ->
                     logger:info("SSL connection from ~s granted by ACL \"~s\"",

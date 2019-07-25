@@ -316,7 +316,7 @@ create_traditional_plan(VNodeTarget, NVal, PVC, ReqId, Service, CHBin, AvailNode
             %% Assemble the data structures required for
             %% executing the coverage operation.
             lists:mapfoldl(CoverageVNodeFun, [], CoveragePlan);
-        {insufficient_vnodes_available, _KeySpace, PartialCoverage}  ->
+        {error, {insufficient_vnodes_available, _KeySpace, PartialCoverage}}  ->
             case VNodeTarget of
                 allup ->
                     %% The allup indicator means generate a coverage plan
@@ -677,7 +677,7 @@ find_minimal_coverage(AllPartitions,
                                   PVC-1,
                                   UpdatedResults);
         Error ->
-            Error
+            {error, Error}
     end.
 
 %% @private

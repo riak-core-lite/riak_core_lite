@@ -532,7 +532,7 @@ authenticate(Username, Password, ConnInfo) ->
                             end;
                         Source ->
                             %% check for a dynamically registered auth module
-                            AuthMods = app_helper:get_env(riak_core,
+                            AuthMods = application:get_env(riak_core,
                                                           auth_mods, []),
                             case proplists:get_value(Source, AuthMods) of
                                 undefined ->
@@ -1119,7 +1119,7 @@ validate_password_option(Pass, Options) ->
     {ok, NewOptions}.
 
 validate_permissions(Perms) ->
-    KnownPermissions = app_helper:get_env(riak_core, permissions, []),
+    KnownPermissions = application:get_env(riak_core, permissions, []),
     validate_permissions(Perms, KnownPermissions).
 
 validate_permissions([], _) ->

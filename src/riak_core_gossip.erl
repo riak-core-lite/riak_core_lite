@@ -38,16 +38,14 @@
          terminate/2, code_change/3]).
 -export ([distribute_ring/1, send_ring/1, send_ring/2, remove_from_cluster/2,
           remove_from_cluster/3, random_gossip/1,
-          recursive_gossip/1, random_recursive_gossip/1, rejoin/2,
-          gossip_version/0]).
+          recursive_gossip/1, random_recursive_gossip/1, rejoin/2
+]).
 
--include("riak_core_ring.hrl").
 
 %% Default gossip rate: allow at most 45 gossip messages every 10 seconds
 -define(DEFAULT_LIMIT, {45, 10000}).
 
--record(state, {gossip_versions,
-                gossip_tokens}).
+-record(state, {gossip_tokens}).
 
 %% ===================================================================
 %% Public API
@@ -125,75 +123,19 @@ random_recursive_gossip(Ring) ->
 %% @private
 init(_State) ->
     schedule_next_reset(),
-    {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
-    {Tokens, _} = app_helper:get_env(riak_core, gossip_limit, ?DEFAULT_LIMIT),
-    State = update_known_versions(Ring,
-                                  #state{gossip_versions=orddict:new(),
-                                         gossip_tokens=Tokens}),
+    {Tokens, _} = application:get_env(riak_core, gossip_limit, ?DEFAULT_LIMIT),
+    State = #state{gossip_tokens = Tokens},
     {ok, State}.
 
 handle_call(_, _From, State) ->
     {reply, ok, State}.
-
-update_gossip_version(Ring) ->
-    CurrentVsn = riak_core_ring:get_member_meta(Ring, node(), gossip_vsn),
-    DesiredVsn = gossip_version(),
-    case CurrentVsn of
-        DesiredVsn ->
-            Ring;
-        _ ->
-            Ring2 = riak_core_ring:update_member_meta(node(), Ring, node(),
-                                                      gossip_vsn, DesiredVsn),
-            Ring2
-    end.
-
-update_known_version(Node, {OtherRing, GVsns}) ->
-    case riak_core_ring:get_member_meta(OtherRing, Node, gossip_vsn) of
-        undefined ->
-            case riak_core_ring:owner_node(OtherRing) of
-                Node ->
-                    {OtherRing, orddict:store(Node, ?CURRENT_RING_VSN, GVsns)};
-                _ ->
-                    {OtherRing, GVsns}
-            end;
-        GossipVsn ->
-            {OtherRing, orddict:store(Node, GossipVsn, GVsns)}
-    end.
-
-update_known_versions(OtherRing, State=#state{gossip_versions=GVsns}) ->
-    {_, GVsns2} = lists:foldl(fun update_known_version/2,
-                              {OtherRing, GVsns},
-                              riak_core_ring:all_members(OtherRing)),
-    State#state{gossip_versions=GVsns2}.
-
-gossip_version() ->
-    %% Now that we can safely assume all nodes support capabilities, this
-    %% should be replaced with a capability someday.
-    ?CURRENT_RING_VSN.
-
-rpc_gossip_version(Ring, Node) ->
-    GossipVsn = riak_core_ring:get_member_meta(Ring, Node, gossip_vsn),
-    case GossipVsn of
-        undefined ->
-            case riak_core_util:safe_rpc(Node, riak_core_gossip, gossip_version, [], 1000) of
-                {badrpc, _} ->
-                    ?LEGACY_RING_VSN;
-                Vsn ->
-                    Vsn
-            end;
-        _ ->
-            GossipVsn
-    end.
 
 %% @private
 handle_cast({send_ring_to, _Node}, State=#state{gossip_tokens=0}) ->
     %% Out of gossip tokens, ignore the send request
     {noreply, State};
 handle_cast({send_ring_to, Node}, State) ->
-    {ok, MyRing0} = riak_core_ring_manager:get_raw_ring(),
-    MyRing = update_gossip_version(MyRing0),
-    GossipVsn = rpc_gossip_version(MyRing, Node),
-    RingOut = riak_core_ring:downgrade(GossipVsn, MyRing),
+    {ok, RingOut} = riak_core_ring_manager:get_raw_ring(),
     riak_core_ring:check_tainted(RingOut,
                                  "Error: riak_core_gossip/send_ring_to :: "
                                  "Sending tainted ring over gossip"),
@@ -209,14 +151,13 @@ handle_cast({distribute_ring, Ring}, State) ->
     gen_server:abcast(Nodes, ?MODULE, {reconcile_ring, Ring}),
     {noreply, State};
 
-handle_cast({reconcile_ring, RingIn}, State) ->
-    OtherRing = riak_core_ring:upgrade(RingIn),
-    State2 = update_known_versions(OtherRing, State),
+handle_cast({reconcile_ring, OtherRing}, State) ->
     %% Compare the two rings, see if there is anything that
     %% must be done to make them equal...
-    riak_core_stat:update(gossip_received),
+    %% STATS
+    % riak_core_stat:update(gossip_received),
     riak_core_ring_manager:ring_trans(fun reconcile/2, [OtherRing]),
-    {noreply, State2};
+    {noreply, State};
 
 handle_cast(gossip_ring, State) ->
     % Gossip the ring to some random other node...
@@ -225,8 +166,7 @@ handle_cast(gossip_ring, State) ->
     random_gossip(MyRing),
     {noreply, State};
 
-handle_cast({rejoin, RingIn}, State) ->
-    OtherRing = riak_core_ring:upgrade(RingIn),
+handle_cast({rejoin, OtherRing}, State) ->
     {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
     SameCluster =
         (riak_core_ring:cluster_name(Ring) =:=
@@ -251,7 +191,7 @@ handle_cast(_, State) ->
 handle_info(reset_tokens, State) ->
     schedule_next_reset(),
     gen_server:cast(?MODULE, gossip_ring),
-    {Tokens, _} = app_helper:get_env(riak_core, gossip_limit, ?DEFAULT_LIMIT),
+    {Tokens, _} = application:get_env(riak_core, gossip_limit, ?DEFAULT_LIMIT),
     {noreply, State#state{gossip_tokens=Tokens}};
 
 handle_info(_Info, State) -> {noreply, State}.
@@ -270,9 +210,10 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 
 schedule_next_reset() ->
-    {_, Reset} = app_helper:get_env(riak_core, gossip_limit, ?DEFAULT_LIMIT),
+    {_, Reset} = application:get_env(riak_core, gossip_limit, ?DEFAULT_LIMIT),
     erlang:send_after(Reset, ?MODULE, reset_tokens).
 
+%%noinspection ErlangUnboundVariable
 reconcile(Ring0, [OtherRing0]) ->
     {Ring, OtherRing} = riak_core_ring:reconcile_names(Ring0, OtherRing0),
     Node = node(),
@@ -295,7 +236,8 @@ reconcile(Ring0, [OtherRing0]) ->
     case {WrongCluster, OtherStatus, Changed} of
         {true, _OS, _C} ->
             %% TODO: Tell other node to stop gossiping to this node.
-            riak_core_stat:update(ignored_gossip),
+            %% STATS
+            % riak_core_stat:update(ignored_gossip),
             ignore;
         {false, down, _C} ->
             %% Tell other node to rejoin the cluster.
@@ -308,7 +250,8 @@ reconcile(Ring0, [OtherRing0]) ->
             ignore;
         {false, _OS, new_ring} ->
             Ring3 = riak_core_ring:ring_changed(Node, Ring2),
-            riak_core_stat:update(rings_reconciled),
+            %% STATS
+            % riak_core_stat:update(rings_reconciled),
             log_membership_changes(Ring, Ring3),
             {reconciled_ring, Ring3};
         {false, _OS, _C} ->
@@ -386,7 +329,7 @@ remove_from_cluster(Ring, ExitingNode, Seed) ->
     ExitRing.
 
 attempt_simple_transfer(Seed, Ring, Owners, ExitingNode) ->
-    TargetN = app_helper:get_env(riak_core, target_n_val),
+    TargetN = application:get_env(riak_core, target_n_val, undefined),
     attempt_simple_transfer(Seed, Ring, Owners,
                             TargetN,
                             ExitingNode, 0,

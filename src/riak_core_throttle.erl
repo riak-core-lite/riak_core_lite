@@ -135,9 +135,9 @@ is_throttle_enabled(AppName, Key) ->
 init(AppName, Key,
      {LimitsKey, LimitsDefault},
      {EnabledKey, EnabledDefault}) ->
-    Limits = app_helper:get_env(AppName, LimitsKey, LimitsDefault),
+    Limits = application:get_env(AppName, LimitsKey, LimitsDefault),
     set_limits(AppName, Key, Limits),
-    Enabled = app_helper:get_env(AppName, EnabledKey, EnabledDefault),
+    Enabled = application:get_env(AppName, EnabledKey, EnabledDefault),
     case Enabled of
         true ->
             enable_throttle(AppName, Key);

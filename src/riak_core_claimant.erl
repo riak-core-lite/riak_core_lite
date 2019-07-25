@@ -602,7 +602,7 @@ valid_resize_request(NewRingSize, [], Ring) ->
     %%            should allow applications to register with some flag indicating support
     %%            for dynamic ring, if all registered applications support it
     %%            the cluster is capable. core knowing about search/kv is :(
-    ControlRunning = app_helper:get_env(riak_control, enabled, false),
+    ControlRunning = application:get_env(riak_control, enabled, false),
     NodeCount = length(riak_core_ring:all_members(Ring)),
     Changes = length(riak_core_ring:pending_changes(Ring)) > 0,
     case {ControlRunning, Capable, IsResizing, NodeCount, Changes} of
@@ -670,7 +670,7 @@ same_plan(RingA, RingB) ->
     (riak_core_ring:pending_changes(RingA) == riak_core_ring:pending_changes(RingB)).
 
 schedule_tick() ->
-    Tick = app_helper:get_env(riak_core,
+    Tick = application:get_env(riak_core,
                               claimant_tick,
                               10000),
     erlang:send_after(Tick, ?MODULE, tick).
@@ -1012,19 +1012,28 @@ internal_ring_changed(Node, CState) ->
     %% Outer case statement already checks for ring_ready
     case {IsClaimant, Changed} of
         {true, true} ->
-            riak_core_stat:update(converge_timer_end),
-            riak_core_stat:update(converge_timer_begin);
+            %% STATS
+%%            riak_core_stat:update(converge_timer_end),
+            %% STATS
+%%            riak_core_stat:update(converge_timer_begin);
+            ok;
         {true, false} ->
-            riak_core_stat:update(converge_timer_end);
+            %% STATS
+%%            riak_core_stat:update(converge_timer_end);
+            ok;
         _ ->
             ok
     end,
 
     case {IsClaimant, WasPending, IsPending} of
         {true, false, true} ->
-            riak_core_stat:update(rebalance_timer_begin);
+            %% STATS
+%%            riak_core_stat:update(rebalance_timer_begin);
+            ok;
         {true, true, false} ->
-            riak_core_stat:update(rebalance_timer_end);
+            %% STATS
+%%            riak_core_stat:update(rebalance_timer_end);
+            ok;
         _ ->
             ok
     end,

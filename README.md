@@ -1,15 +1,15 @@
-# What is riak_core_ng?
+# What is riak_core_antidote?
 
-The 'ng' version of riak core is a modernized version of riak core, it is entirely build with rebar3 using hex packages for all dependences, with more modern versions of some libraries. 99.9% of all credit goes to basho, very little extra work has happened here! The aim is to keep this up to date with all changes pushed to riak_core proper.
-
-## Improvements and Additions
-
-* R19 compatibility - This form works with R18 and R19 (lower versions should work but are not tested)
-* AAE - this version includes the Active Anti Entropy code extracted from `riak_kv` and provides a new behavior called `riak_core_aae_vnode`.
+The 'antidote' version of riak core is a minimal and up-to-date version of riak core.
 
 # Riak Core
 
-[![Build Status](https://secure.travis-ci.org/basho/riak_core.png)](http://travis-ci.org/basho/riak_core)
+![Language](https://img.shields.io/badge/language-erlang-blue.svg)
+![Release](https://img.shields.io/badge/release-R21-9cf.svg)
+![Build](https://img.shields.io/badge/build-rebar3%203.9.0-brightgreen.svg)
+
+[![Build Status](https://travis-ci.com/albsch/riak_core.svg?branch=master)](https://travis-ci.com/albsch/riak_core.svg?branch=master)
+
 
 Riak Core is the distributed systems framework that forms the basis of
 how [Riak](http://github.com/basho/riak) distributes data and scales.

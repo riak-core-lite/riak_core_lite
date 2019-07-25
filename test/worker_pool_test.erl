@@ -86,6 +86,7 @@ simple_noreply_worker_pool() ->
 pool_test_() ->
     {setup,
         fun() ->
+          %% #5 silence log output for test case
                 error_logger:tty(false)
         end,
         fun(_) ->

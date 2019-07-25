@@ -370,7 +370,7 @@ g_services() ->
     list(elements([s1, s2, s3, s4])).
 
 g_ring_nodes() ->
-    vector(app_helper:get_env(riak_core, ring_creation_size),
+    vector(application:get_env(riak_core, ring_creation_size, undefined),
            oneof([node(), 'n1@127.0.0.1', 'n2@127.0.0.1', 'n3@127.0.0.1'])).
 g_service_threshold() ->
     [g_service(), {nw_mecked_thresher, health_check, [oneof([true, false, kill, error])]}].
@@ -613,7 +613,7 @@ service_loop() ->
     end.
 
 build_ring([Node | Rest]) ->
-    Inc = trunc(math:pow(2,160)-1) div app_helper:get_env(riak_core, ring_creation_size),
+    Inc = trunc(math:pow(2,160)-1) div application:get_env(riak_core, ring_creation_size, undefined),
     build_ring(Rest, 0, Inc, riak_core_ring:fresh(Node)).
 
 build_ring([], _Id, _Inc, R) ->

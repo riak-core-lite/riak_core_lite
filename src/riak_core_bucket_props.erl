@@ -117,11 +117,11 @@ validate_reserved_name(_) ->
 
 -spec defaults() -> [{atom(), any()}].
 defaults() ->
-    app_helper:get_env(riak_core, default_bucket_props).
+    application:get_env(riak_core, default_bucket_props, undefined).
 
 -spec append_defaults([{atom(), any()}]) -> ok.
 append_defaults(Items) when is_list(Items) ->
-    OldDefaults = app_helper:get_env(riak_core, default_bucket_props, []),
+    OldDefaults = application:get_env(riak_core, default_bucket_props, []),
     NewDefaults = merge(OldDefaults, Items),
     FixedDefaults = case riak_core:bucket_fixups() of
         [] -> NewDefaults;
@@ -136,6 +136,7 @@ append_defaults(Items) when is_list(Items) ->
     ok.
 
 -spec resolve([{atom(), any()}], [{atom(), any()}]) -> [{atom(), any()}].
+%%noinspection ErlangUnusedVariable
 resolve(PropsA, PropsB) when is_list(PropsA) andalso
                              is_list(PropsB) ->
     PropsASorted = lists:ukeysort(1, PropsA),

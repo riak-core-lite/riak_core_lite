@@ -5,8 +5,11 @@
      {registered,[]},
      {included_applications,[chash]},
      {applications,
-         [kernel,stdlib,gen_fsm_compat,sasl,crypto,riak_sysmon,os_mon,
-          basho_stats,eleveldb,pbkdf2,poolboy,exometer_core,clique,folsom]},
+         [
+          kernel,stdlib,sasl,crypto,os_mon,
+          gen_fsm_compat,
+          basho_stats,eleveldb,pbkdf2,poolboy
+         ]},
      {mod,{riak_core_app,[]}},
      {env,
          [{cluster_name,"default"},
@@ -22,14 +25,9 @@
           {handoff_port,8099},
           {handoff_ip,"0.0.0.0"},
           {dist_send_buf_size,393216},
-          {dist_recv_buf_size,786432},
-          {exometer_defaults,
-              [{['_'],
-                histogram,
-                [{options,
-                     [{histogram_module,exometer_slot_slide},
-                      {keep_high,500}]}]}]}]},
-     {pkg_name,"riak_core_ng"},
+          {dist_recv_buf_size,786432}
+         ]},
+     {pkg_name,"riak_core_antidote"},
      {maintainers,["basho","Heinz N. Gies"]},
      {licenses,["Apache"]},
      {links,[{"Github","https://github.com/Kyorai/riak_core"}]}]}.
