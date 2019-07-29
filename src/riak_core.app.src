@@ -14,20 +14,37 @@
      {env,
          [{cluster_name,"default"},
           {platform_data_dir,"data"},
+          {ring_state_dir,"data/ring"},
           {ring_creation_size,64},
-          {gossip_interval,60000},
+          {gossip_interval, 60000},
           {target_n_val,4},
           {wants_claim_fun,{riak_core_claim,default_wants_claim}},
           {choose_claim_fun,{riak_core_claim,default_choose_claim}},
-          {vnode_inactivity_timeout,60000},
+          {vnode_inactivity_timeout, 60000},
+          {vnode_check_interval, 5000},
+          {vnode_overload_threshold, 10000},
+          {vnode_modules, []},
+          {use_background_manager, true},
+          {metadata_exchange_timeout, 60000},
           {handoff_concurrency,2},
+          {handoff_receive_timeout, 300000}, % 5 minutes TCP timeout
+          {handoff_receive_vnode_timeout, 60000}, % timeout for vnode to process the hand-off data msg
           {disable_http_nagle,true},
+          {default_bucket_props, []},
+          {force_reclaim, false},
           {handoff_port,8099},
           {handoff_ip,"0.0.0.0"},
           {dist_send_buf_size,393216},
-          {dist_recv_buf_size,786432}
-         ]},
-     {pkg_name,"riak_core_antidote"},
+          {dist_recv_buf_size,786432},
+          {bucket_fixups, []},
+          {bucket_validators, []},
+          {stat_mods, []},
+          {health_checks, []}
+
+
+
+]},
+{pkg_name,"riak_core_antidote"},
      {maintainers,["basho","Heinz N. Gies"]},
      {licenses,["Apache"]},
      {links,[{"Github","https://github.com/Kyorai/riak_core"}]}]}.
