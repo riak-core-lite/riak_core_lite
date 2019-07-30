@@ -1,6 +1,6 @@
 {application,riak_core,
     [{description,"Riak Core"},
-     {vsn,"3.1.0"},
+     {vsn,"4.0.0"},
      {modules,[]},
      {registered,[]},
      {included_applications,[chash]},
@@ -40,11 +40,8 @@
           {bucket_validators, []},
           {stat_mods, []},
           {health_checks, []}
-
-
-
 ]},
-{pkg_name,"riak_core_antidote"},
-     {maintainers,["basho","Heinz N. Gies"]},
+{pkg_name,"riak_core"},
+     {maintainers,["AntidoteDB","Albert Schimpf"]},
      {licenses,["Apache"]},
-     {links,[{"Github","https://github.com/Kyorai/riak_core"}]}]}.
+     {links,[{"Github","https://github.com/AntidoteDB/riak_core"}]}]}.
