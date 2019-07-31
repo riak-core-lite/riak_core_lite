@@ -3,10 +3,10 @@
      {vsn,"4.0.0"},
      {modules,[]},
      {registered,[]},
-     {included_applications,[chash]},
+     {included_applications,[chash, syntax_tools, compiler]},
      {applications,
          [
-          kernel,stdlib,sasl,crypto,os_mon,
+          kernel,stdlib,crypto,os_mon,
           gen_fsm_compat,
           basho_stats,eleveldb,pbkdf2,poolboy
          ]},
