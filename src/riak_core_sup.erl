@@ -24,8 +24,6 @@
 
 -behaviour(supervisor).
 
--include("riak_core_bg_manager.hrl").
-
 %% API
 -export([start_link/0]).
 
@@ -51,7 +49,7 @@ start_link() ->
 init([]) ->
 
     Children = lists:flatten(
-                 [?CHILD(riak_core_bg_manager, worker),
+                 [
                   ?CHILD(riak_core_vnode_sup, supervisor, 305000),
                   ?CHILD(riak_core_eventhandler_sup, supervisor),
                   ?CHILD(riak_core_handoff_sup, supervisor),
