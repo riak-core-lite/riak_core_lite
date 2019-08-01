@@ -45,16 +45,6 @@ get_handoff_ip() ->
 
 init([IpAddr, PortNum, SslOpts]) ->
     register(?MODULE, self()),
-
-    %% This exit() call shouldn't be necessary, AFAICT the VM's EXIT
-    %% propagation via linking should do the right thing, but BZ 823
-    %% suggests otherwise.  However, the exit() call should fall into
-    %% the "shouldn't hurt", especially since the next line will
-    %% explicitly try to spawn a new proc that will try to register
-    %% the riak_kv_handoff_listener name.
-    catch exit(whereis(riak_kv_handoff_listener), kill),
-    process_proxy:start_link(riak_kv_handoff_listener, ?MODULE),
-
     {ok, #state{portnum=PortNum, ipaddr=IpAddr, ssl_opts = SslOpts}}.
 
 sock_opts() -> [binary, {packet, 4}, {reuseaddr, true}, {backlog, 64}].
