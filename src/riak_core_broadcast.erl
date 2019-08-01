@@ -114,7 +114,7 @@ start_link() ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     Members = all_broadcast_members(Ring),
     {InitEagers, InitLazys} = init_peers(Members),
-    Mods = application:get_env(riak_core, broadcast_mods, [riak_core_metadata_manager]),
+    Mods = application:get_env(riak_core, broadcast_mods, []),
     Res = start_link(Members, InitEagers, InitLazys, Mods),
     riak_core_ring_events:add_sup_callback(fun ?MODULE:ring_update/1),
     Res.
