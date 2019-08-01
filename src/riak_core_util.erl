@@ -266,9 +266,11 @@ chash_key({Bucket,_Key}=BKey) ->
 %% @spec chash_key(BKey :: riak_object:bkey(), [{atom(), any()}]) ->
 %%          chash:index()
 %% @doc Create a binary used for determining replica placement.
-chash_key({Bucket,Key}, BucketProps) ->
-    {_, {M, F}} = lists:keyfind(chash_keyfun, 1, BucketProps),
-    M:F({Bucket,Key}).
+chash_key({Bucket,Key}, _BucketProps) ->
+  %{_, {M, F}} = lists:keyfind(chash_keyfun, 1, BucketProps),
+  %M:F({Bucket,Key}).
+  % FIX static keyfun
+  chash_std_keyfun({Bucket, Key}).
 
 %% @spec chash_std_keyfun(BKey :: riak_object:bkey()) -> chash:index()
 %% @doc Default object/ring hashing fun, direct passthrough of bkey.
