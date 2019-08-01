@@ -403,6 +403,9 @@ maybe_exchange(State) ->
 
 maybe_exchange(undefined, State) ->
     State;
+maybe_exchange(_, State=#state{mods=[],exchanges=Exchanges}) ->
+  logger:warning("No exchange possible: ~p", [Exchanges]),
+  State;
 maybe_exchange(Peer, State=#state{mods=[Mod | _],exchanges=Exchanges}) ->
     %% limit the number of exchanges this node can start concurrently.
     %% the exchange must (currently?) implement any "inbound" concurrency limits
