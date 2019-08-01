@@ -8,7 +8,7 @@
          [
           kernel,stdlib,crypto,os_mon,
           gen_fsm_compat,
-          basho_stats,eleveldb,pbkdf2,poolboy
+          basho_stats,pbkdf2,poolboy
          ]},
      {mod,{riak_core_app,[]}},
      {env,
