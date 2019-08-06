@@ -34,7 +34,6 @@
 start(_StartType, _StartArgs) ->
     maybe_delay_start(),
     ok = validate_ring_state_directory_exists(),
-    ok = safe_register_cluster_info(),
 
     start_riak_core_sup().
 
@@ -64,11 +63,6 @@ validate_ring_state_directory_exists() ->
             throw({error, invalid_ring_state_dir})
     end.
 
-safe_register_cluster_info() ->
-    %% Register our cluster_info app callback modules, with catch if
-    %% the app is missing or packaging is broken.
-    catch cluster_info:register_app(riak_core_cinfo_core),
-    ok.
 
 start_riak_core_sup() ->
     %% Spin up the supervisor; prune ring files as necessary
