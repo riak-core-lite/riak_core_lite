@@ -38,8 +38,6 @@ basic_test_() ->
 
 basic_default() ->
     Opts = [{suffix, "_default"},
-            {wc_mf, {riak_core_claim, default_wants_claim}},
-            {cc_mf, {riak_core_claim, default_choose_claim}},
             {target_n_val, 4},
             {ring_size, 32},
             {node_count, 8},
@@ -49,8 +47,6 @@ basic_default() ->
 
 basic_new() ->
     Opts = [{suffix, "_new"},
-            {wc_mf, {riak_core_new_claim, new_wants_claim}},
-            {cc_mf, {riak_core_new_claim, new_choose_claim}},
             {target_n_val, 4},
             {ring_size, 32},
             {node_count, 8},
@@ -61,13 +57,9 @@ basic_new() ->
 run(Opts) ->
     application:load(riak_core),
 
-    WCMod = ?get(wc_mf, Opts, {riak_core_claim, default_wants_claim}),
-    CCMod = ?get(cc_mf, Opts, {riak_core_claim, default_choose_claim}),
     TargetN = ?get(target_n_val, Opts, 4),
     Suffix = ?get(suffix, Opts, ""),
 
-    application:set_env(riak_core, wants_claim_fun, WCMod),
-    application:set_env(riak_core, choose_claim_fun, CCMod),
     application:set_env(riak_core, target_n_val, TargetN),
 
     RingSize = ?get(ring_size, Opts, 2048),
