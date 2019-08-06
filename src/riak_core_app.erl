@@ -113,10 +113,8 @@ register_capabilities() ->
                      false],
                     [{riak_core, fold_req_version},
                      [v2, v1],
-                     v1],
-                    [{riak_core, net_ticktime},
-                     [true, false],
-                     false]],
+                     v1]
+    ],
     lists:foreach(
       fun(Capability) ->
               apply(riak_core_capability, register, Capability)
