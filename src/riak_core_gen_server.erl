@@ -1027,8 +1027,8 @@ format_status(Opt, StatusData) ->
 		      Name
 	      end,
     Header = lists:concat(["Status for generic server ", NameTag]),
-    Log = get_log(Debug),
-    Specfic =
+    Log = sys:get_log(Debug),
+    Specfic = 
 	case erlang:function_exported(Mod, format_status, 2) of
 	    true ->
 		case catch Mod:format_status(Opt, [PDict, State]) of
