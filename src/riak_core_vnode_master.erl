@@ -123,10 +123,10 @@ coverage(Msg, {Index, Node}, Keyspaces, Sender, VMaster) ->
 %% VnodePid}'.
 command_return_vnode({Index,Node}, Msg, Sender, VMaster) ->
     Req = make_request(Msg, Sender, Index),
-    case riak_core_capability:get({riak_core, vnode_routing}, legacy) of
-        legacy ->
+    case application:get_env(riak_core, vnode_routing) of
+      {ok, legacy} ->
             gen_server:call({VMaster, Node}, {return_vnode, Req}, ?LONG_TIMEOUT);
-        proxy ->
+      {ok, proxy} ->
             Mod = vmaster_to_vmod(VMaster),
             riak_core_vnode_proxy:command_return_vnode({Mod,Index,Node}, Req)
     end.
@@ -195,14 +195,14 @@ proxy_cast(Who, Req) ->
     proxy_cast(Who, Req, normal).
 
 proxy_cast({VMaster, Node}, Req, How) ->
-    case riak_core_capability:get({riak_core, vnode_routing}, legacy) of
-        legacy ->
+    case application:get_env(riak_core, vnode_routing) of
+      {ok, legacy} ->
             if How == normal ->
                     gen_server:cast({VMaster, Node}, Req);
                How == unreliable ->
                     riak_core_send_msg:cast_unreliable({VMaster, Node}, Req)
             end;
-        proxy ->
+      {ok, proxy} ->
             do_proxy_cast({VMaster, Node}, Req, How)
     end.
 

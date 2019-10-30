@@ -26,10 +26,6 @@
 
 per_test_setup(DefaultBucketProps, TestFun) ->
     try
-        meck:new(riak_core_capability, []),
-        meck:expect(riak_core_capability, get,
-                    fun({riak_core, bucket_types}) -> true;
-                       (X) -> meck:passthrough([X]) end),
         os:cmd("rm -rf ./meta_temp"),
         riak_core_test_util:stop_pid(whereis(riak_core_ring_events)),
         riak_core_test_util:stop_pid(whereis(riak_core_ring_manager)),

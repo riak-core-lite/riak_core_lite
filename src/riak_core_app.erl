@@ -32,6 +32,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+  logger:error("WHY?"),
     maybe_delay_start(),
     ok = validate_ring_state_directory_exists(),
 
@@ -71,7 +72,6 @@ start_riak_core_sup() ->
             ok = register_applications(),
             ok = add_ring_event_handler(),
 
-            ok = register_capabilities(),
             ok = riak_core_throttle:init(),
 
             riak_core_throttle:init(),
@@ -92,26 +92,3 @@ register_applications() ->
 add_ring_event_handler() ->
     ok = riak_core_ring_events:add_guarded_handler(riak_core_ring_handler, []).
 
-register_capabilities() ->
-    Capabilities = [[{riak_core, vnode_routing},
-                     [proxy, legacy],
-                     legacy,
-                     {riak_core,
-                      legacy_vnode_routing,
-                      [{true, legacy}, {false, proxy}]}],
-                    [{riak_core, staged_joins},
-                     [true, false],
-                     false],
-                    [{riak_core, resizable_ring},
-                     [true, false],
-                     false],
-                    [{riak_core, fold_req_version},
-                     [v2, v1],
-                     v1]
-    ],
-    lists:foreach(
-      fun(Capability) ->
-              apply(riak_core_capability, register, Capability)
-      end,
-      Capabilities),
-    ok.

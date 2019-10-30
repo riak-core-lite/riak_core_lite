@@ -683,8 +683,7 @@ make_fold_req(FoldFun, Acc0) ->
     make_fold_req(FoldFun, Acc0, false, []).
 
 make_fold_req(FoldFun, Acc0, Forwardable, Opts) ->
-    make_fold_reqv(riak_core_capability:get({riak_core, fold_req_version}, v1),
-                   FoldFun, Acc0, Forwardable, Opts).
+    make_fold_reqv(v2, FoldFun, Acc0, Forwardable, Opts).
 
 %% @doc Force a #riak_core_fold_req_v? record to the latest version,
 %%      regardless of cluster support
@@ -1137,54 +1136,6 @@ bounded_pmap_test_() ->
       end,
       Tests
      }.
-
-make_fold_req_test_() ->
-    {setup,
-     fun() ->
-             meck:unload(),
-             meck:new(riak_core_capability, [passthrough])
-     end,
-     fun(_) ->
-             ok
-     end,
-     [
-      fun() ->
-              FoldFun = fun(_, _, _) -> ok end,
-              Acc0 = acc0,
-              Forw = true,
-              Opts = [opts],
-              F_1 = #riak_core_fold_req_v1{foldfun=FoldFun, acc0=Acc0},
-              F_2 = #riak_core_fold_req_v2{foldfun=FoldFun, acc0=Acc0,
-                                           forwardable=Forw, opts=Opts},
-              F_2_default = #riak_core_fold_req_v2{foldfun=FoldFun, acc0=Acc0,
-                                                   forwardable=false, opts=[]},
-              Newest = fun() -> F_2_default = make_newest_fold_req(F_1),
-                                F_2         = make_newest_fold_req(F_2),
-                                ok
-                       end,
-
-              meck:expect(riak_core_capability, get,
-                          fun({riak_core, fold_req_version}, _) -> v1 end),
-              F_1         = make_fold_req(F_1),
-              F_1         = make_fold_req(F_2),
-              F_1         = make_fold_req(FoldFun, Acc0),
-              F_1         = make_fold_req(FoldFun, Acc0, Forw, Opts),
-              ok = Newest(),
-
-              meck:expect(riak_core_capability, get,
-                          fun({riak_core, fold_req_version}, _) -> v2 end),
-              F_2_default = make_fold_req(F_1),
-              F_2         = make_fold_req(F_2),
-              F_2_default = make_fold_req(FoldFun, Acc0),
-              F_2         = make_fold_req(FoldFun, Acc0, Forw, Opts),
-              ok = Newest(),
-              %% It seems you could unload `meck' in the test teardown,
-              %% but that sometimes causes the eunit process to crash.
-              %% Instead, unload at end of test.
-              meck:unload()
-      end
-     ]
-    }.
 
 proxy_spawn_test() ->
     A = proxy_spawn(fun() -> a end),

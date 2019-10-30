@@ -133,7 +133,7 @@ standard_join(Node, Ring, Rejoin, Auto) ->
                                                   node(),
                                                   gossip_vsn,
                                                   2),
-            {_, Ring5} = riak_core_capability:update_ring(Ring4),
+            Ring5 = Ring4,
             Ring6 = maybe_auto_join(Auto, node(), Ring5),
             riak_core_ring_manager:set_my_ring(Ring6),
             riak_core_gossip:send_ring(Node, node())

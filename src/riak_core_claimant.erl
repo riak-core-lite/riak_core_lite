@@ -480,7 +480,7 @@ valid_force_replace_request(Node, NewNode, Changes, Ring) ->
 %% @private
 %% restrictions preventing resize along with other operations are temporary
 valid_resize_request(NewRingSize, [], Ring) ->
-    Capable = riak_core_capability:get({riak_core, resizable_ring}, false),
+    {ok, Capable} = application:get_env(riak_core, resizable_ring),
     IsResizing = riak_core_ring:num_partitions(Ring) =/= NewRingSize,
 
     %% NOTE/TODO: the checks below are a stop-gap measure to limit the changes
@@ -938,7 +938,7 @@ are_joining_nodes(CState) ->
 %% @private
 auto_joining_nodes(CState) ->
     Joining = riak_core_ring:members(CState, [joining]),
-    case riak_core_capability:get({riak_core, staged_joins}, false) of
+    case application:get_env(riak_core, staged_joins, false) of
         false ->
             Joining;
         true ->
