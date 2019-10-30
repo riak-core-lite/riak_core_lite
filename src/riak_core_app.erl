@@ -32,28 +32,17 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-  logger:error("WHY?"),
-    maybe_delay_start(),
     ok = validate_ring_state_directory_exists(),
 
     start_riak_core_sup().
 
 stop(_State) ->
-    logger:info("Stopped  application riak_core.\n", []),
+    logger:info("Stopped application riak_core", []),
     ok.
-
-maybe_delay_start() ->
-    case application:get_env(riak_core, delayed_start) of
-        {ok, Delay} ->
-            logger:info("Delaying riak_core startup as requested"),
-            timer:sleep(Delay);
-        _ ->
-            ok
-    end.
 
 validate_ring_state_directory_exists() ->
     riak_core_util:start_app_deps(riak_core),
-    RingStateDir = application:get_env(riak_core, ring_state_dir, undefined),
+    {ok, RingStateDir} = application:get_env(riak_core, ring_state_dir),
     case filelib:ensure_dir(filename:join(RingStateDir, "dummy")) of
         ok ->
             ok;
@@ -71,10 +60,8 @@ start_riak_core_sup() ->
         {ok, Pid} ->
             ok = register_applications(),
             ok = add_ring_event_handler(),
-
             ok = riak_core_throttle:init(),
 
-            riak_core_throttle:init(),
 
             {ok, Pid};
         {error, Reason} ->
@@ -82,11 +69,6 @@ start_riak_core_sup() ->
     end.
 
 register_applications() ->
-  %% STATS
-%%    riak_core:register(riak_core, [{stat_mod, riak_core_stat},
-%%                                   {permissions, [get_bucket,
-%%                                                  set_bucket
-%%                                                  ]}]),
     ok.
 
 add_ring_event_handler() ->
