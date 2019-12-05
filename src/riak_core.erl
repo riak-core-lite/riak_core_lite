@@ -56,7 +56,7 @@ stop(Reason) ->
 %% @doc Join the ring found on the specified remote node
 %%
 join(Node) ->
-    join(Node, true).
+    join(Node, false).
 
 %% @doc Join the remote cluster without automatically claiming ring
 %%      ownership. Used to stage a join in the newer plan/commit
