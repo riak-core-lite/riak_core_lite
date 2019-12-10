@@ -268,12 +268,12 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
             ThroughputBytes = TotalBytes/FoldTimeDiff,
 
             ok = logger:info("~p transfer of ~p from ~p ~p to ~p ~p"
-                            " completed: sent ~s bytes in ~p of ~p objects"
-                            " in ~.2f seconds (~s/second)",
+                            " completed: sent ~p bytes in ~p of ~p objects"
+                            " in ~p seconds (~p/second)",
                             [Type, Module, SrcNode, SrcPartition, TargetNode, TargetPartition,
-                             riak_core_format:human_size_fmt("~.2f", TotalBytes),
+                             TotalBytes,
                              FinalStats#ho_stats.objs, TotalObjects, FoldTimeDiff,
-                             riak_core_format:human_size_fmt("~.2f", ThroughputBytes)]),
+                             ThroughputBytes]),
             case Type of
                 repair -> ok;
                 resize -> gen_fsm_compat:send_event(ParentPid, {resize_transfer_complete,
