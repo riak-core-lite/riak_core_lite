@@ -78,7 +78,8 @@
          responsible_preflists/1,
          responsible_preflists/2,
          get_index_n/1,
-         preflist_siblings/1
+         preflist_siblings/1,
+         posix_error/1
         ]).
 
 -include("riak_core_vnode.hrl").
@@ -105,6 +106,12 @@
 %% 719528 days from Jan 1, 0 to Jan 1, 1970
 %%  *86400 seconds/day
 -define(SEC_TO_EPOCH, 62167219200).
+
+posix_error(Error) ->
+  case erl_posix_msg:message(Error) of
+    "unknown POSIX error" -> lists:flatten(io_lib:format("~p", [Error]));
+    Message -> Message
+  end.
 
 %% @spec moment() -> integer()
 %% @doc Get the current "moment".  Current implementation is the

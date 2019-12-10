@@ -21,11 +21,7 @@
 %% @doc send a partition's data via TCP-based handoff
 
 -module(riak_core_handoff_sender).
--export([start_link/4, get_handoff_ssl_options/0]).
-
--compile({nowarn_deprecated_function, 
-            [{gen_fsm, send_event, 2}]}).
-
+-export([start_link/4]).
 -include("riak_core_vnode.hrl").
 -include("riak_core_handoff.hrl").
 -include("stacktrace.hrl").
@@ -56,7 +52,6 @@
           socket               :: any(),
           src_target           :: {non_neg_integer(), non_neg_integer()},
           stats                :: #ho_stats{},
-          tcp_mod              :: module(),
 
           total_objects        :: non_neg_integer(),
           total_bytes          :: non_neg_integer(),
@@ -81,12 +76,11 @@
 %%%===================================================================
 
 start_link(TargetNode, Module, {Type, Opts}, Vnode) ->
-    SslOpts = get_handoff_ssl_options(),
     Pid = spawn_link(fun()->start_fold(TargetNode,
                                        Module,
                                        {Type, Opts},
-                                       Vnode,
-                                       SslOpts)
+                                       Vnode
+                                       )
                      end),
     {ok, Pid}.
 
@@ -95,8 +89,7 @@ start_link(TargetNode, Module, {Type, Opts}, Vnode) ->
 %%%===================================================================
 
 
-start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPartition, TargetPartition) ->
-
+start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, TargetPartition) ->
     %% Give workers one more chance to abort or get a lock or whatever.
     FoldOpts = maybe_call_handoff_started(Module, SrcPartition),
 
@@ -113,15 +106,8 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
                 Other
         end,
     SockOpts = [binary, {packet, 4}, {header,1}, {active, false}],
-    {Socket, TcpMod} =
-        if SslOpts /= [] ->
-                {ok, Skt} = ssl:connect(TNHandoffIP, Port, SslOpts ++ SockOpts,
-                                        15000),
-                {Skt, ssl};
-           true ->
-                {ok, Skt} = gen_tcp:connect(TNHandoffIP, Port, SockOpts, 15000),
-                {Skt, gen_tcp}
-        end,
+    {ok, Socket} = gen_tcp:connect(TNHandoffIP, Port, SockOpts, 15000),
+
 
     RecvTimeout = get_handoff_receive_timeout(),
 
@@ -133,8 +119,8 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
     %% print an error and keep going with our fingers crossed.
     TargetBin = term_to_binary(TargetNode),
     VerifyNodeMsg = <<?PT_MSG_VERIFY_NODE:8,TargetBin/binary>>,
-    ok = TcpMod:send(Socket, VerifyNodeMsg),
-    case TcpMod:recv(Socket, 0, RecvTimeout) of
+    ok = gen_tcp:send(Socket, VerifyNodeMsg),
+    case gen_tcp:recv(Socket, 0, RecvTimeout) of
         {ok,[?PT_MSG_VERIFY_NODE | _]} -> ok;
         {ok,[?PT_MSG_UNKNOWN | _]} ->
             logger:warning("Could not verify identity of peer ~s.",
@@ -152,7 +138,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
     VMaster = list_to_atom(atom_to_list(Module) ++ "_master"),
     ModBin = atom_to_binary(Module, utf8),
     Msg = <<?PT_MSG_OLDSYNC:8,ModBin/binary>>,
-    ok = TcpMod:send(Socket, Msg),
+    ok = gen_tcp:send(Socket, Msg),
 
     AckSyncThreshold = application:get_env(riak_core, handoff_acksync_threshold, 25),
 
@@ -163,7 +149,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
     %% protocol but for now the sender must assume that a closed
     %% socket at this point is a rejection by the receiver to
     %% enforce handoff_concurrency.
-    case TcpMod:recv(Socket, 0, RecvTimeout) of
+    case gen_tcp:recv(Socket, 0, RecvTimeout) of
         {ok,[?PT_MSG_OLDSYNC|<<"sync">>]} -> ok;
         {error, timeout} -> exit({shutdown, timeout});
         {error, closed} -> exit({shutdown, max_concurrency})
@@ -176,7 +162,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
                 TargetNode, TargetPartition]),
 
     M = <<?PT_MSG_INIT:8,TargetPartition:160/integer>>,
-    ok = TcpMod:send(Socket, M),
+    ok = gen_tcp:send(Socket, M),
     StartFoldTime = os:timestamp(),
     Stats = #ho_stats{interval_end=future_now(get_status_interval())},
     UnsentAcc0 = get_notsent_acc0(Opts),
@@ -192,7 +178,6 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
                     socket=Socket,
                     src_target={SrcPartition, TargetPartition},
                     stats=Stats,
-                    tcp_mod=TcpMod,
 
                     total_bytes=0,
                     total_objects=0,
@@ -238,7 +223,6 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
        error=ErrStatus,
        module=Module,
        parent=ParentPid,
-       tcp_mod=TcpMod,
        total_objects=TotalObjects,
        total_bytes=TotalBytes,
        stats=FinalStats,
@@ -255,9 +239,9 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
             %% we receive the sync the remote side will be up to date.
             logger:debug("~p ~p Sending final sync",
                         [SrcPartition, Module]),
-            ok = TcpMod:send(Socket, <<?PT_MSG_SYNC:8>>),
+            ok = gen_tcp:send(Socket, <<?PT_MSG_SYNC:8>>),
 
-            case TcpMod:recv(Socket, 0, RecvTimeout) of
+            case gen_tcp:recv(Socket, 0, RecvTimeout) of
                 {ok,[?PT_MSG_SYNC|<<"sync">>]} ->
                     logger:debug("~p ~p Final sync received",
                                 [SrcPartition, Module]);
@@ -288,12 +272,12 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPart
             end
     end.
 -ifndef('21.0').
-start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
+start_fold(TargetNode, Module, {Type, Opts}, ParentPid) ->
     SrcNode = node(),
     SrcPartition = get_src_partition(Opts),
     TargetPartition = get_target_partition(Opts),
     try
-        start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPartition, TargetPartition)
+        start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, TargetPartition)
     catch
         exit:{shutdown,max_concurrency} ->
              %% Need to fwd the error so the handoff mgr knows
@@ -317,12 +301,12 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
              gen_fsm_compat:send_event(ParentPid, {handoff_error, Err, Reason})
      end.
 -else.
-start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
+start_fold(TargetNode, Module, {Type, Opts}, ParentPid) ->
     SrcNode = node(),
     SrcPartition = get_src_partition(Opts),
     TargetPartition = get_target_partition(Opts),
     try
-        start_fold_(TargetNode, Module, Type, Opts, ParentPid, SslOpts, SrcNode, SrcPartition, TargetPartition)
+        start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, TargetPartition)
     catch
         exit:{shutdown,max_concurrency} ->
              %% Need to fwd the error so the handoff mgr knows
@@ -378,14 +362,13 @@ visit_item(K, V, Acc0 = #ho_acc{acksync_threshold = AccSyncThreshold}) ->
 %% When a tcp error occurs, the ErrStatus argument is set to {error, Reason}.
 %% Since we can't abort the fold, this clause is just a no-op.
 visit_item2(_K, _V, Acc=#ho_acc{error={error, _Reason}}) ->
-    %% When a TCP/SSL error occurs, #ho_acc.error is set to {error, Reason}.
+    %% When a TCP error occurs, #ho_acc.error is set to {error, Reason}.
     throw(Acc);
 visit_item2(K, V, Acc = #ho_acc{ack = _AccSyncThreshold, acksync_threshold = _AccSyncThreshold}) ->
     #ho_acc{module=Module,
             socket=Sock,
             src_target={SrcPartition, TargetPartition},
-            stats=Stats,
-            tcp_mod=TcpMod
+            stats=Stats
            } = Acc,
 
     RecvTimeout = get_handoff_receive_timeout(),
@@ -395,9 +378,9 @@ visit_item2(K, V, Acc = #ho_acc{ack = _AccSyncThreshold, acksync_threshold = _Ac
     Stats2 = incr_bytes(Stats, NumBytes),
     Stats3 = maybe_send_status({Module, SrcPartition, TargetPartition}, Stats2),
 
-    case TcpMod:send(Sock, M) of
+    case gen_tcp:send(Sock, M) of
         ok ->
-            case TcpMod:recv(Sock, 0, RecvTimeout) of
+            case gen_tcp:recv(Sock, 0, RecvTimeout) of
                 {ok,[?PT_MSG_OLDSYNC|<<"sync">>]} ->
                     Acc2 = Acc#ho_acc{ack=0, error=ok, stats=Stats3},
                     visit_item2(K, V, Acc2);
@@ -450,7 +433,6 @@ visit_item2(K, V, Acc) ->
                                     socket=Sock,
                                     src_target={SrcPartition, TargetPartition},
                                     stats=Stats,
-                                    tcp_mod=TcpMod,
                                     total_objects=TotalObjects,
                                     total_bytes=TotalBytes} = Acc,
                             M = <<?PT_MSG_OBJ:8,BinObj/binary>>,
@@ -460,7 +442,7 @@ visit_item2(K, V, Acc) ->
                             Stats3 = maybe_send_status({Module, SrcPartition,
                                                         TargetPartition}, Stats2),
 
-                            case TcpMod:send(Sock, M) of
+                            case gen_tcp:send(Sock, M) of
                                 ok ->
                                     Acc#ho_acc{ack=Ack+1,
                                                error=ok,
@@ -495,7 +477,6 @@ send_objects(ItemsReverseList, Acc) ->
             socket=Sock,
             src_target={SrcPartition, TargetPartition},
             stats=Stats,
-            tcp_mod=TcpMod,
 
             total_objects=TotalObjects,
             total_bytes=TotalBytes,
@@ -511,7 +492,7 @@ send_objects(ItemsReverseList, Acc) ->
     Stats2 = incr_bytes(incr_objs(Stats, NObjects), NumBytes),
     Stats3 = maybe_send_status({Module, SrcPartition, TargetPartition}, Stats2),
 
-    case TcpMod:send(Sock, M) of
+    case gen_tcp:send(Sock, M) of
         ok ->
             Acc#ho_acc{ack=Ack+1, error=ok, stats=Stats3,
                        total_objects=TotalObjects+NObjects,
@@ -538,34 +519,6 @@ get_handoff_port(Node) when is_atom(Node) ->
             %% Check old location from previous release
             riak_core_gen_server:call({riak_kv_handoff_listener, Node}, handoff_port, infinity);
         Other -> Other
-    end.
-
-get_handoff_ssl_options() ->
-    case application:get_env(riak_core, handoff_ssl_options, []) of
-        [] ->
-            [];
-        Props ->
-            try
-                %% We'll check if the file(s) exist but won't check
-                %% file contents' sanity.
-                ZZ = [{_, {ok, _}} = {ToCheck, file:read_file(Path)} ||
-                         ToCheck <- [certfile, keyfile, cacertfile, dhfile],
-                         Path <- [proplists:get_value(ToCheck, Props)],
-                         Path /= undefined],
-                spawn(fun() -> self() ! ZZ end), % Avoid term...never used err
-                %% Props are OK
-                Props
-            catch
-                error:{badmatch, {FailProp, BadMat}} ->
-                    logger:error("SSL handoff config error: property ~p: ~p.",
-                                [FailProp, BadMat]),
-                    [];
-                X:Y ->
-                    logger:error("Failure processing SSL handoff config "
-                                "~p: ~p:~p",
-                                [Props, X, Y]),
-                    []
-            end
     end.
 
 get_handoff_receive_timeout() ->

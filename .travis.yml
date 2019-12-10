@@ -7,7 +7,5 @@ install:
 script:
   - make test
   - make dialyzer
-notifications:
-  email: bieniusa@cs.uni-kl.de
 sudo: required
 dist: trusty

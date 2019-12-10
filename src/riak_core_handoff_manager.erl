@@ -35,7 +35,7 @@
 %% handoff api
 -export([add_outbound/6,
          add_outbound/7,
-         add_inbound/1,
+         add_inbound/0,
          xfer/3,
          kill_xfer/3,
          status/0,
@@ -91,12 +91,12 @@ add_outbound(HOType,Module,SrcIdx,TargetIdx,Node,VnodePid,Opts) ->
                             infinity)
     end.
 
-add_inbound(SSLOpts) ->
+add_inbound() ->
     case application:get_env(riak_core, disable_inbound_handoff) of
         {ok, true} ->
             {error, max_concurrency};
         _ ->
-            gen_server:call(?MODULE,{add_inbound,SSLOpts},infinity)
+            gen_server:call(?MODULE,{add_inbound},infinity)
     end.
 
 %% @doc Initiate a transfer from `SrcPartition' to `TargetPartition'
@@ -173,8 +173,8 @@ handle_call({add_outbound,Type,Mod,SrcIdx,TargetIdx,Node,Pid,Opts},_From,
         Error ->
             {reply, Error, State}
     end;
-handle_call({add_inbound,SSLOpts},_From,State=#state{handoffs=HS}) ->
-    case receive_handoff(SSLOpts) of
+handle_call({add_inbound},_From,State=#state{handoffs=HS}) ->
+    case receive_handoff() of
         {ok,Handoff=#handoff_status{transport_pid=Receiver}} ->
             HS2 = HS ++ [Handoff],
             {reply, {ok,Receiver}, State#state{handoffs=HS2}};
@@ -557,12 +557,12 @@ send_handoff(HOType, {Mod, Src, Target}, Node, Vnode, HS, {Filter, FilterModFun}
     end.
 
 %% spawn a receiver process
-receive_handoff (SSLOpts) ->
+receive_handoff () ->
     case handoff_concurrency_limit_reached() of
         true ->
             {error, max_concurrency};
         false ->
-            {ok,Pid}=riak_core_handoff_receiver_sup:start_receiver(SSLOpts),
+            {ok,Pid}=riak_core_handoff_receiver_sup:start_receiver(),
             PidM = monitor(process, Pid),
 
             %% successfully started up a new receiver
@@ -680,7 +680,7 @@ simple_handoff () ->
 
     %% clear handoff_concurrency and make sure a handoff fails
     ?assertEqual(ok,set_concurrency(0)),
-    ?assertEqual({error,max_concurrency},add_inbound([])),
+    ?assertEqual({error,max_concurrency},add_inbound()),
     ?assertEqual({error,max_concurrency},add_outbound(ownership,riak_kv_vnode,
                                                       0,node(),self(),[])),
 
@@ -697,7 +697,7 @@ config_disable () ->
 
     ?assertEqual([], status()),
 
-    Res = add_inbound([]),
+    Res = add_inbound(),
     ?assertMatch({ok, _}, Res),
     {ok, Pid} = Res,
 
@@ -726,13 +726,13 @@ config_disable () ->
     Status0 = fun() -> length(status()) =:= 0 end,
     ?assertEqual(ok, wait_until(Status0, 500, 1)),
 
-    ?assertEqual({error, max_concurrency}, add_inbound([])),
+    ?assertEqual({error, max_concurrency}, add_inbound()),
 
     ?assertEqual(ok, handoff_enable(inbound)),
     ?assertEqual(ok, handoff_enable(outbound)),
     ?assertEqual(0, length(status())),
 
-    ?assertMatch({ok, _}, add_inbound([])),
+    ?assertMatch({ok, _}, add_inbound()),
     ?assertEqual(1, length(status())).
 
 %% Copied from riak_test's rt.erl:

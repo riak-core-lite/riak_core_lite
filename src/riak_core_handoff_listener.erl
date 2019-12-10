@@ -30,22 +30,20 @@
 -export([get_handoff_ip/0, sock_opts/0, new_connection/2]).
 -record(state, {
           ipaddr :: string(),
-          portnum :: integer(),
-          ssl_opts :: list()
+          portnum :: integer()
          }).
 
 start_link() ->
     PortNum = application:get_env(riak_core, handoff_port, undefined),
     IpAddr = application:get_env(riak_core, handoff_ip, undefined),
-    SslOpts = riak_core_handoff_sender:get_handoff_ssl_options(),
-    gen_nb_server:start_link(?MODULE, IpAddr, PortNum, [IpAddr, PortNum, SslOpts]).
+    gen_nb_server:start_link(?MODULE, IpAddr, PortNum, [IpAddr, PortNum]).
 
 get_handoff_ip() ->
     riak_core_gen_server:call(?MODULE, handoff_ip, infinity).
 
-init([IpAddr, PortNum, SslOpts]) ->
+init([IpAddr, PortNum]) ->
     register(?MODULE, self()),
-    {ok, #state{portnum=PortNum, ipaddr=IpAddr, ssl_opts = SslOpts}}.
+    {ok, #state{portnum=PortNum, ipaddr=IpAddr}}.
 
 sock_opts() -> [binary, {packet, 4}, {reuseaddr, true}, {backlog, 64}].
 
@@ -63,8 +61,8 @@ terminate(_Reason, _State) -> ok.
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
-new_connection(Socket, State = #state{ssl_opts = SslOpts}) ->
-    case riak_core_handoff_manager:add_inbound(SslOpts) of
+new_connection(Socket, State) ->
+    case riak_core_handoff_manager:add_inbound() of
         {ok, Pid} ->
             ok = gen_tcp:controlling_process(Socket, Pid),
             ok = riak_core_handoff_receiver:set_socket(Pid, Socket),

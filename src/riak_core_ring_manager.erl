@@ -358,7 +358,7 @@ reload_ring(live) ->
             case riak_core_ring_manager:read_ringfile(RingFile) of
                 {error, Reason} ->
                     logger:critical("Failed to read ring file: ~p",
-                                   [riak_core_ssl_util:posix_error(Reason)]),
+                                   [riak_core_util:posix_error(Reason)]),
                     throw({error, Reason});
                 Ring ->
                     Ring
@@ -368,7 +368,7 @@ reload_ring(live) ->
             riak_core_ring:fresh();
         {error, Reason} ->
             logger:critical("Failed to load ring file: ~p",
-                           [riak_core_ssl_util:posix_error(Reason)]),
+                           [riak_core_util:posix_error(Reason)]),
             throw({error, Reason})
     end.
 
