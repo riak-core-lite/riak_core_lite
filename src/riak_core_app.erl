@@ -60,8 +60,6 @@ start_riak_core_sup() ->
         {ok, Pid} ->
             ok = register_applications(),
             ok = add_ring_event_handler(),
-            ok = riak_core_throttle:init(),
-
 
             {ok, Pid};
         {error, Reason} ->
