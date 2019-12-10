@@ -55,7 +55,6 @@ simple_test_() ->
          riak_core_test_util:unlink_named_process(riak_core_ring_manager),
          riak_core_ring_manager:stop(),
          riak_core_test_util:stop_pid(riak_core_ring_events),
-         application:stop(exometer),
          application:stop(goldrush),
          [ok = application:set_env(riak_core, K, V) || {K,V} <- OldVars],
          ok
@@ -68,9 +67,8 @@ setup_simple() ->
     %% meck'ed things we use, and they an break us if eunit doesn't tear
     %% them down fast enough.
     meck:unload(),
-    error_logger:tty(false),
-    application:set_env(sasl, sasl_error_logger, {file, "core_vnode_eqc_sasl.log"}),
-    error_logger:logfile({open, "core_vnode_eqc.log"}),
+    %error_logger:tty(false),
+    %error_logger:logfile({open, "core_vnode_eqc.log"}),
 
     Vars = [{ring_creation_size, 8},
             {ring_state_dir, "<nostore>"},
@@ -83,7 +81,6 @@ setup_simple() ->
                    ok = application:set_env(riak_core, AppKey, Val),
                    {AppKey, Old}
                end || {AppKey, Val} <- Vars],
-    exometer:start(),
     riak_core_ring_events:start_link(),
     riak_core_ring_manager:start_link(test),
     riak_core_vnode_proxy_sup:start_link(),
@@ -97,7 +94,6 @@ eqc_setup() ->
     OldVars = setup_simple(),
     fun() ->
             riak_core_ring_manager:stop(),
-            application:stop(exometer),
             application:stop(goldrush),
             [ok = application:set_env(riak_core, K, V) || {K,V} <- OldVars],
             ok
