@@ -456,9 +456,7 @@ handle_info(management_tick, State0) ->
                 State2#state{repairs=[]}
         end,
 
-    MaxStart = application:get_env(riak_core, vnode_rolling_start,
-                                  ?DEFAULT_VNODE_ROLLING_START),
-    State4 = State3#state{vnode_start_tokens=MaxStart},
+    State4 = State3#state{vnode_start_tokens = ?DEFAULT_VNODE_ROLLING_START},
     State5 = maybe_start_vnodes(Ring, State4),
 
     Repairs2 = check_repairs(State4#state.repairs),
@@ -630,9 +628,7 @@ get_vnode(IdxList, Mod, State) ->
                 logger:debug("VNode initialization ready ~p, ~p", [Pid, Idx]),
                 {Idx, Pid}
         end,
-    MaxStart = application:get_env(riak_core, vnode_parallel_start,
-                                  ?DEFAULT_VNODE_ROLLING_START),
-    Pairs = Started ++ riak_core_util:pmap(StartFun, NotStarted, MaxStart),
+    Pairs = Started ++ riak_core_util:pmap(StartFun, NotStarted, ?DEFAULT_VNODE_ROLLING_START),
     %% Return Pids in same order as input
     PairsDict = dict:from_list(Pairs),
     _ = [begin
