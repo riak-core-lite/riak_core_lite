@@ -66,7 +66,9 @@ init([]) ->
 
 handle_call({set_socket, Socket0}, _From, State) ->
     SockOpts = [{active, once}, {packet, 4}, {header, 1}],
-    Socket = ok = inet:setopts(Socket0, SockOpts), Peer = safe_peername(Socket0, inet), Socket0,
+    ok = inet:setopts(Socket0, SockOpts),
+    Peer = safe_peername(Socket0, inet),
+    Socket = Socket0,
     {reply, ok, State#state { sock = Socket, peer = Peer }}.
 
 handle_info({tcp_closed,_Socket},State=#state{partition=Partition,count=Count,
