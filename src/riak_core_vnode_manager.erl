@@ -527,7 +527,6 @@ maybe_ensure_vnodes_started(Ring) ->
             ok
     end.
 
--ifndef('21.0').
 ensure_vnodes_started(Ring) ->
     spawn(fun() ->
                   try
@@ -537,17 +536,6 @@ ensure_vnodes_started(Ring) ->
                       logger:error("~p", [{Type, Reason, Stacktrace}])
                   end
           end).
--else.
-ensure_vnodes_started(Ring) ->
-    spawn(fun() ->
-                  try
-                      riak_core_ring_handler:ensure_vnodes_started(Ring)
-                  catch
-                    Type:Reason:Stacktrace ->
-                      logger:error("~p", [{Type, Reason, Stacktrace}])
-                  end
-          end).
--endif.
 
 schedule_management_timer() ->
     ManagementTick = application:get_env(riak_core,
