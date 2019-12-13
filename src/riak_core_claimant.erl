@@ -480,24 +480,15 @@ valid_force_replace_request(Node, NewNode, Changes, Ring) ->
 %% @private
 %% restrictions preventing resize along with other operations are temporary
 valid_resize_request(NewRingSize, [], Ring) ->
-    {ok, Capable} = application:get_env(riak_core, resizable_ring),
     IsResizing = riak_core_ring:num_partitions(Ring) =/= NewRingSize,
 
-    %% NOTE/TODO: the checks below are a stop-gap measure to limit the changes
-    %%            made by the introduction of ring resizing. future implementation
-    %%            should allow applications to register with some flag indicating support
-    %%            for dynamic ring, if all registered applications support it
-    %%            the cluster is capable. core knowing about search/kv is :(
-    ControlRunning = application:get_env(riak_control, enabled, false),
     NodeCount = length(riak_core_ring:all_members(Ring)),
     Changes = length(riak_core_ring:pending_changes(Ring)) > 0,
-    case {ControlRunning, Capable, IsResizing, NodeCount, Changes} of
-        {false, true, true, N, false} when N > 1 -> true;
-        {true,  _, _, _, _} -> {error, control_running};
-        {_, false, _, _, _} -> {error, not_capable};
-        {_, _, false, _, _} -> {error, same_size};
-        {_, _, _, 1, _} -> {error, single_node};
-        {_, _, _, _, true} -> {error, pending_changes}
+    case {IsResizing, NodeCount, Changes} of
+        {true, N, false} when N > 1 -> true;
+        {false, _, _} -> {error, same_size};
+        {_, 1, _} -> {error, single_node};
+        {_, _, true} -> {error, pending_changes}
     end.
 
 
