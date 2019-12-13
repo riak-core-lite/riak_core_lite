@@ -3,8 +3,6 @@
                   %% TODO: Double-check that these special cases are kosher
                   {server, undefined, undefined} | % special case in
                                                    % riak_core_vnode_master.erl
-                  {fsm, undefined, pid()} |        % special case in
-                                                   % riak_kv_util:make_request/2.erl
                   ignore.
 -type partition() :: chash:index_as_int().
 -type vnode_req() :: term().
