@@ -491,17 +491,17 @@ vnode_resize_command(Sender, Request, FutureIndex,
 active(timeout, State=#state{mod=Mod, index=Idx}) ->
     riak_core_vnode_manager:vnode_event(Mod, Idx, self(), inactive),
     continue(State);
-active(?COVERAGE_REQ{keyspaces=KeySpaces,
+active(#riak_coverage_req_v1{keyspaces=KeySpaces,
                      request=Request,
                      sender=Sender}, State) ->
     %% Coverage request handled in handoff and non-handoff.  Will be forwarded if set.
     vnode_coverage(Sender, Request, KeySpaces, State);
-active(?VNODE_REQ{sender=Sender, request={resize_forward, Request}}, State) ->
+active(#riak_vnode_req_v1{sender=Sender, request={resize_forward, Request}}, State) ->
     vnode_command(Sender, Request, State);
-active(?VNODE_REQ{sender=Sender, request=Request},
+active(#riak_vnode_req_v1{sender=Sender, request=Request},
        State=#state{handoff_target=HT}) when HT =:= none ->
     forward_or_vnode_command(Sender, Request, State);
-active(?VNODE_REQ{sender=Sender, request=Request},
+active(#riak_vnode_req_v1{sender=Sender, request=Request},
                   State=#state{handoff_type=resize,
                                handoff_target={HOIdx,HONode},
                                index=Index,
@@ -525,7 +525,7 @@ active(?VNODE_REQ{sender=Sender, request=Request},
                 _Other -> vnode_command(Sender, Request, State)
             end
     end;
-active(?VNODE_REQ{sender=Sender, request=Request},State) ->
+active(#riak_vnode_req_v1{sender=Sender, request=Request},State) ->
     vnode_handoff_command(Sender, Request, State#state.handoff_target, State);
 active(handoff_complete, State) ->
     State2 = start_manager_event_timer(handoff_complete, State),
@@ -780,9 +780,9 @@ handle_event(trigger_delete, _StateName, State=#state{modstate={deleted,_}}) ->
     continue(State);
 handle_event(trigger_delete, _StateName, State) ->
     active(trigger_delete, State);
-handle_event(R=?VNODE_REQ{}, _StateName, State) ->
+handle_event(R=#riak_vnode_req_v1{}, _StateName, State) ->
     active(R, State);
-handle_event(R=?COVERAGE_REQ{}, _StateName, State) ->
+handle_event(R=#riak_coverage_req_v1{}, _StateName, State) ->
     active(R, State).
 
 
