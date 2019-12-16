@@ -186,6 +186,7 @@ bucket_key(Name) ->
 
 simple_set_test() ->
     application:load(riak_core),
+    application:set_env(riak_core, ring_state_dir, "_build/test/tmp"),
     %% appending an empty list of defaults makes up for the fact that
     %% riak_core_app:start/2 is not called during eunit runs
     %% (that's where the usual defaults are set at startup),

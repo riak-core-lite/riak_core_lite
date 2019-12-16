@@ -64,8 +64,8 @@
 -type repairs() :: [repair()].
 
 -record(state, {idxtab,
-                forwarding :: riak_core_dict(),
-                handoff :: riak_core_dict(),
+                forwarding :: dict:dict(),
+                handoff :: dict:dict(),
                 known_modules :: [term()],
                 never_started :: [{integer(), term()}],
                 vnode_start_tokens :: integer(),
@@ -73,7 +73,6 @@
                 repairs :: repairs()
                }).
 
--include("riak_core.hrl").
 -include("riak_core_handoff.hrl").
 -include("riak_core_vnode.hrl").
 -define(XFER_EQ(A, ModSrcTgt), A#xfer_status.mod_src_target == ModSrcTgt).

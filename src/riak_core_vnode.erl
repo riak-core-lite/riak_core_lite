@@ -1112,6 +1112,9 @@ pool_death_test() ->
     meck:new(test_pool_mod, [non_strict, no_link]),
     meck:expect(test_pool_mod, init_worker, fun(_, _, _) -> {ok, []} end),
 
+    %% expect error log
+    error_logger:tty(false),
+
     {ok, Pid} = ?MODULE:test_link(test_vnode, 0),
     {_, StateData1} = ?MODULE:current_state(Pid),
     PoolPid1 = StateData1#state.pool_pid,
@@ -1124,6 +1127,8 @@ pool_death_test() ->
     ?assertNot(PoolPid2 =:= undefined),
     exit(Pid, normal),
     wait_for_process_death(Pid),
+
+    error_logger:tty(false),
     meck:validate(test_pool_mod),
     meck:validate(test_vnode).
 

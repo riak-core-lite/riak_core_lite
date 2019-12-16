@@ -701,7 +701,7 @@ refresh_my_ring_test() ->
     {spawn, fun() ->
         setup_ets(test),
         Core_Settings = [{ring_creation_size, 4},
-                         {ring_state_dir, "/tmp"},
+                         {ring_state_dir, "_build/test/tmp"},
                          {cluster_name, "test"}],
         [begin
              put({?MODULE,AppKey}, application:get_env(riak_core, AppKey, undefined)),
@@ -730,19 +730,21 @@ stop_core_processes() ->
     riak_core_test_util:stop_pid(riak_core_vnode_sup),
     riak_core_test_util:stop_pid(riak_core_vnode_master).
 
--define(TEST_RINGDIR, "ring_manager_eunit").
--define(TEST_RINGFILE, (?TEST_RINGDIR ++ "/test.ring")).
+-define(TEST_RINGDIR, "_build/test_ring").
+-define(TEST_RINGFILE, (?TEST_RINGDIR ++ "/ring")).
 -define(TMP_RINGFILE,  (?TEST_RINGFILE ++ ".tmp")).
+
 do_write_ringfile_test() ->
     %% Make sure no data exists from previous runs
     file:change_mode(?TMP_RINGFILE, 8#00644),
     file:delete(?TMP_RINGFILE),
-    file:change_mode(?TEST_RINGFILE, 8#00644),
-    file:delete(?TEST_RINGFILE),
 
     %% Check happy path
     GenR = fun(Name) -> riak_core_ring:fresh(64, Name) end,
     ?assertEqual(ok, do_write_ringfile(GenR(happy), ?TEST_RINGFILE)),
+
+    %% errors expected
+    error_logger:tty(false),
 
     %% Check write fails (create .tmp file with no write perms)
     ok = file:write_file(?TMP_RINGFILE, <<"no write for you">>),
@@ -755,8 +757,12 @@ do_write_ringfile_test() ->
     ok = file:change_mode(?TEST_RINGDIR, 8#00444),
     ?assertMatch({error,_}, do_write_ringfile(GenR(ring_perms), ?TEST_RINGFILE)),
     ok = file:change_mode(?TEST_RINGDIR, 8#00755),
-    ok = file:change_mode(?TEST_RINGFILE, 8#00644),
-    ok = file:delete(?TEST_RINGFILE).
+
+    error_logger:tty(true),
+
+    %% Cleanup the ring file created for this test
+    {ok, RingFile} = find_latest_ringfile(),
+    file:delete(RingFile).
 
 is_stable_ring_test() ->
     {A,B,C} = Now = os:timestamp(),

@@ -3,7 +3,6 @@
  {<<"blume">>,{pkg,<<"blume">>,<<"0.1.1">>},0},
  {<<"chash">>,{pkg,<<"chash">>,<<"0.1.2">>},0},
  {<<"gen_fsm_compat">>,{pkg,<<"gen_fsm_compat">>,<<"0.3.0">>},0},
- {<<"pbkdf2">>,{pkg,<<"pbkdf2">>,<<"2.0.0">>},0},
  {<<"poolboy">>,{pkg,<<"poolboy">>,<<"1.5.2">>},0}]}.
 [
 {pkg_hash,[
@@ -11,6 +10,5 @@
  {<<"blume">>, <<"CFB4F43688690BA81C6A79F54E4678CFD5FDEDAB692F277AE740AE4A3897360D">>},
  {<<"chash">>, <<"AF02484F2640C653C4B9A8557A14CA0704989DBEDB27E7CCBC442F1903A3BCA7">>},
  {<<"gen_fsm_compat">>, <<"5903549F67D595F58A7101154CBE0FDD46955FBFBE40813F1E53C23A970FF5F4">>},
- {<<"pbkdf2">>, <<"11C23279FDED5C0027AB3996CFAE77805521D7EF4BABDE2BD7EC04A9086CF499">>},
  {<<"poolboy">>, <<"392B007A1693A64540CEAD79830443ABF5762F5D30CF50BC95CB2C1AAAFA006B">>}]}
 ].

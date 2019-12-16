@@ -681,8 +681,7 @@ simple_handoff () ->
     %% clear handoff_concurrency and make sure a handoff fails
     ?assertEqual(ok,set_concurrency(0)),
     ?assertEqual({error,max_concurrency},add_inbound()),
-    ?assertEqual({error,max_concurrency},add_outbound(ownership,riak_kv_vnode,
-                                                      0,node(),self(),[])),
+    ?assertEqual({error,max_concurrency},add_outbound(ownership,riak_kv_vnode, 0,node(),self(),[])),
 
     %% allow for a single handoff
     ?assertEqual(ok,set_concurrency(1)),
@@ -691,6 +690,9 @@ simple_handoff () ->
     ok.
 
 config_disable () ->
+    %% expect error log
+    error_logger:tty(false),
+
     ?assertEqual(ok, handoff_enable(inbound)),
     ?assertEqual(ok, handoff_enable(outbound)),
     ?assertEqual(ok, set_concurrency(2)),
@@ -726,6 +728,7 @@ config_disable () ->
     Status0 = fun() -> length(status()) =:= 0 end,
     ?assertEqual(ok, wait_until(Status0, 500, 1)),
 
+
     ?assertEqual({error, max_concurrency}, add_inbound()),
 
     ?assertEqual(ok, handoff_enable(inbound)),
@@ -733,7 +736,8 @@ config_disable () ->
     ?assertEqual(0, length(status())),
 
     ?assertMatch({ok, _}, add_inbound()),
-    ?assertEqual(1, length(status())).
+    ?assertEqual(1, length(status())),
+    error_logger:tty(true).
 
 %% Copied from riak_test's rt.erl:
 wait_until(Fun, Retry, Delay) when Retry > 0 ->
