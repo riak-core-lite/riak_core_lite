@@ -26,13 +26,6 @@
         code_change/3]).
 -export([start_link/1, handle_work/3, handle_work/4]).
 
--ifdef(PULSE).
--compile(export_all).
--compile({parse_transform, pulse_instrument}).
--compile({pulse_replace_module, [{gen_fsm, pulse_gen_fsm},
-                                 {gen_server, pulse_gen_server}]}).
--endif.
-
 -type mod_state() :: term().
 
 -record(state, {
@@ -60,7 +53,7 @@ handle_work(Worker, Work, From, Caller) ->
 init([Module, VNodeIndex, WorkerArgs, WorkerProps, Caller]) ->
     {ok, WorkerState} = Module:init_worker(VNodeIndex, WorkerArgs, WorkerProps),
     %% let the pool queue manager know there might be a worker to checkout
-    gen_fsm:send_all_state_event(Caller, worker_start),
+    riak_core_vnode_worker_pool:worker_started(Caller),
     {ok, #state{module=Module, modstate=WorkerState}}.
 
 handle_call(Event, _From, State) ->
@@ -77,16 +70,12 @@ handle_cast({work, Work, WorkFrom, Caller},
             NS
     end,
     %% check the worker back into the pool
-    gen_fsm:send_all_state_event(Caller, {checkin, self()}),
+    riak_core_vnode_worker_pool:checkin_worker(Caller, self()),
     {noreply, State#state{modstate=NewModState}};
-handle_cast(_Event, State) ->
-    {noreply, State}.
 
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_cast(_Event, State) -> {noreply, State}.
 
-terminate(_Reason, _State) ->
-    ok.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+handle_info(_Info, State) -> {noreply, State}.
+terminate(_Reason, _State) -> ok.
+code_change(_OldVsn, State, _Extra) -> {ok, State}.

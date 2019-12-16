@@ -49,7 +49,7 @@
 -export([ready/2, queueing/2, ready/3, queueing/3, shutdown/2, shutdown/3]).
 
 %% API
--export([start_link/6, start_link/5, stop/2, shutdown_pool/2, handle_work/3]).
+-export([start_link/6, start_link/5, stop/2, shutdown_pool/2, handle_work/3, worker_started/1, checkin_worker/2]).
 
 -ifdef(PULSE).
 -compile(export_all).
@@ -85,6 +85,12 @@ handle_work(Pid, Work, From) ->
 
 stop(Pid, Reason) ->
     gen_fsm_compat:sync_send_all_state_event(Pid, {stop, Reason}).
+
+worker_started(Pid) ->
+    gen_fsm_compat:send_all_state_event(Pid, worker_start).
+
+checkin_worker(Pid, WorkerPid) ->
+    gen_fsm_compat:send_all_state_event(Pid, {checkin, WorkerPid}).
 
 %% wait for all the workers to finish any current work
 shutdown_pool(Pid, Wait) ->
