@@ -1,9 +1,10 @@
 -type sender_type() :: fsm | server | raw.
 -type sender() :: {sender_type(), reference() | tuple(), pid()} |
                   %% TODO: Double-check that these special cases are kosher
-                  {server, undefined, undefined} | % special case in
-                                                   % riak_core_vnode_master.erl
+                    {fsm, undefined, pid()} | % what are these special cases and what is the reference used for??
+                    {server, undefined, undefined} | % special case in riak_core_vnode_master.erl
                   ignore.
+
 -type partition() :: chash:index_as_int().
 -type vnode_req() :: term().
 -type keyspaces() :: [{partition(), [partition()]}].

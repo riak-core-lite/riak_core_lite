@@ -718,10 +718,7 @@ proxy_spawn(Fun) ->
 
 
 %% @private
-make_fold_reqv(v1, FoldFun, Acc0, _Forwardable, _Opts)
-  when is_function(FoldFun, 3) ->
-    #riak_core_fold_req_v1{foldfun=FoldFun, acc0=Acc0};
-make_fold_reqv(v2, FoldFun, Acc0, Forwardable, Opts)
+make_fold_reqv(_, FoldFun, Acc0, Forwardable, Opts)
   when is_function(FoldFun, 3)
        andalso (Forwardable == true orelse Forwardable == false)
        andalso is_list(Opts) ->

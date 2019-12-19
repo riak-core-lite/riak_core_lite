@@ -1095,6 +1095,8 @@ current_state(Pid) ->
     gen_fsm:sync_send_all_state_event(Pid, current_state).
 
 pool_death_test() ->
+    %% expect error log
+    error_logger:tty(false),
     meck:unload(),
     meck:new(test_vnode, [non_strict, no_link]),
     meck:expect(test_vnode, init, fun(_) -> {ok, [], [{pool, test_pool_mod, 1, []}]} end),
@@ -1102,23 +1104,20 @@ pool_death_test() ->
     meck:new(test_pool_mod, [non_strict, no_link]),
     meck:expect(test_pool_mod, init_worker, fun(_, _, _) -> {ok, []} end),
 
-    %% expect error log
-    error_logger:tty(false),
-
-    {ok, Pid} = ?MODULE:test_link(test_vnode, 0),
-    {_, StateData1} = ?MODULE:current_state(Pid),
+    {ok, Pid} = riak_core_vnode:test_link(test_vnode, 0),
+    {_, StateData1} = riak_core_vnode:current_state(Pid),
     PoolPid1 = StateData1#state.pool_pid,
     exit(PoolPid1, kill),
     wait_for_process_death(PoolPid1),
     ?assertNot(is_process_alive(PoolPid1)),
+
     wait_for_state_update(StateData1, Pid),
-    {_, StateData2} = ?MODULE:current_state(Pid),
+    {_, StateData2} = riak_core_vnode:current_state(Pid),
     PoolPid2 = StateData2#state.pool_pid,
     ?assertNot(PoolPid2 =:= undefined),
     exit(Pid, normal),
     wait_for_process_death(Pid),
 
-    error_logger:tty(false),
     meck:validate(test_pool_mod),
     meck:validate(test_vnode).
 

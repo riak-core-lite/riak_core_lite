@@ -20,22 +20,22 @@
 -module(worker_pool_test).
 
 -behaviour(riak_core_vnode_worker).
--include_lib("eunit/include/eunit.hrl").
 
 -export([init_worker/3, handle_work/3]).
 
-init_worker(_VnodeIndex, Noreply, _WorkerProps) ->
-    {ok, Noreply}.
+init_worker(_VnodeIndex, DoReply, _WorkerProps) ->
+    {ok, DoReply}.
 
-handle_work(Work, From, true = State) ->
+handle_work(Work, _From, false = DoReply) ->
     Work(),
-    riak_core_vnode:reply(From, ok),
-    {noreply, State};
-handle_work(Work, _From, false = State) ->
+    {noreply, DoReply};
+handle_work(Work, _From, true = DoReply) ->
     Work(),
-    {reply, ok, State}.
+    {reply, ok, DoReply}.
 
 -ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
 
 receive_result(N) ->
     receive
@@ -48,38 +48,79 @@ receive_result(N) ->
             timeout
     end.
 
-simple_worker_pool() ->
-    {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 3, 10, false, []),
-    [ riak_core_vnode_worker_pool:handle_work(Pool, fun() ->
-                        timer:sleep(100),
-                        1/(N rem 2)
-                end,
-                {raw, N, self()})
-            || N <- lists:seq(1, 10)],
-
-    timer:sleep(1200),
-
-    %% make sure we got all the expected responses
-    [ ?assertEqual(true, receive_result(N)) || N <- lists:seq(1, 10)],
-    unlink(Pool),
-    riak_core_vnode_worker_pool:stop(Pool, normal).
-
-simple_noreply_worker_pool() ->
+simple_reply_worker_pool() ->
     {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 3, 10, true, []),
     [ riak_core_vnode_worker_pool:handle_work(Pool, fun() ->
-                        timer:sleep(100),
+                        timer:sleep(10),
                         1/(N rem 2)
                 end,
                 {raw, N, self()})
             || N <- lists:seq(1, 10)],
 
-    timer:sleep(1200),
+    timer:sleep(200),
 
-    %% make sure we got all the expected responses
-
+    %% make sure we got all replies
     [ ?assertEqual(true, receive_result(N)) || N <- lists:seq(1, 10)],
     unlink(Pool),
-    riak_core_vnode_worker_pool:stop(Pool, normal).
+    ok = riak_core_vnode_worker_pool:stop(Pool, normal),
+    ok = wait_for_process_death(Pool).
+
+simple_noreply_worker_pool() ->
+    {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 3, 10, false, []),
+    [ riak_core_vnode_worker_pool:handle_work(Pool, fun() ->
+                        timer:sleep(10),
+                        1/(N rem 2)
+                end,
+                {raw, N, self()})
+            || N <- lists:seq(1, 10)],
+
+    timer:sleep(200),
+
+    %% make sure that the non-crashing work calls receive timeouts
+    [ ?assertEqual(timeout, receive_result(N)) || N <- lists:seq(1, 10), N rem 2 == 1],
+    [ ?assertEqual(true, receive_result(N)) || N <- lists:seq(1, 10), N rem 2 == 0],
+
+    unlink(Pool),
+    ok = riak_core_vnode_worker_pool:stop(Pool, normal),
+    ok = wait_for_process_death(Pool).
+
+shutdown_pool_empty_success() ->
+    {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 3, 10, false, []),
+    unlink(Pool),
+    ok = riak_core_vnode_worker_pool:shutdown_pool(Pool, 100),
+    ok = wait_for_process_death(Pool),
+    ok.
+
+shutdown_pool_worker_finish_success() ->
+    {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 3, 10, false, []),
+    riak_core_vnode_worker_pool:handle_work(Pool, fun() -> timer:sleep(50) end, {raw, 1, self()}),
+    unlink(Pool),
+    ok = riak_core_vnode_worker_pool:shutdown_pool(Pool, 100),
+    ok = wait_for_process_death(Pool),
+    ok.
+
+shutdown_pool_force_timeout() ->
+    {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 3, 10, false, []),
+    riak_core_vnode_worker_pool:handle_work(Pool, fun() -> timer:sleep(100) end, {raw, 1, self()}),
+    unlink(Pool),
+    {error, vnode_shutdown} = riak_core_vnode_worker_pool:shutdown_pool(Pool, 50),
+    ok = wait_for_process_death(Pool),
+    ok.
+
+shutdown_pool_duplicate_calls() ->
+    {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 3, 10, false, []),
+    riak_core_vnode_worker_pool:handle_work(Pool, fun() -> timer:sleep(100) end, {raw, 1, self()}),
+    unlink(Pool),
+
+    %% request shutdown a bit later a second time
+    spawn_link(fun() ->
+        timer:sleep(30),
+        {error, vnode_shutdown} = riak_core_vnode_worker_pool:shutdown_pool(Pool, 50)
+               end),
+
+    {error, vnode_shutdown} = riak_core_vnode_worker_pool:shutdown_pool(Pool, 50),
+    ok = wait_for_process_death(Pool),
+    ok.
 
 
 pool_test_() ->
@@ -87,9 +128,21 @@ pool_test_() ->
         fun() -> error_logger:tty(false) end,
         fun(_) -> error_logger:tty(true) end,
         [
-            fun simple_worker_pool/0,
-            fun simple_noreply_worker_pool/0
-        ]
+            fun simple_reply_worker_pool/0,
+            fun simple_noreply_worker_pool/0,
+            fun shutdown_pool_empty_success/0,
+            fun shutdown_pool_worker_finish_success/0,
+            fun shutdown_pool_force_timeout/0,
+            fun shutdown_pool_duplicate_calls/0
+    ]
     }.
+
+wait_for_process_death(Pid) ->
+    wait_for_process_death(Pid, is_process_alive(Pid)).
+
+wait_for_process_death(Pid, true) ->
+    wait_for_process_death(Pid, is_process_alive(Pid));
+wait_for_process_death(_Pid, false) ->
+    ok.
 
 -endif.
