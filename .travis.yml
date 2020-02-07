@@ -9,8 +9,10 @@ script:
   - make test
   - make coverage
   - ./rebar3 as test coveralls send
+  - make lint
   - make xref
   - make dialyzer
   - make docs
+
 sudo: required
 dist: trusty

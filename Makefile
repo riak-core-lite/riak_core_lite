@@ -47,3 +47,6 @@ xref: compile
 
 dialyzer:
 	${REBAR} dialyzer
+
+lint:
+	${REBAR} as lint lint
