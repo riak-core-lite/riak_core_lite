@@ -213,14 +213,14 @@ start_link(Mod, Index, InitialInactivityTimeout, Forward) ->
 %% Send a command message for the vnode module by Pid -
 %% typically to do some deferred processing after returning yourself
 send_command(Pid, Request) ->
-    gen_fsm:send_event(Pid, ?VNODE_REQ{request=Request}).
+    gen_fsm_compat:send_event(Pid, #riak_vnode_req_v1{request=Request}).
 
 
 %% Sends a command to the FSM that called it after Time
 %% has passed.
 -spec send_command_after(integer(), term()) -> reference().
 send_command_after(Time, Request) ->
-    gen_fsm:send_event_after(Time, ?VNODE_REQ{request=Request}).
+    gen_fsm_compat:send_event_after(Time, #riak_vnode_req_v1{request=Request}).
 
 
 init([Mod, Index, InitialInactivityTimeout, Forward]) ->

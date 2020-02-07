@@ -1017,6 +1017,7 @@ name_to_pid(Name) ->
 %%-----------------------------------------------------------------
 %% Status information
 %%-----------------------------------------------------------------
+-if(?OTP_RELEASE >= 22).
 format_status(Opt, StatusData) ->
     [PDict, SysState, Parent, Debug, [Name, State, Mod, _Time,
                                       TimeoutState, Queue]] =
@@ -1050,3 +1051,38 @@ format_status(Opt, StatusData) ->
 	     {"Logged events", Log},
              {"Queued messages", riak_core_priority_queue:to_list(Queue)}]} |
      Specfic1].
+-elif(?OTP_RELEASE >= 21).
+format_status(Opt, StatusData) ->
+	[PDict, SysState, Parent, Debug, [Name, State, Mod, _Time,
+		TimeoutState, Queue]] =
+		StatusData,
+	NameTag = if is_pid(Name) ->
+		pid_to_list(Name);
+				  is_atom(Name) ->
+					  Name
+			  end,
+	Header = lists:concat(["Status for generic server ", NameTag]),
+	Log = sys:get_debug(log, Debug, []),
+	Specfic =
+		case erlang:function_exported(Mod, format_status, 2) of
+			true ->
+				case catch Mod:format_status(Opt, [PDict, State]) of
+					{'EXIT', _} -> [{data, [{"State", State}]}];
+					Else -> Else
+				end;
+			_ ->
+				[{data, [{"State", State}]}]
+		end,
+	Specfic1 = case TimeoutState of
+				   undefined -> Specfic;
+				   {Current, Min, undefined} ->
+					   [ {"Binary Timeout Current and Min", {Current, Min}}
+						   | Specfic]
+			   end,
+	[{header, Header},
+		{data, [{"Status", SysState},
+			{"Parent", Parent},
+			{"Logged events", Log},
+			{"Queued messages", riak_core_priority_queue:to_list(Queue)}]} |
+		Specfic1].
+-endif.

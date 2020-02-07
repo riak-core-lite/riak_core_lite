@@ -1,25 +1,31 @@
-# What is riak_core_antidote?
+# What is riak_core_lite?
 
-The 'antidote' version of riak core is a minimal and up-to-date version of riak core.
+Riak Core Lite is a framework that simplifies the development of dynamo-style architectures, such as highly-available key-value stores and messaging systems.
 
-# Riak Core
+Build upon the essence of Riak KV's core with an up-to-date, modular and extensible foundation for elastic distributed services.
+
+# riak_core_lite
 
 ![Language](https://img.shields.io/badge/language-erlang-blue.svg)
-![Release](https://img.shields.io/badge/release-R21-9cf.svg)
-![Build](https://img.shields.io/badge/build-rebar3%203.9.0-brightgreen.svg)
+![Release](https://img.shields.io/badge/release-R21+-9cf.svg)
+![Build](https://img.shields.io/badge/build-rebar3%203.13.0-brightgreen.svg)
 
-[![Build Status](https://travis-ci.com/albsch/riak_core.svg?branch=master)](https://travis-ci.com/albsch/riak_core.svg?branch=master)
+[![Hex pm](https://img.shields.io/hexpm/v/riak_core_lite.svg)](https://hex.pm/packages/riak_core_lite)
+[![Build Status](https://api.travis-ci.org/riak-core-lite/riak_core_lite.svg?branch=master)](https://api.travis-ci.org/riak-core-lite/riak_core_lite.svg?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/riak-core-lite/riak_core_lite/badge.svg?branch=master)](https://coveralls.io/github/riak-core-lite/riak_core_lite?branch=master)
 
 
-Riak Core is the distributed systems framework that forms the basis of
-how [Riak](http://github.com/basho/riak) distributes data and scales.
-More generally, it can be thought of as a toolkit for building
-distributed, scalable, fault-tolerant applications.
+To get started with riak_core_lite you can follow Mariano Guerra's tutorials.
+They are based on the full riak_core, but are still applicable to riak_core_lite.
 
-For some introductory reading on Riak Core (that’s not pure code),
-there’s an old but still valuable
-[blog post on the Basho Blog](http://basho.com/where-to-start-with-riak-core/)
-that’s well worth your time.
+1. [Setup](http://marianoguerra.org/posts/riak-core-tutorial-part-1-setup.html)
+2. [Starting](http://marianoguerra.org/posts/riak-core-tutorial-part-2-starting.html)
+3. [Ping Command](http://marianoguerra.org/posts/riak-core-tutorial-part-3-ping-command.html)
+4. [First Commands](http://marianoguerra.org/posts/riak-core-tutorial-part-4-first-commands.html)
+5. [Quorum Requests](http://marianoguerra.org/posts/riak-core-tutorial-part-5-quorum-requests.html)
+6. [Handoff](http://marianoguerra.org/posts/riak-core-tutorial-part-6-handoff.html)
+7. [HTTP API](http://marianoguerra.org/posts/riak-core-tutorial-part-8-http-api.html)
+9. [Persistent KV with leveled backend](http://marianoguerra.org/posts/riak-core-tutorial-part-9-persistent-kv-with-leveled-backend.html)
 
 ## Contributing
 
@@ -35,7 +41,7 @@ other code. To get started:
    message, spanning multiple lines if detailed explanation is needed.
 5. Push to your fork of the repository and then send a pull request.
 
-6. A Riak committer will review your patch and merge it into the main
+6. A committer will review your patch and merge it into the main
    repository or send you feedback.
 
 ## Issues, Questions, and Bugs
@@ -43,14 +49,6 @@ other code. To get started:
 There are numerous ways to file issues or start conversations around
 something Core related
 
-* The
-  [Riak Users List](http://lists.basho.com/mailman/listinfo/riak-users_lists.basho.com)
-  is the main place for all discussion around Riak.
-* There is a
-  [Riak Core-specific mailing list](http://lists.basho.com/mailman/listinfo/riak-core_lists.basho.com)
-  for issues and questions that pertain to Core but not Riak.
-* #riak on Freenode is a very active channel and can get you some
-   real-time help if a lot of instances.
-* If you've found a bug in Riak Core,
-  [file](https://github.com/basho/riak_core/issues) a clear, concise,
+* If you've found a bug in riak_core_lite,
+  [file](https://github.com/riak-core-lite/riak_core_lite/issues) a clear, concise,
   explanatory issue against this repo.

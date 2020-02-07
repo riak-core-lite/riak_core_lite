@@ -1,15 +1,12 @@
 {application,riak_core,
-    [{description,"Riak Core"},
-     {vsn,"4.0.0"},
+    [{description,"Riak Core Lite"},
+     {vsn,"0.10.0"},
      {modules,[]},
      {registered,[]},
-     {included_applications,[chash, syntax_tools, compiler]},
+     {included_applications,[syntax_tools, compiler]},
      {applications,
-         [
-          kernel,stdlib,crypto,os_mon,
-          gen_fsm_compat,
-          basho_stats,poolboy
-         ]},
+         [kernel,stdlib,crypto,os_mon,poolboy]
+     },
      {mod,{riak_core_app,[]}},
      {env,
          [{cluster_name,"default"},
@@ -33,8 +30,9 @@
           {bucket_validators, []},
           {stat_mods, []},
           {health_checks, []}
-]},
-{pkg_name,"riak_core"},
-     {maintainers,["AntidoteDB","Albert Schimpf"]},
+     ]},
+     {pkg_name,"riak_core_lite"},
+     {maintainers,["riak_core_lite","Albert Schimpf"]},
      {licenses,["Apache"]},
-     {links,[{"Github","https://github.com/AntidoteDB/riak_core"}]}]}.
+     {links,[{"Github","https://github.com/riak-core-lite/riak_core_lite"}]}
+    ]}.

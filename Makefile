@@ -1,14 +1,16 @@
 PULSE_TESTS = worker_pool_pulse
 
-.PHONY: deps test
+REBAR ?= ./rebar3
+
+.PHONY: deps test docs xref dialyzer
 
 all: compile
 
 compile: deps
-	./rebar3 compile
+	${REBAR} compile
 
 clean: clean-test
-	./rebar3 clean
+	${REBAR} clean
 
 
 distclean: clean
@@ -28,7 +30,20 @@ clean-test:
 # You should 'clean' before your first run of this target
 # so that deps get built with PULSE where needed.
 pulse:
-	./rebar3 compile -D PULSE
-	./rebar3 eunit -D PULSE skip_deps=true suite=$(PULSE_TESTS)
+	${REBAR} compile -D PULSE
+	${REBAR} eunit -D PULSE skip_deps=true suite=$(PULSE_TESTS)
 
-include tools.mk
+test: compile
+	${REBAR} eunit
+
+coverage: compile
+	${REBAR} cover --verbose
+
+docs:
+	${REBAR} edoc
+
+xref: compile
+	${REBAR} xref
+
+dialyzer:
+	${REBAR} dialyzer

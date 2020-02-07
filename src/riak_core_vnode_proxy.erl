@@ -281,11 +281,11 @@ handle_overload(Msg, #state{mod=Mod, index=Index}) ->
     %% STATS
     %riak_core_stat:update(dropped_vnode_requests),
     case Msg of
-        {'$gen_event', ?VNODE_REQ{sender=Sender, request=Request}} ->
+        {'$gen_event', #riak_vnode_req_v1{sender=Sender, request=Request}} ->
             catch(Mod:handle_overload_command(Request, Sender, Index));
-        {'$gen_all_state_event', ?VNODE_REQ{sender=Sender, request=Request}} ->
+        {'$gen_all_state_event', #riak_vnode_req_v1{sender=Sender, request=Request}} ->
             catch(Mod:handle_overload_command(Request, Sender, Index));
-        {'$gen_event', ?COVERAGE_REQ{sender=Sender, request=Request}} ->
+        {'$gen_event', #riak_coverage_req_v1{sender=Sender, request=Request}} ->
             catch(Mod:handle_overload_command(Request, Sender, Index));
         _ ->
             catch(Mod:handle_overload_info(Msg, Index))

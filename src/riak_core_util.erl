@@ -234,22 +234,22 @@ sha(Bin) ->
 md5(Bin) ->
     crypto:hash(md5, Bin).
 
-%% @spec unique_id_62() -> string()
 %% @doc Create a random identifying integer, returning its string
 %%      representation in base 62.
+-spec unique_id_62() -> string().
 unique_id_62() ->
     Rand = sha(term_to_binary({make_ref(), os:timestamp()})),
     <<I:160/integer>> = Rand,
     integer_to_list(I, 62).
 
-%% @spec reload_all(Module :: atom()) ->
-%%         [{purge_response(), load_file_response()}]
-%% @type purge_response() = boolean()
-%% @type load_file_response() = {module, Module :: atom()}|
-%%                            2  {error, term()}
+%% purge_response() = boolean()
+%% load_file_response() = {module, Module :: atom()}|
+%%                      2  {error, term()}
 %% @doc Ask each member node of the riak ring to reload the given
 %%      Module.  Return is a list of the results of code:purge/1
 %%      and code:load_file/1 on each node.
+-spec reload_all(Module :: atom()) ->
+         [{boolean(), {module, Module::atom()} | {error, term()}}].
 reload_all(Module) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     [{safe_rpc(Node, code, purge, [Module]),
@@ -682,7 +682,7 @@ sockname(Socket, Transport) ->
 
 make_fold_req(#riak_core_fold_req_v1{foldfun=FoldFun, acc0=Acc0}) ->
     make_fold_req(FoldFun, Acc0, false, []);
-make_fold_req(?FOLD_REQ{foldfun=FoldFun, acc0=Acc0,
+make_fold_req(#riak_core_fold_req_v2{foldfun=FoldFun, acc0=Acc0,
                        forwardable=Forwardable, opts=Opts}) ->
     make_fold_req(FoldFun, Acc0, Forwardable, Opts).
 
@@ -697,7 +697,7 @@ make_fold_req(FoldFun, Acc0, Forwardable, Opts) ->
 
 make_newest_fold_req(#riak_core_fold_req_v1{foldfun=FoldFun, acc0=Acc0}) ->
     make_fold_reqv(v2, FoldFun, Acc0, false, []);
-make_newest_fold_req(?FOLD_REQ{} = F) ->
+make_newest_fold_req(#riak_core_fold_req_v2{} = F) ->
     F.
 
 %% @doc Spawn an intermediate proxy process to handle errors during gen_xxx
@@ -722,7 +722,7 @@ make_fold_reqv(_, FoldFun, Acc0, Forwardable, Opts)
   when is_function(FoldFun, 3)
        andalso (Forwardable == true orelse Forwardable == false)
        andalso is_list(Opts) ->
-    ?FOLD_REQ{foldfun=FoldFun, acc0=Acc0,
+    #riak_core_fold_req_v2{foldfun=FoldFun, acc0=Acc0,
               forwardable=Forwardable, opts=Opts}.
 
 %% @private - used with proxy_spawn

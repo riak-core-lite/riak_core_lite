@@ -1,11 +1,16 @@
 language: erlang
 otp_release:
-  - 21.2
+  - 21.3
+  - 22.2
 install:
   - make
   - ./rebar3 update
 script:
   - make test
+  - make coverage
+  - ./rebar3 as test coveralls send
+  - make xref
   - make dialyzer
+  - make docs
 sudo: required
 dist: trusty
