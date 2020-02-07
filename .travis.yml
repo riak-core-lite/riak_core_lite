@@ -11,5 +11,6 @@ script:
   - ./rebar3 as test coveralls send
   - make xref
   - make dialyzer
+  - make lint
 sudo: required
 dist: trusty
