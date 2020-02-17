@@ -1,9 +1,6 @@
 {application,riak_core,
     [{description,"Riak Core Lite"},
-     {vsn,"0.9.0"},
-     {modules,[]},
-     {registered,[]},
-     {included_applications,[syntax_tools, compiler]},
+     {vsn,"0.9.1"},
      {applications,
          [kernel,stdlib,crypto,os_mon,poolboy]
      },

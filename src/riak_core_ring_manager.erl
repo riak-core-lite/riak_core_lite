@@ -24,11 +24,10 @@
 %%
 %% Numerous processes concurrently read and access the ring in a
 %% variety of time sensitive code paths. To make this efficient,
-%% `riak_core' uses `mochiglobal' which exploits the Erlang constant
-%% pool to provide constant-time access to the ring without needing
-%% to copy data into individual process heaps.
+%% `riak_core' uses `persistent_term' to provide constant-time access
+%% to the ring without needing to copy data into individual process heaps.
 %%
-%% However, updating a `mochiglobal' value is very slow, and becomes slower
+%% However, updating a `persistent' value is very slow, and becomes slower
 %% the larger the item being stored. With large rings, the delay can
 %% become too long during periods of high ring churn, where hundreds of
 %% ring events are being triggered a second.
@@ -36,10 +35,10 @@
 %% As of Riak 1.4, `riak_core' uses a hybrid approach to solve this
 %% problem. When a ring is first written, it is written to a shared ETS
 %% table. If no ring events have occurred for 90 seconds, the ring is
-%% then promoted to `mochiglobal'.  This provides fast updates during
+%% then promoted to `persistent_term'.  This provides fast updates during
 %% periods of ring churn, while eventually providing very fast reads
 %% after the ring stabilizes. The downside is that reading from the ETS
-%% table before promotion is slower than `mochiglobal', and requires
+%% table before promotion is slower than `persistent_term', and requires
 %% copying the ring into individual process heaps.
 %%
 %% To alleviate the slow down while in the ETS phase, `riak_core'
@@ -127,7 +126,7 @@ start_link(test) ->
 
 %% @spec get_my_ring() -> {ok, riak_core_ring:riak_core_ring()} | {error, Reason}
 get_my_ring() ->
-    Ring = case riak_core_mochiglobal:get(?RING_KEY) of
+    Ring = case persistent_term:get(?RING_KEY, undefined) of
                ets ->
                    case ets:lookup(?ETS, ring) of
                        [{_, RingETS}] ->
@@ -543,18 +542,18 @@ cleanup_ets(test) ->
     ets:delete(?ETS).
 
 reset_ring_id() ->
-    %% Maintain ring id epoch using mochiglobal to ensure ring id remains
+    %% Maintain ring id epoch using persistent_term to ensure ring id remains
     %% monotonic even if the riak_core_ring_manager crashes and restarts
-    Epoch = case riak_core_mochiglobal:get(riak_ring_id_epoch) of
+    Epoch = case persistent_term:get(riak_ring_id_epoch, undefined) of
                 undefined ->
                     0;
                 Value ->
                     Value
             end,
-    riak_core_mochiglobal:put(riak_ring_id_epoch, Epoch + 1),
+    persistent_term:put(riak_ring_id_epoch, Epoch + 1),
     {Epoch + 1, 0}.
 
-%% Set the ring in mochiglobal/ETS.  Exported during unit testing
+%% Set the ring in persistent_term/ETS.  Exported during unit testing
 %% to make test setup simpler - no need to spin up a riak_core_ring_manager
 %% process.
 set_ring_global(Ring) ->
@@ -564,7 +563,7 @@ set_ring_global(Ring) ->
         _ ->
             []
     end,
-    %% run fixups on the ring before storing it in mochiglobal
+    %% run fixups on the ring before storing it in persistent_term
     FixedRing = case riak_core:bucket_fixups() of
         [] -> Ring;
         Fixups ->
@@ -613,17 +612,17 @@ set_ring_global(Ring) ->
                {chashbin, CHBin} | BucketMeta2],
     ets:insert(?ETS, Actions),
     ets:match_delete(?ETS, {{bucket, '_'}, undefined}),
-    case riak_core_mochiglobal:get(?RING_KEY) of
+    case persistent_term:get(?RING_KEY, undefined) of
         ets ->
             ok;
         _ ->
-            riak_core_mochiglobal:put(?RING_KEY, ets)
+            persistent_term:put(?RING_KEY, ets)
     end,
     ok.
 
 promote_ring() ->
     {ok, Ring} = get_my_ring(),
-    riak_core_mochiglobal:put(?RING_KEY, Ring).
+    persistent_term:put(?RING_KEY, Ring).
 
 %% Persist a new ring file, set the global value and notify any listeners
 prune_write_notify_ring(Ring, State) ->
@@ -674,7 +673,7 @@ set_ring_global_test() ->
     Ring = riak_core_ring:fresh(),
     set_ring_global(Ring),
     promote_ring(),
-    ?assert(riak_core_ring:nearly_equal(Ring, riak_core_mochiglobal:get(?RING_KEY))),
+    ?assert(riak_core_ring:nearly_equal(Ring, persistent_term:get(?RING_KEY, undefined))),
     cleanup_ets(test).
 
 set_my_ring_test() ->
