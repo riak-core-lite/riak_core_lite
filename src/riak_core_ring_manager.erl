@@ -26,11 +26,7 @@
 %% variety of time sensitive code paths. To make this efficient,
 %% `riak_core' uses `persistent_term' to provide constant-time access
 %% to the ring without needing to copy data into individual process heaps.
-%%
-%% However, updating a `persistent' value is very slow, and becomes slower
-%% the larger the item being stored. With large rings, the delay can
-%% become too long during periods of high ring churn, where hundreds of
-%% ring events are being triggered a second.
+%% See http://erlang.org/doc/man/persistent_term.html
 %%
 %% As of Riak 1.4, `riak_core' uses a hybrid approach to solve this
 %% problem. When a ring is first written, it is written to a shared ETS
