@@ -23,10 +23,17 @@
 -include("riak_core_vnode.hrl").
 
 % gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 % API
--export([start_link/1, handle_work/3, handle_work/4]).
+-export([start_link/1,
+         handle_work/3,
+         handle_work/4]).
 
 -type mod_state() :: term().
 
@@ -35,7 +42,10 @@
     modstate :: mod_state()
 }).
 
--callback init_worker(partition(), Args :: term(), Props :: [{atom(), term()}]) -> {ok, mod_state()}.
+-callback init_worker(partition(),
+                      Args :: term(),
+                      Props :: [{atom(), term()}])
+                      -> {ok, mod_state()}.
 -callback handle_work(Work :: term(), sender(), mod_state()) ->
     {reply, Reply :: term(), mod_state()} |
     {noreply, mod_state()}.

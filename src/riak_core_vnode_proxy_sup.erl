@@ -18,8 +18,12 @@
 %% -------------------------------------------------------------------
 -module(riak_core_vnode_proxy_sup).
 -behaviour(supervisor).
--export([start_link/0, init/1]).
--export([start_proxy/2, stop_proxy/2, start_proxies/1]).
+-export([start_link/0,
+         init/1]).
+
+-export([start_proxy/2,
+         stop_proxy/2,
+         start_proxies/1]).
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).

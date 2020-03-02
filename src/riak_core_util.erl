@@ -89,7 +89,9 @@
 -include_lib("eqc/include/eqc.hrl").
 -endif. %% EQC
 -include_lib("eunit/include/eunit.hrl").
--export([counter_loop/1,incr_counter/1,decr_counter/1]).
+-export([counter_loop/1,
+         incr_counter/1,
+         decr_counter/1]).
 -endif. %% TEST
 
 -type riak_core_ring() :: riak_core_ring:riak_core_ring().
@@ -97,7 +99,7 @@
 -type index_n() :: {index(), pos_integer()}.
 
 %% R14 Compatibility
--compile({no_auto_import,[integer_to_list/2]}).
+-compile({no_auto_import, [integer_to_list/2]}).
 
 %% ===================================================================
 %% Public API
@@ -125,7 +127,7 @@ moment() ->
 %% @spec compare_dates(string(), string()) -> boolean()
 %% @doc Compare two RFC1123 date strings or two now() tuples (or one
 %%      of each).  Return true if date A is later than date B.
-compare_dates(A={_,_,_}, B={_,_,_}) ->
+compare_dates(A={_, _, _}, B={_, _, _}) ->
     %% assume 3-tuples are now() times
     A > B;
 compare_dates(A, B) when is_list(A) ->
@@ -147,7 +149,7 @@ rfc1123_to_now(String) when is_list(String) ->
 %%      to the new directory.
 make_tmp_dir() ->
     TmpId = io_lib:format("riptemp.~p",
-                          [erlang:phash2({riak_core_rand:uniform(),self()})]),
+                          [erlang:phash2({riak_core_rand:uniform(), self()})]),
     TempDir = filename:join("/tmp", TmpId),
     case filelib:is_dir(TempDir) of
         true -> make_tmp_dir();
@@ -202,7 +204,7 @@ read_file(FD, Acc) ->
 integer_to_list(I, 10) ->
     erlang:integer_to_list(I);
 integer_to_list(I, Base)
-  when is_integer(I), is_integer(Base),Base >= 2, Base =< 1+$Z-$A+10+1+$z-$a ->
+  when is_integer(I), is_integer(Base), Base >= 2, Base =< 1+$Z-$A+10+1+$z-$a ->
     if I < 0 ->
             [$-|integer_to_list(-I, Base, [])];
        true ->
@@ -216,16 +218,16 @@ integer_to_list(I0, Base, R0) ->
     D = I0 rem Base,
     I1 = I0 div Base,
     R1 = if D >= 36 ->
-		 [D-36+$a|R0];
-	    D >= 10 ->
-		 [D-10+$A|R0];
-	    true ->
-		 [D+$0|R0]
-	 end,
+         [D-36+$a|R0];
+        D >= 10 ->
+         [D-10+$A|R0];
+        true ->
+         [D+$0|R0]
+     end,
     if I1 =:= 0 ->
-	    R1;
+        R1;
        true ->
-	    integer_to_list(I1, Base, R1)
+        integer_to_list(I1, Base, R1)
     end.
 
 sha(Bin) ->
@@ -259,21 +261,21 @@ reload_all(Module) ->
 %% @spec mkclientid(RemoteNode :: term()) -> ClientID :: list()
 %% @doc Create a unique-enough id for vclock clients.
 mkclientid(RemoteNode) ->
-    {{Y,Mo,D},{H,Mi,S}} = erlang:universaltime(),
-    {_,_,NowPart} = os:timestamp(),
-    Id = erlang:phash2([Y,Mo,D,H,Mi,S,node(),RemoteNode,NowPart,self()]),
+    {{Y, Mo, D}, {H, Mi, S}} = erlang:universaltime(),
+    {_, _, NowPart} = os:timestamp(),
+    Id = erlang:phash2([Y, Mo, D, H, Mi, S, node(), RemoteNode, NowPart, self()]),
     <<Id:32>>.
 
 %% @spec chash_key(BKey :: riak_object:bkey()) -> chash:index()
 %% @doc Create a binary used for determining replica placement.
-chash_key({Bucket,_Key}=BKey) ->
+chash_key({Bucket, _Key}=BKey) ->
     BucketProps = riak_core_bucket:get_bucket(Bucket),
     chash_key(BKey, BucketProps).
 
 %% @spec chash_key(BKey :: riak_object:bkey(), [{atom(), any()}]) ->
 %%          chash:index()
 %% @doc Create a binary used for determining replica placement.
-chash_key({Bucket,Key}, _BucketProps) ->
+chash_key({Bucket, Key}, _BucketProps) ->
   %{_, {M, F}} = lists:keyfind(chash_keyfun, 1, BucketProps),
   %M:F({Bucket,Key}).
   % FIX static keyfun
@@ -325,10 +327,10 @@ start_app_deps(App) ->
 %% @doc Start the named application if not already started.
 ensure_started(App) ->
     case application:start(App) of
-	ok ->
-	    ok;
-	{error, {already_started, App}} ->
-	    ok
+    ok ->
+        ok;
+    {error, {already_started, App}} ->
+        ok
     end.
 
 %% @doc Applies `Pred' to each element in `List', and returns a count of how many
@@ -401,11 +403,11 @@ pmap(F, L) ->
                          end),
               N+1
       end, 0, L),
-    L2 = [receive {pmap, N, R} -> {N,R} end || _ <- L],
+    L2 = [receive {pmap, N, R} -> {N, R} end || _ <- L],
     L3 = lists:keysort(1, L2),
-    [R || {_,R} <- L3].
+    [R || {_, R} <- L3].
 
--record(pmap_acc,{
+-record(pmap_acc, {
                   mapper,
                   fn,
                   n_pending=0,
@@ -647,18 +649,17 @@ get_arch () -> string:to_lower(erlang:system_info(system_architecture)).
 
 %% Checks if this node is of a given architecture
 -spec is_arch (atom()) -> boolean().
-is_arch (linux) -> string:str(get_arch(),"linux") > 0;
-is_arch (darwin) -> string:str(get_arch(),"darwin") > 0;
-is_arch (sunos) -> string:str(get_arch(),"sunos") > 0;
+is_arch (linux) -> string:str(get_arch(), "linux") > 0;
+is_arch (darwin) -> string:str(get_arch(), "darwin") > 0;
+is_arch (sunos) -> string:str(get_arch(), "sunos") > 0;
 is_arch (osx) -> is_arch(darwin);
 is_arch (solaris) -> is_arch(sunos);
-is_arch (Arch) -> throw({unsupported_architecture,Arch}).
+is_arch (Arch) -> throw({unsupported_architecture, Arch}).
 
 format_ip_and_port(Ip, Port) when is_list(Ip) ->
-    lists:flatten(io_lib:format("~s:~p",[Ip,Port]));
+    lists:flatten(io_lib:format("~s:~p", [Ip, Port]));
 format_ip_and_port(Ip, Port) when is_tuple(Ip) ->
-    lists:flatten(io_lib:format("~s:~p",[inet_parse:ntoa(Ip),
-                                         Port])).
+    lists:flatten(io_lib:format("~s:~p", [inet_parse:ntoa(Ip), Port])).
 peername(Socket, Transport) ->
     case Transport:peername(Socket) of
         {ok, {Ip, Port}} ->
@@ -916,7 +917,7 @@ responsible_preflists(Index, Ring) ->
     AllN = determine_all_n(Ring),
     responsible_preflists(Index, AllN, Ring).
 
--spec responsible_preflists(index(), [pos_integer(),...], riak_core_ring())
+-spec responsible_preflists(index(), [pos_integer(), ...], riak_core_ring())
                            -> [index_n()].
 responsible_preflists(Index, AllN, Ring) ->
     IndexBin = <<Index:160/integer>>,
@@ -937,7 +938,7 @@ responsible_preflists_n(RevIndices, N) ->
 determine_max_n(Ring) ->
     lists:max(determine_all_n(Ring)).
 
--spec determine_all_n(riak_core_ring()) -> [pos_integer(),...].
+-spec determine_all_n(riak_core_ring()) -> [pos_integer(), ...].
 determine_all_n(Ring) ->
     Buckets = riak_core_ring:get_buckets(Ring),
     BucketProps = [riak_core_bucket:get_bucket(Bucket, Ring) || Bucket <- Buckets],
@@ -1071,8 +1072,8 @@ pmap_test_() ->
     Fbad = fun(3) -> throw(die_on_3);
               (X) -> Fgood(X)
            end,
-    Lin = [1,2,3,4],
-    Lout = [2,4,6,8],
+    Lin = [1, 2, 3, 4],
+    Lout = [2, 4, 6, 8],
     {setup,
      fun() -> error_logger:tty(false) end,
      fun(_) -> error_logger:tty(true) end,
@@ -1117,8 +1118,8 @@ bounded_pmap_test_() ->
                           pmap(GFun(MaxP),
                                lists:seq(1, N), MaxP))
          end ||
-         MaxP <- lists:seq(1,20),
-         N <- lists:seq(0,10)
+         MaxP <- lists:seq(1, 20),
+         N <- lists:seq(0, 10)
         ]
     end,
     {setup,

@@ -30,10 +30,10 @@
 ringready() ->
     case get_rings() of
         {[], Rings} ->
-            {N1,R1}=hd(Rings),
+            {N1, R1}=hd(Rings),
             case rings_match(hash_ring(R1), tl(Rings)) of
                 true ->
-                    Nodes = [N || {N,_} <- Rings],
+                    Nodes = [N || {N, _} <- Rings],
                     {ok, Nodes};
 
                 {false, N2} ->
@@ -51,7 +51,7 @@ transfers() ->
     {Down, Rings} = get_rings(),
 
     %% Work out which vnodes are running and which partitions they claim
-    F = fun({N,R}, Acc) ->
+    F = fun({N, R}, Acc) ->
                 {_Pri, Sec, Stopped} = partitions(N, R),
                 Acc1 = case Sec of
                            [] ->

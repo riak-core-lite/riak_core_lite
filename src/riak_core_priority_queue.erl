@@ -55,8 +55,17 @@
 
 -module(riak_core_priority_queue).
 
--export([new/0, is_queue/1, is_empty/1, len/1, to_list/1, in/2, in/3,
-         out/1, out/2, pout/1, join/2]).
+-export([new/0,
+         is_queue/1,
+         is_empty/1,
+         len/1,
+         to_list/1,
+         in/2,
+         in/3,
+         out/1,
+         out/2,
+         pout/1,
+         join/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -128,8 +137,8 @@ out({queue, [Y|In], []}) ->
     [V|Out] = lists:reverse(In, []),
     {{value, V}, {queue, [Y], Out}};
 out({queue, In, [V]}) when is_list(In) ->
-    {{value,V}, r2f(In)};
-out({queue, In,[V|Out]}) when is_list(In) ->
+    {{value, V}, r2f(In)};
+out({queue, In, [V|Out]}) when is_list(In) ->
     {{value, V}, {queue, In, Out}};
 out({pqueue, [{P, Q} | Queues]}) ->
     {R, Q1} = out(Q),
@@ -213,8 +222,8 @@ merge(As = [{_, _}|_], [{PB, B}|Bs], Acc) ->
 
 r2f([])      -> {queue, [], []};
 r2f([_] = R) -> {queue, [], R};
-r2f([X,Y])   -> {queue, [X], [Y]};
-r2f([X,Y|R]) -> {queue, [X,Y], lists:reverse(R, [])}.
+r2f([X, Y])   -> {queue, [X], [Y]};
+r2f([X, Y|R]) -> {queue, [X, Y], lists:reverse(R, [])}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -267,7 +276,7 @@ merge_case() ->
     QueueB4 = ?MODULE:in(6, QueueB3),
 
     Merged1 = ?MODULE:join(QueueA4, QueueB4),
-    ?assertEqual([{0,1},{0,3},{0,5},{0,2},{0,4},{0,6}],
+    ?assertEqual([{0, 1}, {0, 3}, {0, 5}, {0, 2}, {0, 4}, {0, 6}],
                  ?MODULE:to_list(Merged1)),
 
     QueueC1 = ?MODULE:new(),
@@ -281,7 +290,7 @@ merge_case() ->
     QueueD4 = ?MODULE:in(6, 60, QueueD3),
 
     Merged2 = ?MODULE:join(QueueC4, QueueD4),
-    ?assertEqual([{60,6},{50,5},{40,4},{30,3},{20,2},{10,1}],
+    ?assertEqual([{60, 6}, {50, 5}, {40, 4}, {30, 3}, {20, 2}, {10, 1}],
                  ?MODULE:to_list(Merged2)),
     ok.
 

@@ -25,9 +25,15 @@
 -module(riak_core_handoff_listener).
 -behavior(gen_nb_server).
 -export([start_link/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
--export([get_handoff_ip/0, sock_opts/0, new_connection/2]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
+-export([get_handoff_ip/0,
+         sock_opts/0,
+         new_connection/2]).
 -record(state, {
           ipaddr :: string(),
           portnum :: integer()

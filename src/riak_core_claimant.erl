@@ -37,8 +37,12 @@
 -export([reassign_indices/1]). % helpers for claim sim
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -type action() :: leave
                 | remove
@@ -67,7 +71,7 @@
           %% between plan and commit phases
           seed}).
 
--define(ROUT(S,A),ok).
+-define(ROUT(S, A), ok).
 %%-define(ROUT(S,A),?debugFmt(S,A)).
 %%-define(ROUT(S,A),io:format(S,A)).
 
@@ -644,17 +648,17 @@ compute_resize(Orig, Resized) ->
 %% @doc determine the first resize transfer a partition should perform with
 %% the goal of ensuring the transfer will actually have data to send to the
 %% target.
-schedule_first_resize_transfer(smaller, {Idx,_}=IdxOwner, none, Resized) ->
+schedule_first_resize_transfer(smaller, {Idx, _}=IdxOwner, none, Resized) ->
     %% partition no longer exists in shrunk ring, first successor will be
     %% new owner of its data
     Target = hd(riak_core_ring:preflist(<<Idx:160/integer>>, Resized)),
     riak_core_ring:schedule_resize_transfer(Resized, IdxOwner, Target);
-schedule_first_resize_transfer(_Type,{Idx, Owner}=IdxOwner, Owner, Resized) ->
+schedule_first_resize_transfer(_Type, {Idx, Owner}=IdxOwner, Owner, Resized) ->
     %% partition is not being moved during expansion, first predecessor will
     %% own at least a portion of its data
     Target = hd(chash:predecessors(Idx-1, riak_core_ring:chash(Resized))),
     riak_core_ring:schedule_resize_transfer(Resized, IdxOwner, Target);
-schedule_first_resize_transfer(_,{Idx, _Owner}=IdxOwner, NextOwner, Resized) ->
+schedule_first_resize_transfer(_, {Idx, _Owner}=IdxOwner, NextOwner, Resized) ->
     %% partition is being moved during expansion, schedule transfer to partition
     %% on new owner since it will still own some of its data
     riak_core_ring:schedule_resize_transfer(Resized, IdxOwner, {Idx, NextOwner}).
@@ -771,7 +775,7 @@ internal_ring_changed(Node, CState) ->
     case {IsClaimant, riak_core_ring:cluster_name(CState5)} of
         {true, undefined} ->
             ClusterName = {Node, riak_core_rand:rand_seed()},
-            {_,_} = riak_core_util:rpc_every_member(riak_core_ring_manager,
+            {_, _} = riak_core_util:rpc_every_member(riak_core_ring_manager,
                                                     set_cluster_name,
                                                     [ClusterName],
                                                     1000),
@@ -891,7 +895,8 @@ are_joining_nodes(CState) ->
 auto_joining_nodes(CState) ->
     Joining = riak_core_ring:members(CState, [joining]),
 %%    case application:get_env(riak_core, staged_joins, true) of false -> Joining; true ->
-    [Member || Member <- Joining, riak_core_ring:get_member_meta(CState, Member, '$autojoin') == true].
+    [Member || Member <- Joining,
+     riak_core_ring:get_member_meta(CState, Member, '$autojoin') == true].
 %%    end.
 
 %% @private
@@ -951,7 +956,7 @@ update_ring(CNode, CState, Replacing, Seed, Log, false) ->
     %% Rebalance the ring as necessary. If pending changes exist ring
     %% is not rebalanced
     Next3 = rebalance_ring(CNode, CState4),
-    Log(debug,{"Pending ownership transfers: ~b~n",
+    Log(debug, {"Pending ownership transfers: ~b~n",
                [length(riak_core_ring:pending_changes(CState4))]}),
 
     %% Remove transfers to/from down nodes
@@ -961,8 +966,8 @@ update_ring(CNode, CState, Replacing, Seed, Log, false) ->
     Changed = (NextChanged or RingChanged1 or RingChanged2),
     case Changed of
         true ->
-            OldS = ordsets:from_list([{Idx,O,NO} || {Idx,O,NO,_,_} <- Next0]),
-            NewS = ordsets:from_list([{Idx,O,NO} || {Idx,O,NO,_,_} <- Next4]),
+            OldS = ordsets:from_list([{Idx, O, NO} || {Idx, O, NO, _, _} <- Next0]),
+            NewS = ordsets:from_list([{Idx, O, NO} || {Idx, O, NO, _, _} <- Next4]),
             Diff = ordsets:subtract(NewS, OldS),
             _ = [Log(next, NChange) || NChange <- Diff],
             ?ROUT("Updating ring :: next3 : ~p~n", [Next4]),
@@ -1153,7 +1158,7 @@ replace_node_during_resize(CState0, Node, NewNode, false) -> %% ongoing xfers
     riak_core_ring:set_resized_ring(CState1, ReassignedCHash);
 replace_node_during_resize(CState, Node, _NewNode, true) -> %% performing cleanup
     %% we are simply deleting data at this point, no reason to do that on either node
-    NewNext = [{I,N,O,M,S} || {I,N,O,M,S} <- riak_core_ring:pending_changes(CState),
+    NewNext = [{I, N, O, M, S} || {I, N, O, M, S} <- riak_core_ring:pending_changes(CState),
                               N =/= Node],
     riak_core_ring:set_pending_changes(CState, NewNext).
 

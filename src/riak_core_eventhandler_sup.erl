@@ -23,8 +23,11 @@
 %% @doc supervise riak_core_eventhandler_guard processes
 -module(riak_core_eventhandler_sup).
 -behaviour(supervisor).
--export([start_link/0, init/1]).
--export([start_guarded_handler/3, start_guarded_handler/4, stop_guarded_handler/3]).
+-export([start_link/0,
+         init/1]).
+-export([start_guarded_handler/3,
+         start_guarded_handler/4,
+         stop_guarded_handler/3]).
 
 start_guarded_handler(HandlerMod, Handler, Args) ->
     start_guarded_handler(HandlerMod, Handler, Args, undefined).

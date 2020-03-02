@@ -24,14 +24,32 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, stop/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
--export([all_vnodes/0, all_vnodes/1, all_vnodes_status/0,
-         force_handoffs/0, repair/3, all_handoffs/0, repair_status/1, xfer_complete/2,
+-export([start_link/0,
+         stop/0]).
+
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
+
+-export([all_vnodes/0,
+         all_vnodes/1,
+         all_vnodes_status/0,
+         force_handoffs/0,
+         repair/3,
+         all_handoffs/0,
+         repair_status/1,
+         xfer_complete/2,
          kill_repairs/1]).
--export([all_index_pid/1, get_vnode_pid/2, start_vnode/2,
-         unregister_vnode/2, unregister_vnode/3, vnode_event/4]).
+
+-export([all_index_pid/1,
+         get_vnode_pid/2,
+         start_vnode/2,
+         unregister_vnode/2,
+         unregister_vnode/3,
+         vnode_event/4]).
 %% Field debugging
 -export([get_tab/0]).
 
@@ -247,7 +265,7 @@ find_vnodes(State) ->
     %% in the list comprehension)
     F = fun(Pid, Idx, Mod) ->
                 Mref = erlang:monitor(process, Pid),
-                #idxrec { key = {Idx,Mod}, idx = Idx, mod = Mod, pid = Pid,
+                #idxrec { key = {Idx, Mod}, idx = Idx, mod = Mod, pid = Pid,
                           monref = Mref }
         end,
     IdxRecs = [F(Pid, Idx, Mod) || {Pid, {Mod, Idx}} <- PidIdxs],
@@ -275,11 +293,12 @@ handle_call({Partition, Mod, get_vnode}, _From, State) ->
 handle_call(get_tab, _From, State) ->
     {reply, ets:tab2list(State#state.idxtab), State};
 
-handle_call({repair, Service, {Mod,Partition}=ModPartition, FilterModFun},
+handle_call({repair, Service, {Mod, Partition}=ModPartition, FilterModFun},
             _From, #state{repairs=Repairs}=State) ->
     case get_repair(ModPartition, Repairs) of
         none ->
-            maybe_create_repair(Partition, Service, ModPartition, FilterModFun, Mod, Repairs, State);
+            maybe_create_repair(Partition, Service, ModPartition, FilterModFun,
+                                Mod, Repairs, State);
         Repair ->
             Pairs = Repair#repair.pairs,
             {reply, {ok, Pairs}, State}
@@ -339,13 +358,15 @@ transform_repair_records(Repairs) ->
     %% World's ugliest pattern match, simplest logic: matching
     %% module/node values in the `pairs' field against
     %% `minus_one_xfer' and `plus_one_xfer'
-    lists:flatten(lists:map(fun(#repair{pairs=[{M1SrcIdx, Mnode}, _FixPartition, {P1SrcIdx, Pnode}],
-                                        minus_one_xfer=#xfer_status{mod_src_target={M1Mod, M1SrcIdx, _M1DstIdx}},
-                                        plus_one_xfer=#xfer_status{mod_src_target={P1Mod, P1SrcIdx, _P1DstIdx}}}) ->
-                                    [{{M1Mod, M1SrcIdx}, {repair, inbound, Mnode}},
-                                     {{P1Mod, P1SrcIdx}, {repair, inbound, Pnode}}]
-                            end,
-                            Repairs)).
+    lists:flatten(
+        lists:map(
+            fun(#repair{pairs=[{M1SrcIdx, Mnode}, _FixPartition, {P1SrcIdx, Pnode}],
+                        minus_one_xfer=#xfer_status{mod_src_target={M1Mod, M1SrcIdx, _M1DstIdx}},
+                        plus_one_xfer=#xfer_status{mod_src_target={P1Mod, P1SrcIdx, _P1DstIdx}}}) ->
+                                [{{M1Mod, M1SrcIdx}, {repair, inbound, Mnode}},
+                                 {{P1Mod, P1SrcIdx}, {repair, inbound, Pnode}}]
+                end,
+                Repairs)).
 
 maybe_create_repair(Partition, Service, ModPartition, FilterModFun, Mod, Repairs, State) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
@@ -355,7 +376,8 @@ maybe_create_repair(Partition, Service, ModPartition, FilterModFun, Mod, Repairs
             Pairs = repair_pairs(Ring, Partition),
             case check_up(Pairs, UpNodes) of
                 true ->
-                    create_repair(Pairs, ModPartition, FilterModFun, Mod, Partition, Repairs, State);
+                    create_repair(Pairs, ModPartition, FilterModFun, Mod,
+                                  Partition, Repairs, State);
                 {false, Down} ->
                     {reply, {down, Down}, State}
             end;
@@ -558,7 +580,7 @@ limit_ownership_handoff(Limit, Transfers, true) ->
     %% if we are resizing: filter out completed resize operations,
     %% since they remain in the list until all are complete. then
     %% treat transfers as normal
-    Filtered = [Transfer || {_,_,_,_,Status}=Transfer <- Transfers,
+    Filtered = [Transfer || {_, _, _, _, Status}=Transfer <- Transfers,
                             Status =:= awaiting],
     limit_ownership_handoff(Limit, Filtered, false).
 
@@ -581,7 +603,7 @@ delmon(MonRef, _State=#state{idxtab=T}) ->
     end.
 
 %% @private
-add_vnode_rec(I,  _State=#state{idxtab=T}) -> ets:insert(T,I).
+add_vnode_rec(I, _State=#state{idxtab=T}) -> ets:insert(T, I).
 
 %% @private
 get_vnode(Idx, Mod, State) when not is_list(Idx) ->
@@ -602,7 +624,8 @@ get_vnode(IdxList, Mod, State) ->
                 {ok, Pid} =
                     riak_core_vnode_sup:start_vnode(Mod, Idx, ForwardTo),
                 register_vnode_stats(Mod, Idx, Pid),
-                logger:debug("Started VNode, waiting for initialization to complete ~p, ~p ", [Pid, Idx]),
+                logger:debug("Started VNode, waiting for initialization to
+                              complete ~p, ~p ", [Pid, Idx]),
                 ok = riak_core_vnode:wait_for_init(Pid),
                 logger:debug("VNode initialization ready ~p, ~p", [Pid, Idx]),
                 {Idx, Pid}
@@ -613,9 +636,9 @@ get_vnode(IdxList, Mod, State) ->
     _ = [begin
              Pid = dict:fetch(Idx, PairsDict),
              MonRef = erlang:monitor(process, Pid),
-             IdxRec = #idxrec{key={Idx,Mod},idx=Idx,mod=Mod,pid=Pid,
+             IdxRec = #idxrec{key={Idx, Mod}, idx=Idx, mod=Mod, pid=Pid,
                               monref=MonRef},
-             MonRec = #monrec{monref=MonRef, key={Idx,Mod}},
+             MonRec = #monrec{monref=MonRef, key={Idx, Mod}},
              add_vnode_rec([IdxRec, MonRec], State)
          end || Idx <- NotStarted],
     [ dict:fetch(Idx, PairsDict) || Idx <- IdxList].
@@ -674,7 +697,7 @@ update_forwarding(AllVNodes, Mods, Ring,
 
     %% Inform vnodes that have changed forwarding status
     VNodes = dict:from_list([{{Mod, Idx}, Pid} || {Mod, Idx, Pid} <- AllVNodes]),
-    Diff = dict:filter(fun(K,V) ->
+    Diff = dict:filter(fun(K, V) ->
                                dict:find(K, Forwarding) /= {ok, V}
                        end, NewForwarding),
     dict:fold(fun({Mod, Idx}, ForwardTo, _) ->
@@ -831,11 +854,11 @@ get_all_vnodes_status(#state{forwarding=Forwarding, handoff=HO}) ->
     Pids = [{{Mod, Idx}, {pid, Pid}} || {Mod, Idx, Pid} <- VNodes],
     Pids2 = lists:keysort(1, Pids),
     Forwarding1 = lists:sort(dict:to_list(Forwarding)),
-    Forwarding2 = [{MI, {forwarding, Node}} || {MI,Node} <- Forwarding1,
+    Forwarding2 = [{MI, {forwarding, Node}} || {MI, Node} <- Forwarding1,
                                                Node /= undefined],
     Handoff1 = lists:sort(dict:to_list(HO)),
     Handoff2 = [{MI, {should_handoff, Node}} ||
-                   {MI,{_Type, _Direction, Node}} <- Handoff1],
+                   {MI, {_Type, _Direction, Node}} <- Handoff1],
 
     MergeFn = fun(_, V1, V2) when is_list(V1) and is_list(V2) ->
                       V1 ++ V2;
@@ -1005,8 +1028,8 @@ kill_repairs(Repairs, Reason) ->
 kill_repair(Repair, Reason) ->
     {Mod, Partition} = Repair#repair.mod_partition,
     Pairs = Repair#repair.pairs,
-    {_,MOOwner} = get_minus_one(Pairs),
-    {_,POOwner} = get_minus_one(Pairs),
+    {_, MOOwner} = get_minus_one(Pairs),
+    {_, POOwner} = get_minus_one(Pairs),
     MOX = Repair#repair.minus_one_xfer,
     POX = Repair#repair.plus_one_xfer,
     MOModSrcTarget = MOX#xfer_status.mod_src_target,

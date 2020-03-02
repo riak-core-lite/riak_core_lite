@@ -30,14 +30,14 @@
 -export([start_sender/5]).
 
 -include("riak_core_handoff.hrl").
--define(CHILD(I,Type), {I,{I,start_link,[]},temporary,brutal_kill,Type,[I]}).
+-define(CHILD(I, Type), {I, {I, start_link, []}, temporary, brutal_kill, Type, [I]}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 start_link() ->
-    supervisor:start_link({local,?MODULE},?MODULE,[]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @doc Start the handoff process for the module (`Module'), partition
 %%      (`Partition'), and vnode (`VNode') from the local node to the
@@ -63,6 +63,6 @@ start_sender(Type, Module, TargetNode, VNode, Opts) ->
 
 %% @private
 init ([]) ->
-    {ok,{{simple_one_for_one,10,10},
-         [?CHILD(riak_core_handoff_sender,worker)
+    {ok, {{simple_one_for_one, 10, 10},
+         [?CHILD(riak_core_handoff_sender, worker)
          ]}}.

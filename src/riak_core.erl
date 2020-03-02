@@ -20,16 +20,31 @@
 %%
 %% -------------------------------------------------------------------
 -module(riak_core).
--export([stop/0, stop/1, join/1, join/4, staged_join/1, remove/1, down/1,
-         leave/0, remove_from_cluster/1]).
--export([vnode_modules/0, health_check/1]).
--export([register/1, register/2, bucket_fixups/0, bucket_validators/0]).
--export([stat_mods/0, stat_prefix/0]).
+-export([stop/0,
+         stop/1,
+         join/1,
+         join/4,
+         staged_join/1,
+         remove/1,
+         down/1,
+         leave/0,
+         remove_from_cluster/1]).
 
--export([add_guarded_event_handler/3, add_guarded_event_handler/4]).
+-export([vnode_modules/0,
+         health_check/1]).
+-export([register/1,
+         register/2,
+         bucket_fixups/0,
+         bucket_validators/0]).
+-export([stat_mods/0,
+         stat_prefix/0]).
+
+-export([add_guarded_event_handler/3,
+         add_guarded_event_handler/4]).
 -export([delete_guarded_event_handler/3]).
--export([wait_for_application/1, wait_for_service/1]).
--compile({no_auto_import,[register/2]}).
+-export([wait_for_application/1,
+         wait_for_service/1]).
+-compile({no_auto_import, [register/2]}).
 
 -define(WAIT_PRINT_INTERVAL, (60 * 1000)).
 -define(WAIT_POLL_INTERVAL, 100).
@@ -274,7 +289,7 @@ register(_App, []) ->
     %% Once the app is registered, do a no-op ring trans
     %% to ensure the new fixups are run against
     %% the ring.
-    {ok, _R} = riak_core_ring_manager:ring_trans(fun(R,_A) -> {new_ring, R} end,
+    {ok, _R} = riak_core_ring_manager:ring_trans(fun(R, _A) -> {new_ring, R} end,
                                                  undefined),
     riak_core_ring_events:force_sync_update(),
     ok;
@@ -317,19 +332,19 @@ register_mod(App, Module, Type) when is_atom(Type) ->
     end,
     case application:get_env(riak_core, Type) of
         undefined ->
-            application:set_env(riak_core, Type, [{App,Module}]);
+            application:set_env(riak_core, Type, [{App, Module}]);
         {ok, Mods} ->
             application:set_env(riak_core, Type,
-                lists:usort([{App,Module}|Mods]))
+                lists:usort([{App, Module}|Mods]))
     end.
 
 register_metadata(App, Value, Type) ->
     case application:get_env(riak_core, Type) of
         undefined ->
-            application:set_env(riak_core, Type, [{App,Value}]);
+            application:set_env(riak_core, Type, [{App, Value}]);
         {ok, Values} ->
             application:set_env(riak_core, Type,
-                lists:usort([{App,Value}|Values]))
+                lists:usort([{App, Value}|Values]))
     end.
 
 register_proplist({Key, Value}, Type) ->
@@ -391,7 +406,7 @@ app_for_module(Mod) ->
 
 app_for_module([], _Mod) ->
     {ok, undefined};
-app_for_module([{App,_,_}|T], Mod) ->
+app_for_module([{App, _, _}|T], Mod) ->
     {ok, Mods} = application:get_key(App, modules),
     case lists:member(Mod, Mods) of
         true -> {ok, App};
@@ -412,7 +427,8 @@ wait_for_application(App, Elapsed) ->
             %% Possibly print a notice.
             ShouldPrint = Elapsed rem ?WAIT_PRINT_INTERVAL == 0,
             case ShouldPrint of
-                true -> logger:info("Waiting for application ~p to start (~p seconds).", [App, Elapsed div 1000]);
+                true -> logger:info("Waiting for application ~p to start
+                                     (~p seconds).", [App, Elapsed div 1000]);
                 false -> skip
             end,
             timer:sleep(?WAIT_POLL_INTERVAL),
@@ -432,7 +448,8 @@ wait_for_service(Service, Elapsed) ->
             %% Possibly print a notice.
             ShouldPrint = Elapsed rem ?WAIT_PRINT_INTERVAL == 0,
             case ShouldPrint of
-                true -> logger:info("Waiting for service ~p to start (~p seconds)", [Service, Elapsed div 1000]);
+                true -> logger:info("Waiting for service ~p to start
+                                     (~p seconds)", [Service, Elapsed div 1000]);
                 false -> skip
             end,
             timer:sleep(?WAIT_POLL_INTERVAL),
