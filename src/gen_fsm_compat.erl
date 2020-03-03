@@ -672,7 +672,7 @@ format_status(Opt, StatusData) ->
 -elif(?OTP_RELEASE >= 21).
 format_status(Opt, StatusData) ->
     [PDict, SysState, Parent, Debug, [Name, StateName, StateData,
-                                      od, _Time, _HibernateAfterTimeout]] =
+                                      Mod, _Time, _HibernateAfterTimeout]] =
         StatusData,
     Header = gen:format_status_header("Status for state machine",
         Name),
