@@ -159,7 +159,7 @@ vnode_load(R, NVal, DownNodes) ->
     %% NValParts = Nval * riak_core_ring:num_partitions(R),
     AllPLs = [riak_core_apl:get_apl_ann(Key, NVal, R, UpNodes) || Key <- Keys],
     FlatPLs = lists:flatten(AllPLs),
-    [begin %TODO change _Idx -> Idx
+    [begin
          Pris = lists:usort([Idx || {{Idx, PN}, primary} <- FlatPLs, PN == N]),
          FBs = lists:usort([Idx || {{Idx, FN}, fallback} <- FlatPLs, FN == N]) -- Pris,
          {N, length(Pris), length(FBs)}
