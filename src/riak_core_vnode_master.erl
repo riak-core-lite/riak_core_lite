@@ -260,7 +260,8 @@ handle_call({spawn,
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
     Sender = {server, undefined, From},
     spawn_link(
-      fun() -> gen_fsm_compat:send_all_state_event(Proxy, Req#riak_vnode_req_v1{sender=Sender}) end),
+      fun() -> gen_fsm_compat:send_all_state_event(Proxy,
+                                                   Req#riak_vnode_req_v1{sender=Sender}) end),
     {noreply, State};
 handle_call(Other, From, State=#state{legacy=Legacy}) when Legacy =/= undefined ->
     case catch Legacy:rewrite_call(Other, From) of
