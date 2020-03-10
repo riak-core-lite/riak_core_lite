@@ -31,8 +31,10 @@
 
 -ifdef(TEST).
 -ifdef(EQC).
--export([prop_ids_are_boundaries/0, prop_reverse/0,
-         prop_monotonic/0, prop_only_boundaries/0]).
+-export([prop_ids_are_boundaries/0,
+         prop_reverse/0,
+         prop_monotonic/0,
+         prop_only_boundaries/0]).
 
 -include_lib("eqc/include/eqc.hrl").
 -endif.
@@ -60,8 +62,8 @@ check_ring(Ring) ->
 %% @doc Check a ring for any preflists that do not satisfy n_val
 check_ring(Ring, Nval) ->
     Preflists = riak_core_ring:all_preflists(Ring, Nval),
-    lists:foldl(fun(PL,Acc) ->
-                        PLNodes = lists:usort([Node || {_,Node} <- PL]),
+    lists:foldl(fun(PL, Acc) ->
+                        PLNodes = lists:usort([Node || {_, Node} <- PL]),
                         case length(PLNodes) of
                             Nval ->
                                 Acc;
@@ -143,7 +145,8 @@ boundary_test() ->
 
 -define(HASHMAX, 1 bsl 160 - 1).
 -define(RINGSIZEEXPMAX, 11).
--define(RINGSIZE(X), (1 bsl X)). %% We'll generate powers of 2 with choose() and convert that to a ring size with this macro
+-define(RINGSIZE(X), (1 bsl X)).%% We'll generate powers of 2 with choose()
+                                %% and convert that to a ring size with this macro
 -define(PARTITIONSIZE(X), ((1 bsl 160) div (X))).
 
 ids_are_boundaries_test_() ->

@@ -38,8 +38,10 @@ r_run(Input, Command) ->
     case r_port() of
         {ok, Port} ->
             InputStr = [integer_to_list(I) || I <- Input],
-            port_command(Port, ?FMT("x <- c(~s)\n", [string:join(InputStr, ",")])),
-            port_command(Port, ?FMT("write(~s, ncolumns=1, file=stdout())\n", [Command])),
+            port_command(Port, ?FMT("x <- c(~s)\n",
+                                [string:join(InputStr, ",")])),
+            port_command(Port, ?FMT("write(~s, ncolumns=1, file=stdout())\n",
+                                 [Command])),
             port_command(Port, "write('', file=stdout())\n"),
             r_simple_read_loop(Port, []);
         {error, Reason} ->

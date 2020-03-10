@@ -33,13 +33,24 @@
 
 -behaviour(gen_server).
 
--export([start_link/0, stop/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
--export ([distribute_ring/1, send_ring/1, send_ring/2, remove_from_cluster/2,
-          remove_from_cluster/3, random_gossip/1,
-          recursive_gossip/1, random_recursive_gossip/1, rejoin/2
-]).
+-export([start_link/0,
+         stop/0]).
+
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
+
+-export ([distribute_ring/1,
+          send_ring/1, send_ring/2,
+          remove_from_cluster/2,
+          remove_from_cluster/3,
+          random_gossip/1,
+          recursive_gossip/1,
+          random_recursive_gossip/1,
+          rejoin/2]).
 
 
 %% Default gossip rate: allow at most 45 gossip messages every 10 seconds
@@ -273,11 +284,13 @@ do_log_membership_changes([{Node, Status1}|Old], [{Node, Status2}|New]) ->
     %% State changed, did not join or leave
     log_node_changed(Node, Status1, Status2),
     do_log_membership_changes(Old, New);
-do_log_membership_changes([{OldNode, _OldStatus}|_]=Old, [{NewNode, NewStatus}|New]) when NewNode < OldNode->
+do_log_membership_changes([{OldNode, _OldStatus}|_]=Old, [{NewNode, NewStatus}|New])
+    when NewNode < OldNode->
     %% Node added
     log_node_added(NewNode, NewStatus),
     do_log_membership_changes(Old, New);
-do_log_membership_changes([{OldNode, OldStatus}|Old], [{NewNode, _NewStatus}|_]=New) when OldNode < NewNode ->
+do_log_membership_changes([{OldNode, OldStatus}|Old], [{NewNode, _NewStatus}|_]=New)
+    when OldNode < NewNode ->
     %% Node removed
     log_node_removed(OldNode, OldStatus),
     do_log_membership_changes(Old, New);
@@ -318,7 +331,7 @@ remove_from_cluster(Ring, ExitingNode, Seed) ->
                 Members = riak_core_ring:claiming_members(Ring),
                 Other = hd(lists:delete(ExitingNode, Members)),
                 TempRing = lists:foldl(
-                             fun({I,N}, R) when N == ExitingNode ->
+                             fun({I, N}, R) when N == ExitingNode ->
                                      riak_core_ring:transfer_node(I, Other, R);
                                 (_, R) -> R
                              end,
@@ -333,7 +346,7 @@ attempt_simple_transfer(Seed, Ring, Owners, ExitingNode) ->
     attempt_simple_transfer(Seed, Ring, Owners,
                             TargetN,
                             ExitingNode, 0,
-                            [{O,-TargetN} || O <- riak_core_ring:claiming_members(Ring),
+                            [{O, -TargetN} || O <- riak_core_ring:claiming_members(Ring),
                                              O /= ExitingNode]).
 attempt_simple_transfer(Seed, Ring, [{P, Exit}|Rest], TargetN, Exit, Idx, Last) ->
     %% handoff

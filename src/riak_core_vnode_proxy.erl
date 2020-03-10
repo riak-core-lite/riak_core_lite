@@ -17,9 +17,20 @@
 %%
 %% -------------------------------------------------------------------
 -module(riak_core_vnode_proxy).
--export([start_link/2, init/1, reg_name/2, reg_name/3, call/2, call/3, cast/2,
-         unregister_vnode/3, command_return_vnode/2, overloaded/1]).
--export([system_continue/3, system_terminate/4, system_code_change/4]).
+-export([start_link/2,
+         init/1,
+         reg_name/2,
+         reg_name/3,
+         call/2,
+         call/3,
+         cast/2,
+         unregister_vnode/3,
+         command_return_vnode/2,
+         overloaded/1]).
+
+-export([system_continue/3,
+         system_terminate/4,
+         system_code_change/4]).
 
 -include("riak_core_vnode.hrl").
 
@@ -48,7 +59,7 @@
 reg_name(Mod, Index) ->
     ModBin = atom_to_binary(Mod, latin1),
     IdxBin = list_to_binary(integer_to_list(Index)),
-    AllBin = <<$p,$r,$o,$x,$y,$_, ModBin/binary, $_, IdxBin/binary>>,
+    AllBin = <<$p, $r, $o, $x, $y, $_, ModBin/binary, $_, IdxBin/binary>>,
     binary_to_atom(AllBin, latin1).
 
 reg_name(Mod, Index, Node) ->
@@ -105,7 +116,7 @@ unregister_vnode(Mod, Index, Pid) ->
 
 -spec command_return_vnode({atom(), non_neg_integer(), atom()}, term()) ->
                                   {ok, pid()} | {error, term()}.
-command_return_vnode({Mod,Index,Node}, Req) ->
+command_return_vnode({Mod, Index, Node}, Req) ->
     call(reg_name(Mod, Index, Node), {return_vnode, Req}).
 
 %% Return true if the next proxied message will return overload

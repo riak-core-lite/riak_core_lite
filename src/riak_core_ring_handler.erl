@@ -18,8 +18,12 @@
 -behaviour(gen_event).
 
 %% gen_event callbacks
--export([init/1, handle_event/2, handle_call/2,
-         handle_info/2, terminate/2, code_change/3]).
+-export([init/1,
+         handle_event/2,
+         handle_call/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 -export([ensure_vnodes_started/1]).
 -record(state, {}).
 
@@ -100,7 +104,7 @@ maybe_shutdown(Ring) ->
 
 exit_ring_trans() ->
     riak_core_ring_manager:ring_trans(
-        fun(Ring2, _) -> 
+        fun(Ring2, _) ->
                 Ring3 = riak_core_ring:exit_member(node(), Ring2, node()),
                 {new_ring, Ring3}
         end, []).
@@ -109,7 +113,7 @@ ready_to_exit([]) ->
     true;
 ready_to_exit([{_App, Mod} | AppMods]) ->
     case erlang:function_exported(Mod, ready_to_exit, 0) andalso
-             (not Mod:ready_to_exit()) of 
+             (not Mod:ready_to_exit()) of
         true ->
             false;
         false ->
@@ -119,9 +123,9 @@ ready_to_exit([{_App, Mod} | AppMods]) ->
 ensure_vnodes_started([], _Ring, Acc) ->
     lists:flatten(Acc);
 ensure_vnodes_started([{App, Mod}|T], Ring, Acc) ->
-    ensure_vnodes_started(T, Ring, [ensure_vnodes_started({App,Mod},Ring)|Acc]).
+    ensure_vnodes_started(T, Ring, [ensure_vnodes_started({App, Mod}, Ring)|Acc]).
 
-ensure_vnodes_started({App,Mod}, Ring) ->
+ensure_vnodes_started({App, Mod}, Ring) ->
     Startable = startable_vnodes(Mod, Ring),
     %% NOTE: This following is a hack.  There's a basic
     %%       dependency/race between riak_core (want to start vnodes
@@ -190,7 +194,7 @@ startable_vnodes(Mod, Ring) ->
     end.
 
 maybe_start_vnode_proxies(Ring) ->
-    Mods = [M || {_,M} <- riak_core:vnode_modules()],
+    Mods = [M || {_, M} <- riak_core:vnode_modules()],
     Size = riak_core_ring:num_partitions(Ring),
     FutureSize = riak_core_ring:future_num_partitions(Ring),
     Larger = Size < FutureSize,
@@ -208,11 +212,11 @@ maybe_stop_vnode_proxies(Ring) ->
     Mods = [M || {_, M} <- riak_core:vnode_modules()],
     case riak_core_ring:pending_changes(Ring) of
         [] ->
-            Idxs = [{I,M} || {I,_} <- riak_core_ring:all_owners(Ring), M <- Mods],
+            Idxs = [{I, M} || {I, _} <- riak_core_ring:all_owners(Ring), M <- Mods],
             ProxySpecs = supervisor:which_children(riak_core_vnode_proxy_sup),
-            Running = [{I,M} || {{M,I},_,_,_} <- ProxySpecs, lists:member(M, Mods)],
+            Running = [{I, M} || {{M, I}, _, _, _} <- ProxySpecs, lists:member(M, Mods)],
             ToShutdown = Running -- Idxs,
-            _ = [riak_core_vnode_proxy_sup:stop_proxy(M,I) || {I, M} <- ToShutdown],
+            _ = [riak_core_vnode_proxy_sup:stop_proxy(M, I) || {I, M} <- ToShutdown],
             ok;
         _ ->
             ok

@@ -22,10 +22,22 @@
 %%
 %% -------------------------------------------------------------------
 -module(chashbin).
--export([create/1, to_chash/1, to_list/1, to_list_filter/2,
-         responsible_index/2, responsible_position/2, index_owner/2,
-         num_partitions/1]).
--export([iterator/2, exact_iterator/2, itr_value/1, itr_pop/2, itr_next/1, itr_next_while/2]).
+-export([create/1,
+         to_chash/1,
+         to_list/1,
+         to_list_filter/2,
+         responsible_index/2,
+         responsible_position/2,
+         index_owner/2,
+         num_partitions/1
+        ]).
+-export([iterator/2,
+         exact_iterator/2,
+         itr_value/1,
+         itr_pop/2,
+         itr_next/1,
+         itr_next_while/2
+        ]).
 -export_type([chashbin/0]).
 
 %% 160 bits for hash, 16 bits for node id
@@ -90,9 +102,9 @@ to_list(#chashbin{owners=Bin, nodes=Nodes}) ->
 %% which `Pred({Index, Owner})' returns `true'
 -spec to_list_filter(pred_fun(), chashbin()) -> [{index(), node()}].
 to_list_filter(Pred, #chashbin{owners=Bin, nodes=Nodes}) ->
-    [{Idx, element(Id,Nodes)}
+    [{Idx, element(Id, Nodes)}
      || <<Idx:160/integer, Id:16/integer>> <= Bin,
-        Pred({Idx, element(Id,Nodes)})].
+        Pred({Idx, element(Id, Nodes)})].
 
 %% @doc Determine the ring index responsible for a given chash key
 -spec responsible_index(chash_key(), chashbin()) -> index().

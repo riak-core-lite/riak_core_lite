@@ -3,19 +3,28 @@
 %% compliance with the License. You should have received a copy of the
 %% Erlang Public License along with this software. If not, it can be
 %% retrieved via the world wide web at http://www.erlang.org/.
-%% 
+%%
 %% Software distributed under the License is distributed on an "AS IS"
 %% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
 %% the License for the specific language governing rights and limitations
 %% under the License.
-%% 
+%%
 -module(bloom).
 -author("Paulo Sergio Almeida <psa@di.uminho.pt>").
--export([sbf/1, sbf/2, sbf/3, sbf/4,
-         bloom/1, bloom/2,
-         member/2, add/2,
-         size/1, capacity/1]).
--export([is_element/2, add_element/2]). % alternative names
+-export([sbf/1,
+         sbf/2,
+         sbf/3,
+         sbf/4,
+         bloom/1,
+         bloom/2,
+         member/2,
+         add/2,
+         size/1,
+         capacity/1]).
+
+-export([is_element/2,
+         add_element/2]). % alternative names
+
 -import(math, [log/1, pow/2]).
 
 is_element(E, B) -> member(E, B).
@@ -25,7 +34,7 @@ add_element(E, B) -> add(E, B).
 %% Scalable Bloom Filters
 %% Paulo Sérgio Almeida, Carlos Baquero, Nuno Preguiça, David Hutchison
 %% Information Processing Letters
-%% Volume 101, Issue 6, 31 March 2007, Pages 255-261 
+%% Volume 101, Issue 6, 31 March 2007, Pages 255-261
 %%
 %% Provides scalable bloom filters that can grow indefinitely while
 %% ensuring a desired maximum false positive probability. Also provides
@@ -204,9 +213,9 @@ fixed_case_test_() ->
 fixed_case(Bloom, Size, FalseRate) ->
     ?assert(bloom:capacity(Bloom) > Size),
     ?assertEqual(0, bloom:size(Bloom)),
-    RandomList = simple_shuffle(lists:seq(1,100*Size), Size),
+    RandomList = simple_shuffle(lists:seq(1, 100*Size), Size),
     [?assertEqual(false, bloom:is_element(E, Bloom)) || E <- RandomList],
-    Bloom2 = 
+    Bloom2 =
         lists:foldl(fun(E, Bloom0) ->
                             bloom:add_element(E, Bloom0)
                     end, Bloom, RandomList),
@@ -218,9 +227,9 @@ fixed_case(Bloom, Size, FalseRate) ->
 scalable_case(Bloom, Size, FalseRate) ->
     ?assertEqual(infinity, bloom:capacity(Bloom)),
     ?assertEqual(0, bloom:size(Bloom)),
-    RandomList = simple_shuffle(lists:seq(1,100*Size), 10*Size),
+    RandomList = simple_shuffle(lists:seq(1, 100*Size), 10*Size),
     [?assertEqual(false, bloom:is_element(E, Bloom)) || E <- RandomList],
-    Bloom2 = 
+    Bloom2 =
         lists:foldl(fun(E, Bloom0) ->
                             bloom:add_element(E, Bloom0)
                     end, Bloom, RandomList),
@@ -231,5 +240,5 @@ scalable_case(Bloom, Size, FalseRate) ->
 bloom_test() ->
     scalable_case(sbf(1000, 0.2), 1000, 0.2),
     ok.
-    
+
 -endif.

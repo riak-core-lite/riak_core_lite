@@ -42,13 +42,24 @@
 -behaviour(gen_statem).
 
 %% API
--export([start_link/5, start_link/6, stop/2, shutdown_pool/2, handle_work/3, worker_started/1, checkin_worker/2]).
+-export([start_link/5,
+         start_link/6,
+         stop/2,
+         shutdown_pool/2,
+         handle_work/3,
+         worker_started/1,
+         checkin_worker/2]).
 
 %% gen_statem callbacks
--export([init/1, terminate/3, code_change/4, callback_mode/0]).
+-export([init/1,
+         terminate/3,
+         code_change/4,
+         callback_mode/0]).
 
 %% gen_statem states
--export([ready/3, queue/3, shutdown/3]).
+-export([ready/3,
+         queue/3,
+         shutdown/3]).
 
 
 %% ========
@@ -60,7 +71,8 @@ start_link(WorkerMod, PoolSize, VNodeIndex, WorkerArgs, WorkerProps) ->
 
 
 start_link(WorkerMod, PoolSize, VNodeIndex, WorkerArgs, WorkerProps, Opts) ->
-    gen_statem:start_link(?MODULE, [WorkerMod, PoolSize, VNodeIndex, WorkerArgs, WorkerProps, Opts], []).
+    gen_statem:start_link(?MODULE, [WorkerMod, PoolSize, VNodeIndex,
+                                    WorkerArgs, WorkerProps, Opts], []).
 
 
 % #1 cast
@@ -224,7 +236,9 @@ shutdown(cast, {work, _Work, From}, State) ->
 shutdown(cast, worker_start, State) ->
     worker_started(State, shutdown);
 %% #3
-shutdown(cast, {checkin, Pid}, #state{pool = Pool, monitors = Monitors0, shutdown = From} = State) ->
+shutdown(cast,
+         {checkin, Pid},
+         #state{pool = Pool, monitors = Monitors0, shutdown = From} = State) ->
     Monitors = demonitor_worker(Pid, Monitors0),
     poolboy:checkin(Pool, Pid),
     case Monitors of

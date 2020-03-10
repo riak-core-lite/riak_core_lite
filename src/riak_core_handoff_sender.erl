@@ -32,11 +32,11 @@
 %% note this is in seconds
 -define(STATUS_INTERVAL, 2).
 
--define(log_info(Str, Args),
+-define(LOG_INFO(Str, Args),
         logger:info("~p transfer of ~p from ~p ~p to ~p ~p failed " ++ Str,
                    [Type, Module, SrcNode, SrcPartition, TargetNode,
                     TargetPartition] ++ Args)).
--define(log_fail(Str, Args),
+-define(LOG_FAIL(Str, Args),
         logger:error("~p transfer of ~p from ~p ~p to ~p ~p failed " ++ Str,
                     [Type, Module, SrcNode, SrcPartition, TargetNode,
                      TargetPartition] ++ Args)).
@@ -94,7 +94,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
     FoldOpts = maybe_call_handoff_started(Module, SrcPartition),
 
     Filter = get_filter(Opts),
-    [_Name,Host] = string:tokens(atom_to_list(TargetNode), "@"),
+    [_Name, Host] = string:tokens(atom_to_list(TargetNode), "@"),
     {ok, Port} = get_handoff_port(TargetNode),
     TNHandoffIP =
         case get_handoff_ip(TargetNode) of
@@ -105,7 +105,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
             {ok, Other} ->
                 Other
         end,
-    SockOpts = [binary, {packet, 4}, {header,1}, {active, false}],
+    SockOpts = [binary, {packet, 4}, {header, 1}, {active, false}],
     {ok, Socket} = gen_tcp:connect(TNHandoffIP, Port, SockOpts, 15000),
 
 
@@ -118,11 +118,11 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
     %% If the node does not support this functionality we
     %% print an error and keep going with our fingers crossed.
     TargetBin = term_to_binary(TargetNode),
-    VerifyNodeMsg = <<?PT_MSG_VERIFY_NODE:8,TargetBin/binary>>,
+    VerifyNodeMsg = <<?PT_MSG_VERIFY_NODE:8, TargetBin/binary>>,
     ok = gen_tcp:send(Socket, VerifyNodeMsg),
     case gen_tcp:recv(Socket, 0, RecvTimeout) of
-        {ok,[?PT_MSG_VERIFY_NODE | _]} -> ok;
-        {ok,[?PT_MSG_UNKNOWN | _]} ->
+        {ok, [?PT_MSG_VERIFY_NODE | _]} -> ok;
+        {ok, [?PT_MSG_UNKNOWN | _]} ->
             logger:warning("Could not verify identity of peer ~s.",
                           [TargetNode]),
             ok;
@@ -137,7 +137,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
     %% and PT_MSG_CONFIGURE
     VMaster = list_to_atom(atom_to_list(Module) ++ "_master"),
     ModBin = atom_to_binary(Module, utf8),
-    Msg = <<?PT_MSG_OLDSYNC:8,ModBin/binary>>,
+    Msg = <<?PT_MSG_OLDSYNC:8, ModBin/binary>>,
     ok = gen_tcp:send(Socket, Msg),
 
     AckSyncThreshold = application:get_env(riak_core, handoff_acksync_threshold, 25),
@@ -150,7 +150,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
     %% socket at this point is a rejection by the receiver to
     %% enforce handoff_concurrency.
     case gen_tcp:recv(Socket, 0, RecvTimeout) of
-        {ok,[?PT_MSG_OLDSYNC|<<"sync">>]} -> ok;
+        {ok, [?PT_MSG_OLDSYNC|<<"sync">>]} -> ok;
         {error, timeout} -> exit({shutdown, timeout});
         {error, closed} -> exit({shutdown, max_concurrency})
     end,
@@ -161,7 +161,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
                [Type, Module, SrcNode, SrcPartition,
                 TargetNode, TargetPartition]),
 
-    M = <<?PT_MSG_INIT:8,TargetPartition:160/integer>>,
+    M = <<?PT_MSG_INIT:8, TargetPartition:160/integer>>,
     ok = gen_tcp:send(Socket, M),
     StartFoldTime = os:timestamp(),
     Stats = #ho_stats{interval_end=future_now(get_status_interval())},
@@ -214,7 +214,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
     AccRecord = send_objects(AccRecord0#ho_acc.item_queue, AccRecord0),
 
     if AccRecord == {error, vnode_shutdown} ->
-            ?log_info("because the local vnode was shutdown", []),
+            ?LOG_INFO("because the local vnode was shutdown", []),
             throw({be_quiet, error, local_vnode_shutdown_requested});
        true ->
             ok                     % If not #ho_acc, get badmatch below
@@ -242,7 +242,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
             ok = gen_tcp:send(Socket, <<?PT_MSG_SYNC:8>>),
 
             case gen_tcp:recv(Socket, 0, RecvTimeout) of
-                {ok,[?PT_MSG_SYNC|<<"sync">>]} ->
+                {ok, [?PT_MSG_SYNC|<<"sync">>]} ->
                     logger:debug("~p ~p Final sync received",
                                 [SrcPartition, Module]);
                 {error, timeout} -> exit({shutdown, timeout})
@@ -277,26 +277,27 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid) ->
     SrcPartition = get_src_partition(Opts),
     TargetPartition = get_target_partition(Opts),
     try
-        start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, TargetPartition)
+        start_fold_(TargetNode, Module, Type, Opts, ParentPid,
+                    SrcNode, SrcPartition, TargetPartition)
     catch
-        exit:{shutdown,max_concurrency} ->
+        exit:{shutdown, max_concurrency} ->
              %% Need to fwd the error so the handoff mgr knows
              exit({shutdown, max_concurrency});
          exit:{shutdown, timeout} ->
              %% A receive timeout during handoff
            %% STATS
 %%             riak_core_stat:update(handoff_timeouts),
-             ?log_fail("because of TCP recv timeout", []),
+             ?LOG_FAIL("because of TCP recv timeout", []),
              exit({shutdown, timeout});
          exit:{shutdown, {error, Reason}} ->
-             ?log_fail("because of ~p", [Reason]),
-             gen_fsm:send_event(ParentPid, {handoff_error,
+             ?LOG_FAIL("because of ~p", [Reason]),
+             gen_fsm_compat:send_event(ParentPid, {handoff_error,
                                             fold_error, Reason}),
              exit({shutdown, {error, Reason}});
          throw:{be_quiet, Err, Reason} ->
              gen_fsm_compat:send_event(ParentPid, {handoff_error, Err, Reason});
          Err:Reason:Stacktrace ->
-             ?log_fail("because of ~p:~p ~p",
+             ?LOG_FAIL("because of ~p:~p ~p",
                        [Err, Reason, Stacktrace]),
              gen_fsm_compat:send_event(ParentPid, {handoff_error, Err, Reason})
      end.
@@ -343,7 +344,7 @@ visit_item2(K, V, Acc = #ho_acc{ack = _AccSyncThreshold, acksync_threshold = _Ac
            } = Acc,
 
     RecvTimeout = get_handoff_receive_timeout(),
-    M = <<?PT_MSG_OLDSYNC:8,"sync">>,
+    M = <<?PT_MSG_OLDSYNC:8, "sync">>,
     NumBytes = byte_size(M),
 
     Stats2 = incr_bytes(Stats, NumBytes),
@@ -352,7 +353,7 @@ visit_item2(K, V, Acc = #ho_acc{ack = _AccSyncThreshold, acksync_threshold = _Ac
     case gen_tcp:send(Sock, M) of
         ok ->
             case gen_tcp:recv(Sock, 0, RecvTimeout) of
-                {ok,[?PT_MSG_OLDSYNC|<<"sync">>]} ->
+                {ok, [?PT_MSG_OLDSYNC|<<"sync">>]} ->
                     Acc2 = Acc#ho_acc{ack=0, error=ok, stats=Stats3},
                     visit_item2(K, V, Acc2);
                 {error, Reason} ->
@@ -406,7 +407,7 @@ visit_item2(K, V, Acc) ->
                                     stats=Stats,
                                     total_objects=TotalObjects,
                                     total_bytes=TotalBytes} = Acc,
-                            M = <<?PT_MSG_OBJ:8,BinObj/binary>>,
+                            M = <<?PT_MSG_OBJ:8, BinObj/binary>>,
                             NumBytes = byte_size(M),
 
                             Stats2 = incr_bytes(incr_objs(Stats), NumBytes),
@@ -485,7 +486,8 @@ get_handoff_ip(Node) when is_atom(Node) ->
     end.
 
 get_handoff_port(Node) when is_atom(Node) ->
-    case catch(riak_core_gen_server:call({riak_core_handoff_listener, Node}, handoff_port, infinity)) of
+    case catch(riak_core_gen_server:call({riak_core_handoff_listener, Node},
+               handoff_port, infinity)) of
         {'EXIT', _}  ->
             %% Check old location from previous release
             riak_core_gen_server:call({riak_kv_handoff_listener, Node}, handoff_port, infinity);

@@ -147,7 +147,7 @@ get_buckets(Ring) ->
     RingBuckets.
 
 %% @doc returns a proplist containing all buckets and their respective N values
--spec bucket_nval_map(riak_core_ring()) -> [{binary(),integer()}].
+-spec bucket_nval_map(riak_core_ring()) -> [{binary(), integer()}].
 bucket_nval_map(Ring) ->
     [{riak_core_bucket:name(B), riak_core_bucket:n_val(B)} ||
         B <- riak_core_bucket:get_buckets(Ring)].
@@ -194,7 +194,7 @@ simple_set_test() ->
     append_bucket_defaults([]),
     riak_core_ring_events:start_link(),
     riak_core_ring_manager:start_link(test),
-    ok = set_bucket(a_bucket,[{key,value}]),
+    ok = set_bucket(a_bucket, [{key, value}]),
     Bucket = get_bucket(a_bucket),
     riak_core_ring_manager:stop(),
     ?assertEqual(value, proplists:get_value(key, Bucket)).
