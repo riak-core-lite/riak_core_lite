@@ -26,8 +26,13 @@
 -export([start_link/0,
          set_socket/2,
          supports_batching/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -record(state, {sock :: port() | undefined,
                 peer :: term(),
@@ -53,8 +58,12 @@ supports_batching() ->
     true.
 
 init([]) ->
-    {ok, #state{recv_timeout_len = application:get_env(riak_core, handoff_receive_timeout, ?RECV_TIMEOUT),
-                vnode_timeout_len = application:get_env(riak_core, handoff_receive_vnode_timeout, ?VNODE_TIMEOUT)}}.
+    {ok, #state{recv_timeout_len = application:get_env(riak_core,
+                                                       handoff_receive_timeout,
+                                                       ?RECV_TIMEOUT),
+                vnode_timeout_len = application:get_env(riak_core,
+                                                        handoff_receive_vnode_timeout,
+                                                        ?VNODE_TIMEOUT)}}.
 
 handle_call({set_socket, Socket0}, _From, State) ->
     SockOpts = [{active, once}, {packet, 4}, {header, 1}],
@@ -63,13 +72,12 @@ handle_call({set_socket, Socket0}, _From, State) ->
     Socket = Socket0,
     {reply, ok, State#state { sock = Socket, peer = Peer }}.
 
-handle_info({tcp_closed,_Socket},State=#state{partition=Partition,count=Count,
-                                              peer=Peer}) ->
+handle_info({tcp_closed, _Socket}, State=#state{partition=Partition, count=Count, peer=Peer}) ->
     logger:info("Handoff receiver for partition ~p exited after processing ~p"
                           " objects from ~p", [Partition, Count, Peer]),
     {stop, normal, State};
-handle_info({tcp_error, _Socket, Reason}, State=#state{partition=Partition,count=Count,
-                                                       peer=Peer}) ->
+handle_info({tcp_error, _Socket, Reason}, State=#state{partition=Partition,
+                                                       count=Count, peer=Peer}) ->
     logger:info("Handoff receiver for partition ~p exited after processing ~p"
                           " objects from ~p: TCP error ~p", [Partition, Count, Peer, Reason]),
     {stop, normal, State};
@@ -78,7 +86,8 @@ handle_info({tcp, Socket, Data}, State) ->
     case catch(process_message(MsgType, MsgData, State)) of
         {'EXIT', Reason} ->
             logger:error("Handoff receiver for partition ~p exited abnormally after "
-                                   "processing ~p objects from ~p: ~p", [State#state.partition, State#state.count, State#state.peer, Reason]),
+                         "processing ~p objects from ~p: ~p",
+                         [State#state.partition, State#state.count, State#state.peer, Reason]),
             {stop, normal, State};
         NewState when is_record(NewState, state) ->
             InetMod = inet,
@@ -87,7 +96,8 @@ handle_info({tcp, Socket, Data}, State) ->
     end;
 handle_info(timeout, State) ->
             logger:error("Handoff receiver for partition ~p timed out after "
-                                   "processing ~p objects from ~p.", [State#state.partition, State#state.count, State#state.peer]),
+                         "processing ~p objects from ~p.",
+                         [State#state.partition, State#state.count, State#state.peer]),
     {stop, normal, State}.
 
 process_message(?PT_MSG_INIT, MsgData, State=#state{vnode_mod=VNodeMod,
@@ -116,10 +126,10 @@ process_message(?PT_MSG_OBJ, MsgData, State=#state{vnode=VNode, count=Count,
     catch
         exit:{timeout, _} ->
             exit({error, {vnode_timeout, VNodeTimeout, size(MsgData),
-                          binary:part(MsgData, {0,min(size(MsgData),128)})}})
+                          binary:part(MsgData, {0, min(size(MsgData), 128)})}})
     end;
 process_message(?PT_MSG_OLDSYNC, MsgData, State=#state{sock=Socket}) ->
-    gen_tcp:send(Socket, <<?PT_MSG_OLDSYNC:8,"sync">>),
+    gen_tcp:send(Socket, <<?PT_MSG_OLDSYNC:8, "sync">>),
     <<VNodeModBin/binary>> = MsgData,
     VNodeMod = binary_to_atom(VNodeModBin, utf8),
     State#state{vnode_mod=VNodeMod};
@@ -144,7 +154,7 @@ process_message(?PT_MSG_CONFIGURE, MsgData, State) ->
     State#state{vnode_mod=proplists:get_value(vnode_mod, ConfProps),
                 partition=proplists:get_value(partition, ConfProps)};
 process_message(_, _MsgData, State=#state{sock=Socket}) ->
-    gen_tcp:send(Socket, <<?PT_MSG_UNKNOWN:8,"unknown_msg">>),
+    gen_tcp:send(Socket, <<?PT_MSG_UNKNOWN:8, "unknown_msg">>),
     State.
 
 handle_cast(_Msg, State) -> {noreply, State}.

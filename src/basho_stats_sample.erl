@@ -22,10 +22,14 @@
 -module(basho_stats_sample).
 
 -export([new/0,
-         update/2, update_all/2,
+         update/2,
+         update_all/2,
          count/1,
-         min/1, mean/1, max/1,
-         variance/1, sdev/1,
+         min/1,
+         mean/1,
+         max/1,
+         variance/1,
+         sdev/1,
          summary/1]).
 
 -include("stats.hrl").
@@ -47,7 +51,7 @@
 
 new() ->
     #state{}.
-    
+
 update(Value, State) ->
     State#state {
       n   = State#state.n + 1,
@@ -92,7 +96,6 @@ sdev(State) ->
 
 summary(State) ->
     {min(State), mean(State), max(State), variance(State), sdev(State)}.
-            
 
 %% ===================================================================
 %% Internal functions
@@ -105,7 +108,7 @@ nan_min(V1, V2)    -> erlang:min(V1, V2).
 nan_max(V1, 'NaN') -> V1;
 nan_max('NaN', V1) -> V1;
 nan_max(V1, V2)    -> erlang:max(V1, V2).
-    
+
 
 %% ===================================================================
 %% Unit Tests
@@ -114,12 +117,14 @@ nan_max(V1, V2)    -> erlang:max(V1, V2).
 -ifdef(EUNIT).
 
 simple_test() ->
-    %% A few hand-checked values 
-    {1,3.0,5,2.5,1.5811388300841898} = summary(update_all([1,2,3,4,5], new())),
-    {1,5.5,10,15.0,3.872983346207417} = summary(update_all(lists:seq(1,10,3), new())).
+    %% A few hand-checked values
+    {1, 3.0, 5, 2.5, 1.5811388300841898} = summary(
+                                    update_all([1, 2, 3, 4, 5], new())),
+    {1, 5.5, 10, 15.0, 3.872983346207417} = summary(
+                                    update_all(lists:seq(1, 10, 3), new())).
 
 empty_test() ->
-    {'NaN','NaN','NaN','NaN','NaN'} = summary(new()).
+    {'NaN', 'NaN', 'NaN', 'NaN', 'NaN'} = summary(new()).
 
 
 -ifdef(EQC).
@@ -137,7 +142,8 @@ lists_equal([V1 | R1], [V2 | R2]) ->
 prop_main() ->
     ?FORALL(Xlen, choose(2, 100),
         ?LET(Xs, vector(Xlen, int()),
-            lists_equal(basho_stats_utils:r_run(Xs,"c(min(x), mean(x), max(x), var(x), sd(x))"),
+            lists_equal(basho_stats_utils:r_run(Xs, "c(min(x), mean(x), max(x),
+                                                     var(x), sd(x))"),
                 tuple_to_list(summary(update_all(Xs, new())))))).
 
 qc_test() ->

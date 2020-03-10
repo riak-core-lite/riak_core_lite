@@ -22,14 +22,17 @@
 -module(basho_stats_histogram).
 
 -export([new/3,
-         update/2, update_all/2,
+         update/2,
+         update_all/2,
          quantile/2,
          counts/1,
          observations/1,
          summary_stats/1]).
 
 -ifdef(EQC).
--export([prop_count/0, prop_quantile/0]).
+-export([prop_count/0,
+         prop_quantile/0
+        ]).
 -endif.
 
 -include("stats.hrl").
@@ -81,8 +84,6 @@ update(Value, Hist) ->
 update_all(Values, Hist) ->
     lists:foldl(fun(Value, H) -> update(Value, H) end,
                 Hist, Values).
-    
-
 
 %%
 %% Estimate the quantile from the histogram. Quantile should be a value
@@ -92,7 +93,8 @@ quantile(_Quantile, #hist { n = 0 }) ->
     'NaN';
 quantile(Quantile, Hist)
   when Quantile > 0; Quantile < 1 ->
-    %% Sort out how many complete samples we need to satisfy the requested quantile
+    %% Sort out how many complete samples we need to satisfy the
+    %%requested quantile
     MaxSamples = Quantile * Hist#hist.n,
 
     %% Now iterate over the bins, until we have gathered enough samples
@@ -147,7 +149,6 @@ which_bin(Value, Hist) ->
             Bin
     end.
 
-            
 quantile_itr(none, _Samples, _MaxSamples) ->
     max;
 quantile_itr({Bin, Counter, Itr2}, Samples, MaxSamples) ->
@@ -171,7 +172,6 @@ bin_count(Bin, Hist) ->
          none ->
             0
     end.
-            
 %% ===================================================================
 %% Unit Tests
 %% ===================================================================
@@ -180,7 +180,7 @@ bin_count(Bin, Hist) ->
 
 simple_test() ->
     %% Pre-calculated tests
-    [7,0] = counts(update_all([10,10,10,10,10,10,14], new(10,18,2))).
+    [7, 0] = counts(update_all([10, 10, 10, 10, 10, 10, 14], new(10, 18, 2))).
 
 -ifdef(EQC).
 
@@ -188,8 +188,8 @@ simple_test() ->
 qc_count_check(Min, Max, Bins, Xs) ->
     LCounts = counts(update_all(Xs, new(Min, Max, Bins))),
     RCounts = basho_stats_utils:r_run(Xs,
-        ?FMT("hist(x, seq(~w,~w,length.out=~w), plot=FALSE)$counts",
-                                         [Min, Max, Bins+1])),
+                ?FMT("hist(x, seq(~w,~w,length.out=~w), plot=FALSE)$counts",
+                     [Min, Max, Bins+1])),
     case LCounts == RCounts of
         true ->
             true;
@@ -205,13 +205,14 @@ prop_count() ->
             ?LET(Xs, vector(Xlen, choose(Min, Max)),
                 ?WHENFAIL(
                     begin
-                            io:format("Min ~p, Max ~p, Bins ~p, Xs ~w~n",
-                                [Min, Max, Bins, Xs]),
-                            Command = ?FMT("hist(x, seq(~w,~w,length.out=~w), plot=FALSE)$counts",
-                                [Min, Max, Bins+1]),
-                            InputStr = [integer_to_list(I) || I <- Xs],
-                            io:format(?FMT("x <- c(~s)\n", [string:join(InputStr, ",")])),
-                            io:format(?FMT("write(~s, ncolumns=1, file=stdout())\n", [Command]))
+                        io:format("Min ~p, Max ~p, Bins ~p, Xs ~w~n",
+                            [Min, Max, Bins, Xs]),
+                        Command = ?FMT("hist(x, seq(~w,~w,length.out=~w), plot=FALSE)$counts",
+                                        [Min, Max, Bins+1]),
+                        InputStr = [integer_to_list(I) || I <- Xs],
+                        io:format(?FMT("x <- c(~s)\n",
+                             [string:join(InputStr, ",")])),
+                        io:format(?FMT("write(~s, ncolumns=1,file=stdout())\n", [Command]))
                     end,
                     qc_count_check(Min, Max, Bins, Xs))))).
 
@@ -222,7 +223,8 @@ qc_quantile_check(Q, Min, Max, Bins, Xs) ->
     Hist = new(Min, Max, Bins),
     LCounts = counts(update_all(Xs, Hist)),
     Lq = quantile(Q * 0.01, update_all(Xs, Hist)),
-    [Rq] = basho_stats_utils:r_run(Xs, ?FMT("quantile(x, ~4.2f, type=4)", [Q * 0.01])),
+    [Rq] = basho_stats_utils:r_run(Xs,
+            ?FMT("quantile(x, ~4.2f, type=4)", [Q * 0.01])),
     case abs(Lq - Rq) < 1 of
         true ->
             true;
@@ -235,9 +237,11 @@ qc_quantile_check(Q, Min, Max, Bins, Xs) ->
     end.
 
 prop_quantile() ->
-    %% Loosey-goosey checking of the quantile estimation against R's more precise method.
+    %% Loosey-goosey checking of the quantile estimation
+    %%    against R's more precise method.
     %%
-    %% To ensure a minimal level of accuracy, we ensure that we have between 50-200 bins
+    %% To ensure a minimal level of accuracy,
+    %%  we ensure that we have between 50-200 bins
     %% and between 100-500 data points.
     %%
     %% TODO: Need to nail down the exact error bounds
@@ -245,18 +249,19 @@ prop_quantile() ->
     %% XXX since we try to generate the quantile from the histogram, not the
     %% original data, our results and Rs don't always agree and this means the
     %% test will occasionally fail. There's not an easy way to fix this.
-    ?FORALL({Min, Bins, Xlen, Q}, {choose(1, 99), choose(50, 200), choose(100, 500),
-                                    choose(0,100)},
+    ?FORALL({Min, Bins, Xlen, Q}, {choose(1, 99), choose(50, 200),
+                                     choose(100, 500), choose(0, 100)},
              ?LET(Max, choose(Min+1, 100),
                   ?LET(Xs, vector(Xlen, choose(Min, Max)),
                       ?WHENFAIL(
                           begin
-                                  io:format("Min ~p, Max ~p, Bins ~p, Q ~p, Xs ~w~n",
-                                      [Min, Max, Bins, Q, Xs]),
-                                  Command = ?FMT("quantile(x, ~4.2f, type=4)", [Q * 0.01]),
-                                  InputStr = [integer_to_list(I) || I <- Xs],
-                                  io:format(?FMT("x <- c(~s)\n", [string:join(InputStr, ",")])),
-                                  io:format(?FMT("write(~s, ncolumns=1, file=stdout())\n", [Command]))
+                            io:format("Min ~p, Max ~p, Bins ~p, Q ~p, Xs ~w~n",
+                                [Min, Max, Bins, Q, Xs]),
+                            Command = ?FMT("quantile(x, ~4.2f, type=4)", [Q * 0.01]),
+                            InputStr = [integer_to_list(I) || I <- Xs],
+                            io:format(?FMT("x <- c(~s)\n",
+                                             [string:join(InputStr, ",")])),
+                            io:format(?FMT("write(~s, ncolumns=1,file=stdout())\n", [Command]))
                           end,
                           qc_quantile_check(Q, Min, Max, Bins, Xs))))).
 
@@ -264,4 +269,4 @@ qc_quantile_test() ->
     true = eqc:quickcheck(prop_quantile()).
 
 -endif.
--endif. 
+-endif.

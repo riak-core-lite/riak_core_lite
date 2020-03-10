@@ -23,13 +23,20 @@
 %% substituted.
 %% -------------------------------------------------------------------
 -module(riak_core_apl).
--export([active_owners/1, active_owners/2,
-         get_apl/3, get_apl/4,
-         get_apl_ann/2, get_apl_ann/3, get_apl_ann/4,
+-export([active_owners/1,
+         active_owners/2,
+         get_apl/3,
+         get_apl/4,
+         get_apl_ann/2,
+         get_apl_ann/3,
+         get_apl_ann/4,
          get_apl_ann_with_pnum/1,
-         get_primary_apl/3, get_primary_apl/4,
+         get_primary_apl/3,
+         get_primary_apl/4,
          get_primary_apl_chbin/4,
-         first_up/2, offline_owners/1, offline_owners/2
+         first_up/2,
+         offline_owners/1,
+         offline_owners/2
         ]).
 
 -export_type([preflist/0, preflist_ann/0, preflist_with_pnum_ann/0]).
@@ -188,7 +195,7 @@ offline_owners(UpSet, CHBin) when is_list(UpSet) ->
 -spec check_up(preflist(), [node()], preflist_ann(), preflist()) -> {preflist_ann(), preflist()}.
 check_up([], _UpNodes, Up, Pangs) ->
     {lists:reverse(Up), lists:reverse(Pangs)};
-check_up([{Partition,Node}|Rest], UpNodes, Up, Pangs) ->
+check_up([{Partition, Node}| Rest], UpNodes, Up, Pangs) ->
     case is_up(Node, UpNodes) of
         true ->
             check_up(Rest, UpNodes, [{{Partition, Node}, primary} | Up], Pangs);
@@ -202,7 +209,7 @@ find_fallbacks(_Pangs, [], _UpNodes, Secondaries) ->
     lists:reverse(Secondaries);
 find_fallbacks([], _Fallbacks, _UpNodes, Secondaries) ->
     lists:reverse(Secondaries);
-find_fallbacks([{Partition, _Node}|Rest]=Pangs, [{_,FN}|Fallbacks], UpNodes, Secondaries) ->
+find_fallbacks([{Partition, _Node}|Rest] = Pangs, [{_, FN}|Fallbacks], UpNodes, Secondaries) ->
     case is_up(FN, UpNodes) of
         true ->
             find_fallbacks(Rest, Fallbacks, UpNodes,
@@ -212,7 +219,7 @@ find_fallbacks([{Partition, _Node}|Rest]=Pangs, [{_,FN}|Fallbacks], UpNodes, Sec
     end.
 
 %% @doc Find fallbacks for downed nodes in the preference list.
--spec find_fallbacks_chbin(preflist(), iterator(),[node()], preflist_ann()) -> preflist_ann().
+-spec find_fallbacks_chbin(preflist(), iterator(), [node()], preflist_ann()) -> preflist_ann().
 find_fallbacks_chbin([], _Fallbacks, _UpNodes, Secondaries) ->
     lists:reverse(Secondaries);
 find_fallbacks_chbin(_, done, _UpNodes, Secondaries) ->
@@ -242,38 +249,38 @@ apl_with_partition_nums(Apl, Size) ->
 -ifdef(TEST).
 
 smallest_test() ->
-    Ring = riak_core_ring:fresh(1,node()),
-    ?assertEqual([{0,node()}],  get_apl(last_in_ring(), 1, Ring, [node()])).
+    Ring = riak_core_ring:fresh(1, node()),
+    ?assertEqual([{0, node()}],  get_apl(last_in_ring(), 1, Ring, [node()])).
 
 four_node_test() ->
     Nodes = [nodea, nodeb, nodec, noded],
     Ring = perfect_ring(8, Nodes),
-    ?assertEqual([{0,nodea},
-                  {182687704666362864775460604089535377456991567872,nodeb},
-                  {365375409332725729550921208179070754913983135744,nodec}],
+    ?assertEqual([{0, nodea},
+                  {182687704666362864775460604089535377456991567872, nodeb},
+                  {365375409332725729550921208179070754913983135744, nodec}],
                  get_apl(last_in_ring(), 3, Ring, Nodes)),
     %% With a node down
-    ?assertEqual([{182687704666362864775460604089535377456991567872,nodeb},
-                  {365375409332725729550921208179070754913983135744,nodec},
-                  {0,noded}],
+    ?assertEqual([{182687704666362864775460604089535377456991567872, nodeb},
+                  {365375409332725729550921208179070754913983135744, nodec},
+                  {0, noded}],
                  get_apl(last_in_ring(), 3, Ring, [nodeb, nodec, noded])),
     %% With two nodes down
-    ?assertEqual([{365375409332725729550921208179070754913983135744,nodec},
-                  {0,noded},
-                  {182687704666362864775460604089535377456991567872,nodec}],
+    ?assertEqual([{365375409332725729550921208179070754913983135744, nodec},
+                  {0, noded},
+                  {182687704666362864775460604089535377456991567872, nodec}],
                  get_apl(last_in_ring(), 3, Ring,  [nodec, noded])),
     %% With the other two nodes down
-    ?assertEqual([{0,nodea},
-                  {182687704666362864775460604089535377456991567872,nodeb},
-                  {365375409332725729550921208179070754913983135744,nodea}],
+    ?assertEqual([{0, nodea},
+                  {182687704666362864775460604089535377456991567872, nodeb},
+                  {365375409332725729550921208179070754913983135744, nodea}],
                  get_apl(last_in_ring(), 3, Ring,  [nodea, nodeb])).
 
 %% Create a perfect ring - RingSize must be a multiple of nodes
 perfect_ring(RingSize, Nodes) when RingSize rem length(Nodes) =:= 0 ->
-    Ring = riak_core_ring:fresh(RingSize,node()),
+    Ring = riak_core_ring:fresh(RingSize, node()),
     Owners = riak_core_ring:all_owners(Ring),
     TransferNode =
-        fun({Idx,_CurOwner}, {Ring0, [NewOwner|Rest]}) ->
+        fun({Idx, _CurOwner}, {Ring0, [NewOwner|Rest]}) ->
                 {riak_core_ring:transfer_node(Idx, NewOwner, Ring0), Rest ++ [NewOwner]}
         end,
     {PerfectRing, _} = lists:foldl(TransferNode, {Ring, Nodes}, Owners),
@@ -287,8 +294,8 @@ six_node_test() ->
     %% earlier
     {ok, [Ring]} = file:consult("test/my_ring"),
     %DocIdx = riak_core_util:chash_key({<<"foo">>, <<"bar">>}),
-    DocIdx = <<73,212,27,234,104,13,150,207,0,82,86,183,125,225,172,
-      154,135,46,6,112>>,
+    DocIdx = <<73, 212, 27, 234, 104, 13, 150, 207, 0, 82,
+               86, 183, 125, 225, 172, 154, 135, 46, 6, 112>>,
 
     Nodes = ['dev1@127.0.0.1', 'dev2@127.0.0.1', 'dev3@127.0.0.1',
         'dev4@127.0.0.1', 'dev5@127.0.0.1', 'dev6@127.0.0.1'],
@@ -369,7 +376,7 @@ six_node_bucket_key_ann_test() ->
     Key = <<"jethrotull">>,
     application:set_env(riak_core, default_bucket_props,
                         [{n_val, 3},
-                         {chash_keyfun,{riak_core_util,chash_std_keyfun}}]),
+                         {chash_keyfun, {riak_core_util, chash_std_keyfun}}]),
     riak_core_ring_manager:setup_ets(test),
     riak_core_ring_manager:set_ring_global(Ring),
     Size = riak_core_ring:num_partitions(Ring),

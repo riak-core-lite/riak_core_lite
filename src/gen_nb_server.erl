@@ -28,8 +28,12 @@
 -export([start_link/4]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -define(SERVER, ?MODULE).
 
@@ -37,34 +41,33 @@
                 sock,
                 server_state}).
 
--callback init(InitArgs::list()) -> 
-    {ok, State::term()} | 
+-callback init(InitArgs::list()) ->
+    {ok, State::term()} |
     {error, Reason::term()}.
 
--callback handle_call(Msg::term(), From::{pid(), term()}, State::term()) -> 
-    {reply, Reply::term(), State::term()} | 
-    {reply, Reply::term(), State::term(), number() | hibernate} | 
-    {noreply, State::term()} | 
-    {noreply, State::term(), number() | hibernate} | 
+-callback handle_call(Msg::term(), From::{pid(), term()}, State::term()) ->
+    {reply, Reply::term(), State::term()} |
+    {reply, Reply::term(), State::term(), number() | hibernate} |
+    {noreply, State::term()} |
+    {noreply, State::term(), number() | hibernate} |
     {stop, Reason::term(), State::term()}.
 
 -callback handle_cast(Msg::term(), State::term()) ->
-    {noreply, State::term()} | 
-    {noreply, State::term(), number() | hibernate} | 
+    {noreply, State::term()} |
+    {noreply, State::term(), number() | hibernate} |
     {stop, Reason::term(), State::term()}.
 
 -callback handle_info(Msg::term(), State::term()) ->
-    {noreply, State::term()} | 
-    {noreply, State::term(), number() | hibernate} | 
+    {noreply, State::term()} |
+    {noreply, State::term(), number() | hibernate} |
     {stop, Reason::term(), State::term()}.
 
--callback terminate(Reason::term(), State::term()) ->    
-    ok.
+-callback terminate(Reason::term(), State::term()) -> ok.
 
 -callback sock_opts() -> [gen_tcp:listen_option()].
 
 -callback new_connection(inet:socket(), State::term()) ->
-    {ok, NewState::term()} | 
+    {ok, NewState::term()} |
     {stop, Reason::term(), NewState::term()}.
 
 %% @spec start_link(CallbackModule, IpAddr, Port, InitParams) -> Result
@@ -75,7 +78,10 @@
 %% Result = {ok, pid()} | {error, any()}
 %% @doc Start server listening on IpAddr:Port
 start_link(CallbackModule, IpAddr, Port, InitParams) ->
-  gen_server:start_link(?MODULE, [CallbackModule, IpAddr, Port, InitParams], []).
+  gen_server:start_link(?MODULE,
+                        [CallbackModule, IpAddr, Port, InitParams],
+                        []
+                      ).
 
 %% @hidden
 init([CallbackModule, IpAddr, Port, InitParams]) ->
@@ -93,18 +99,28 @@ init([CallbackModule, IpAddr, Port, InitParams]) ->
   end.
 
 %% @hidden
-handle_call(Request, From, #state{cb=Callback, server_state=ServerState}=State) ->
+handle_call(Request,
+            From,
+            #state{cb=Callback, server_state = ServerState} = State
+            ) ->
   case Callback:handle_call(Request, From, ServerState) of
     {reply, Reply, NewServerState} ->
       {reply, Reply, State#state{server_state=NewServerState}};
-    {reply, Reply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
+
+    {reply, Reply, NewServerState, Arg} when Arg =:= hibernate orelse
+                                             is_number(Arg) ->
       {reply, Reply, State#state{server_state=NewServerState}, Arg};
+
     {noreply, NewServerState} ->
       {noreply, State#state{server_state=NewServerState}};
-    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
+
+    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse
+                                        is_number(Arg) ->
       {noreply, State#state{server_state=NewServerState}, Arg};
+
     {stop, Reason, NewServerState} ->
       {stop, Reason, State#state{server_state=NewServerState}};
+
     {stop, Reason, Reply, NewServerState} ->
       {stop, Reason, Reply, State#state{server_state=NewServerState}}
   end.
@@ -114,14 +130,18 @@ handle_cast(Msg, #state{cb=Callback, server_state=ServerState}=State) ->
   case Callback:handle_cast(Msg, ServerState) of
     {noreply, NewServerState} ->
       {noreply, State#state{server_state=NewServerState}};
-    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
+
+    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse
+                                        is_number(Arg) ->
       {noreply, State#state{server_state=NewServerState}, Arg};
+
     {stop, Reason, NewServerState} ->
       {stop, Reason, State#state{server_state=NewServerState}}
   end.
 
 %% @hidden
-handle_info({inet_async, ListSock, _Ref, {ok, CliSocket}}, #state{cb=Callback, server_state=ServerState}=State) ->
+handle_info({inet_async, ListSock, _Ref, {ok, CliSocket}},
+            #state{cb=Callback, server_state=ServerState}=State) ->
   inet_db:register_socket(CliSocket, inet_tcp),
   case Callback:new_connection(CliSocket, ServerState) of
     {ok, NewServerState} ->
@@ -135,8 +155,11 @@ handle_info(Info, #state{cb=Callback, server_state=ServerState}=State) ->
   case Callback:handle_info(Info, ServerState) of
     {noreply, NewServerState} ->
       {noreply, State#state{server_state=NewServerState}};
-    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
+
+    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse
+                                        is_number(Arg) ->
       {noreply, State#state{server_state=NewServerState}, Arg};
+
     {stop, Reason, NewServerState} ->
       {stop, Reason, State#state{server_state=NewServerState}}
   end.
@@ -175,6 +198,8 @@ listen_on(CallbackModule, IpAddrStr, Port) ->
         {ok, IpAddr} ->
             listen_on(CallbackModule, IpAddr, Port);
         Err ->
-            logger:critical("Cannot start listener for ~p on invalid address ~p:~p", [CallbackModule, IpAddrStr, Port]),
+            logger:critical("Cannot start listener for ~p
+                            on invalid address ~p:~p",
+                            [CallbackModule, IpAddrStr, Port]),
             Err
     end.

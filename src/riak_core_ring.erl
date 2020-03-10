@@ -149,7 +149,8 @@
                                                 % bucket N-value, etc)
           clustername :: {term(), term()} | undefined,
           next     :: [{integer(), term(), term(), [module()], awaiting | complete}],
-          members  :: [{node(), {member_status(), vclock:vclock(), [{atom(), term()}]}}] | undefined,
+          members  :: [{node(),
+                       {member_status(), vclock:vclock(), [{atom(), term()}]}}] | undefined,
           claimant :: term(),
           seen     :: [{term(), vclock:vclock()}] | undefined,
           rvsn     :: vclock:vclock() | undefined
@@ -175,7 +176,7 @@
                            awaiting | complete}
                         | {undefined, undefined, undefined}.
 
--type resize_transfer() :: {{integer(),term()}, ordsets:ordset(node()), awaiting | complete}.
+-type resize_transfer() :: {{integer(), term()}, ordsets:ordset(node()), awaiting | complete}.
 
 -type ring_size() :: non_neg_integer().
 %% @type partition_id(). This integer represents a value in the range [0, ring_size-1].
@@ -253,19 +254,19 @@ all_owners(State) ->
 -spec all_preflists(State :: chstate(), N :: integer()) ->
                                [[{Index :: integer(), Node :: term()}]].
 all_preflists(State, N) ->
-    [lists:sublist(preflist(Key, State),N) ||
+    [lists:sublist(preflist(Key, State), N) ||
         Key <- [<<(I+1):160/integer>> ||
-                   {I,_Owner} <- ?MODULE:all_owners(State)]].
+                   {I, _Owner} <- ?MODULE:all_owners(State)]].
 
 %% @doc For two rings, return the list of owners that have differing ownership.
 -spec diff_nodes(chstate(), chstate()) -> [node()].
-diff_nodes(State1,State2) ->
-    AO = lists:zip(all_owners(State1),all_owners(State2)),
-    AllDiff = [[N1,N2] || {{I,N1},{I,N2}} <- AO, N1 =/= N2],
+diff_nodes(State1, State2) ->
+    AO = lists:zip(all_owners(State1), all_owners(State2)),
+    AllDiff = [[N1, N2] || {{I, N1}, {I, N2}} <- AO, N1 =/= N2],
     lists:usort(lists:flatten(AllDiff)).
 
 -spec equal_rings(chstate(), chstate()) -> boolean().
-equal_rings(_A=#chstate{chring=RA,meta=MA},_B=#chstate{chring=RB,meta=MB}) ->
+equal_rings(_A=#chstate{chring=RA, meta=MA}, _B=#chstate{chring=RB, meta=MB}) ->
     MDA = lists:sort(dict:to_list(MA)),
     MDB = lists:sort(dict:to_list(MB)),
     case MDA =:= MDB of
@@ -306,7 +307,7 @@ fresh(RingSize, NodeName) ->
 %%      by a dummy host
 -spec resize(chstate(), ring_size()) -> chstate().
 resize(State, NewRingSize) ->
-    NewRing = lists:foldl(fun({Idx,Owner}, RingAcc) ->
+    NewRing = lists:foldl(fun({Idx, Owner}, RingAcc) ->
                                   chash:update(Idx, Owner, RingAcc)
                           end,
                           chash:fresh(NewRingSize, '$dummyhost@resized'),
@@ -358,7 +359,7 @@ future_owner(State, Idx) ->
 %% @doc Return all partition indices owned by the node executing this function.
 -spec my_indices(State :: chstate()) -> [chash:index_as_int()].
 my_indices(State) ->
-    [I || {I,Owner} <- ?MODULE:all_owners(State), Owner =:= node()].
+    [I || {I, Owner} <- ?MODULE:all_owners(State), Owner =:= node()].
 
 %% @doc Return the number of partitions in this Riak ring.
 -spec num_partitions(State :: chstate()) -> pos_integer().
@@ -393,13 +394,15 @@ random_node(State) ->
 %%      If this node owns all partitions, return any index.
 -spec random_other_index(State :: chstate()) -> chash:index_as_int().
 random_other_index(State) ->
-    L = [I || {I,Owner} <- ?MODULE:all_owners(State), Owner =/= node()],
+    L = [I || {I, Owner} <- ?MODULE:all_owners(State), Owner =/= node()],
     case L of
         [] -> hd(my_indices(State));
         _ -> lists:nth(riak_core_rand:uniform(length(L)), L)
     end.
 
--spec random_other_index(State :: chstate(), Exclude :: [term()]) -> chash:index_as_int() | no_indices.
+-spec random_other_index(State :: chstate(),
+                         Exclude :: [term()])
+                         -> chash:index_as_int() | no_indices.
 random_other_index(State, Exclude) when is_list(Exclude) ->
     L = [I || {I, Owner} <- ?MODULE:all_owners(State),
               Owner =/= node(),
@@ -536,7 +539,7 @@ future_index(CHashKey, OrigIdx, NValCheck, OrigCount, NextCount) ->
 
             %% Determine the partition that the key should be transferred to (has same position
             %% in future preflist as source partition does in current preflist)
-            RingTop = trunc(math:pow(2,160)-1),
+            RingTop = trunc(math:pow(2, 160)-1),
             (NextOwner + (NextInc * OrigDist)) rem RingTop
     end.
 
@@ -567,7 +570,7 @@ transfer_node(Idx, Node, MyState) ->
             Me = MyState#chstate.nodename,
             VClock = vclock:increment(Me, MyState#chstate.vclock),
             CHRing = chash:update(Idx, Node, MyState#chstate.chring),
-            MyState#chstate{vclock=VClock,chring=CHRing}
+            MyState#chstate{vclock=VClock, chring=CHRing}
     end.
 
 % @doc Set a key in the cluster metadata dict
@@ -927,7 +930,7 @@ reschedule_outbound_resize_transfers(State, Idx, Node, NewNode) ->
     OldSource = {Idx, Node},
     NewSource = {Idx, NewNode},
     Transfers = resize_transfers(State, OldSource),
-    F = fun({I,N}) when N =:= Node -> {I,NewNode};
+    F = fun({I, N}) when N =:= Node -> {I, NewNode};
            (T) -> T
         end,
     NewTransfers = [{F(Target), ordsets:new(), awaiting} || {Target, _, _} <- Transfers],
@@ -972,8 +975,8 @@ resize_transfer_status(State, Source, Target, Mod) ->
 %%      for `Source' that need to be started to be scheduled before calling
 %%      this fuction
 -spec resize_transfer_complete(chstate(),
-                               {integer(),term()},
-                               {integer(),term()},
+                               {integer(), term()},
+                               {integer(), term()},
                                atom()) -> chstate().
 resize_transfer_complete(State, {SrcIdx, _}=Source, Target, Mod) ->
     ResizeTransfers = resize_transfers(State, Source),
@@ -1030,7 +1033,7 @@ is_resize_complete(#chstate{next=Next}) ->
                   end,
                   Next).
 
--spec complete_resize_transfers(chstate(), {integer(),term()}, atom()) -> [{integer(),term()}].
+-spec complete_resize_transfers(chstate(), {integer(), term()}, atom()) -> [{integer(), term()}].
 complete_resize_transfers(State, Source, Mod) ->
     [Target || {Target, Mods, Status} <- resize_transfers(State, Source),
                Status =:= complete orelse ordsets:is_element(Mod, Mods)].
@@ -1073,7 +1076,7 @@ cleanup_after_resize(State) ->
     update_meta('$resized_ring', '$cleanup', State).
 
 
--spec vnode_type(chstate(),integer()) -> primary |
+-spec vnode_type(chstate(), integer()) -> primary |
                                          {fallback, term()} |
                                          future_primary |
                                          resized_primary.
@@ -1263,7 +1266,7 @@ pretty_print(Ring, Opts) ->
         true ->
             io:format(Out, "~36..=s Nodes ~36..=s~n", ["", ""]),
             _ = [begin
-                 NodeIndices = [Idx || {Idx,Owner} <- Indices,
+                 NodeIndices = [Idx || {Idx, Owner} <- Indices,
                                        Owner =:= Node],
                  RingPercent = length(NodeIndices) * 100 / RingSize,
                  io:format(Out, "Node ~s: ~w (~5.1f%) ~s~n",
@@ -1312,13 +1315,13 @@ internal_ring_changed(Node, CState0) ->
     end.
 
 %% @private
-merge_meta({N1,M1}, {N2,M2}) ->
-    Meta = dict:merge(fun(_,D1,D2) -> pick_val({N1,D1}, {N2,D2}) end, M1, M2),
+merge_meta({N1, M1}, {N2, M2}) ->
+    Meta = dict:merge(fun(_, D1, D2) -> pick_val({N1, D1}, {N2, D2}) end, M1, M2),
     log_meta_merge(M1, M2, Meta),
     Meta.
 
 %% @private
-pick_val({N1,M1}, {N2,M2}) ->
+pick_val({N1, M1}, {N2, M2}) ->
     case {M1#meta_entry.lastmod, N1} > {M2#meta_entry.lastmod, N2} of
         true -> M1;
         false -> M2
@@ -1335,8 +1338,8 @@ log_meta_merge(M1, M2, Meta) ->
 %% Log result of a ring reconcile. In the case of ring churn,
 %% subsequent log messages will allow us to track ring versions.
 %% Handle legacy rings as well.
-log_ring_result(#chstate{vclock=V,members=Members,next=Next}) ->
-    logger:debug("Updated ring vclock: ~p, Members: ~p, Next: ~p", 
+log_ring_result(#chstate{vclock=V, members=Members, next=Next}) ->
+    logger:debug("Updated ring vclock: ~p, Members: ~p, Next: ~p",
         [V, Members, Next]).
 
 %% @private
@@ -1393,7 +1396,8 @@ reconcile_divergent(VNode, StateA, StateB) ->
     VClock = vclock:increment(VNode, vclock:merge([StateA#chstate.vclock,
                                                    StateB#chstate.vclock])),
     Members = reconcile_members(StateA, StateB),
-    Meta = merge_meta({StateA#chstate.nodename, StateA#chstate.meta}, {StateB#chstate.nodename, StateB#chstate.meta}),
+    Meta = merge_meta({StateA#chstate.nodename, StateA#chstate.meta},
+                      {StateB#chstate.nodename, StateB#chstate.meta}),
     NewState = reconcile_ring(StateA, StateB, get_members(Members)),
     NewState1 = NewState#chstate{vclock=VClock, members=Members, meta=Meta},
     log_ring_result(NewState1),
@@ -1520,6 +1524,7 @@ reconcile_ring(StateA=#chstate{claimant=Claimant1, rvsn=VC1, next=Next1},
                     %% claimant to handle this case, although the choice
                     %% is irrelevant as a correct valid claimant will
                     %% eventually emerge when the ring converges.
+                %TODO False-false and true-true are the same. _-_ maybe better not repitition
                     case Claimant1 < Claimant2 of
                         true ->
                             Next = reconcile_divergent_next(Next1, Next2),
@@ -1665,75 +1670,78 @@ filtered_seen(State=#chstate{seen=Seen}) ->
 sequence_test() ->
     I1 = 365375409332725729550921208179070754913983135744,
     I2 = 730750818665451459101842416358141509827966271488,
-    A = fresh(4,a),
+    A = fresh(4, a),
     B1 = A#chstate{nodename=b},
     B2 = transfer_node(I1, b, B1),
     ?assertEqual(B2, transfer_node(I1, b, B2)),
-    {no_change, A1} = reconcile(B1,A),
+    {no_change, A1} = reconcile(B1, A),
     C1 = A#chstate{nodename=c},
     C2 = transfer_node(I1, c, C1),
-    {new_ring, A2} = reconcile(C2,A1),
-    {new_ring, A3} = reconcile(B2,A2),
-    C3 = transfer_node(I2,c,C2),
-    {new_ring, C4} = reconcile(A3,C3),
-    {new_ring, A4} = reconcile(C4,A3),
-    {new_ring, B3} = reconcile(A4,B2),
+    {new_ring, A2} = reconcile(C2, A1),
+    {new_ring, A3} = reconcile(B2, A2),
+    C3 = transfer_node(I2, c, C2),
+    {new_ring, C4} = reconcile(A3, C3),
+    {new_ring, A4} = reconcile(C4, A3),
+    {new_ring, B3} = reconcile(A4, B2),
     ?assertEqual(A4#chstate.chring, B3#chstate.chring),
     ?assertEqual(B3#chstate.chring, C4#chstate.chring).
 
 param_fresh_test() ->
-    application:set_env(riak_core,ring_creation_size,4),
+    application:set_env(riak_core, ring_creation_size, 4),
     ?assert(equal_cstate(fresh(), fresh(4, node()))),
-    ?assertEqual(owner_node(fresh()),node()).
+    ?assertEqual(owner_node(fresh()), node()).
 
 index_test() ->
-    Ring0 = fresh(2,node()),
-    Ring1 = transfer_node(0,x,Ring0),
-    ?assertEqual(0,random_other_index(Ring0)),
-    ?assertEqual(0,random_other_index(Ring1)),
-    ?assertEqual(node(),index_owner(Ring0,0)),
-    ?assertEqual(x,index_owner(Ring1,0)),
-    ?assertEqual(lists:sort([x,node()]),lists:sort(diff_nodes(Ring0,Ring1))).
+    Ring0 = fresh(2, node()),
+    Ring1 = transfer_node(0, x, Ring0),
+    ?assertEqual(0, random_other_index(Ring0)),
+    ?assertEqual(0, random_other_index(Ring1)),
+    ?assertEqual(node(), index_owner(Ring0, 0)),
+    ?assertEqual(x, index_owner(Ring1, 0)),
+    ?assertEqual(lists:sort([x, node()]), lists:sort(diff_nodes(Ring0, Ring1))).
 
 reconcile_test() ->
-    Ring0 = fresh(2,node()),
-    Ring1 = transfer_node(0,x,Ring0),
+    Ring0 = fresh(2, node()),
+    Ring1 = transfer_node(0, x, Ring0),
     %% Only members and seen should have changed
-    {new_ring, Ring2} = reconcile(fresh(2,someone_else),Ring1),
+    {new_ring, Ring2} = reconcile(fresh(2, someone_else), Ring1),
     ?assertNot(equal_cstate(Ring1, Ring2, false)),
-    RingB0 = fresh(2,node()),
-    RingB1 = transfer_node(0,x,RingB0),
+    RingB0 = fresh(2, node()),
+    RingB1 = transfer_node(0, x, RingB0),
     RingB2 = RingB1#chstate{nodename=b},
-    ?assertMatch({no_change,_},reconcile(Ring1,RingB2)),
-    {no_change, RingB3} = reconcile(Ring1,RingB2),
+    ?assertMatch({no_change, _}, reconcile(Ring1, RingB2)),
+    {no_change, RingB3} = reconcile(Ring1, RingB2),
     ?assert(equal_cstate(RingB2, RingB3)).
 
 metadata_inequality_test() ->
-    Ring0 = fresh(2,node()),
-    Ring1 = update_meta(key,val,Ring0),
-    ?assertNot(equal_rings(Ring0,Ring1)),
+    Ring0 = fresh(2, node()),
+    Ring1 = update_meta(key, val, Ring0),
+    ?assertNot(equal_rings(Ring0, Ring1)),
     ?assertEqual(Ring1#chstate.meta,
                  merge_meta({'node0', Ring0#chstate.meta}, {'node1', Ring1#chstate.meta})),
     timer:sleep(1001), % ensure that lastmod is at least a second later
-    Ring2 = update_meta(key,val2,Ring1),
-    ?assertEqual(get_meta(key,Ring2),
-                 get_meta(key,#chstate{meta=
-                            merge_meta({'node1',Ring1#chstate.meta},
-                                       {'node2',Ring2#chstate.meta})})),
-    ?assertEqual(get_meta(key,Ring2),
-                 get_meta(key,#chstate{meta=
-                            merge_meta({'node2',Ring2#chstate.meta},
-                                       {'node1',Ring1#chstate.meta})})).
+    Ring2 = update_meta(key, val2, Ring1),
+    ?assertEqual(get_meta(key, Ring2),
+                 get_meta(key, #chstate{meta=
+                            merge_meta({'node1', Ring1#chstate.meta},
+                                       {'node2', Ring2#chstate.meta})})),
+    ?assertEqual(get_meta(key, Ring2),
+                 get_meta(key, #chstate{meta=
+                            merge_meta({'node2', Ring2#chstate.meta},
+                                       {'node1', Ring1#chstate.meta})})).
 
 metadata_remove_test() ->
     Ring0 = fresh(2, node()),
     ?assert(equal_rings(Ring0, remove_meta(key, Ring0))),
-    Ring1 = update_meta(key,val,Ring0),
+    Ring1 = update_meta(key, val, Ring0),
     timer:sleep(1001), % ensure that lastmod is at least one second later
-    Ring2 = remove_meta(key,Ring1),
+    Ring2 = remove_meta(key, Ring1),
     ?assertEqual(undefined, get_meta(key, Ring2)),
-    ?assertEqual(undefined, get_meta(key, #chstate{meta=merge_meta({'node1',Ring1#chstate.meta}, {'node2',Ring2#chstate.meta})})),
-    ?assertEqual(undefined, get_meta(key, #chstate{meta=merge_meta({'node2',Ring2#chstate.meta}, {'node1',Ring1#chstate.meta})})).
+    ?assertEqual(undefined, get_meta(key, #chstate{meta=merge_meta({'node1', Ring1#chstate.meta},
+                                                                {'node2', Ring2#chstate.meta})})),
+
+    ?assertEqual(undefined, get_meta(key, #chstate{meta=merge_meta({'node2', Ring2#chstate.meta},
+                                                                {'node1', Ring1#chstate.meta})})).
 
 rename_test() ->
     Ring0 = fresh(2, node()),
@@ -1743,10 +1751,10 @@ rename_test() ->
 
 exclusion_test() ->
     Ring0 = fresh(2, node()),
-    Ring1 = transfer_node(0,x,Ring0),
-    ?assertEqual(0, random_other_index(Ring1,[730750818665451459101842416358141509827966271488])),
+    Ring1 = transfer_node(0, x, Ring0),
+    ?assertEqual(0, random_other_index(Ring1, [730750818665451459101842416358141509827966271488])),
     ?assertEqual(no_indices, random_other_index(Ring1, [0])),
-    ?assertEqual([{730750818665451459101842416358141509827966271488,node()},{0,x}],
+    ?assertEqual([{730750818665451459101842416358141509827966271488, node()}, {0, x}],
                  preflist(<<1:160/integer>>, Ring1)).
 
 random_other_node_test() ->
@@ -1781,8 +1789,8 @@ membership_test() ->
     {_, RingA7} = reconcile(RingB2, RingA6),
     ?assertEqual([nodeA, nodeB, nodeC], all_members(RingA7)),
 
-    Priority = [{invalid,1}, {down,2}, {joining,3}, {valid,4}, {exiting,5},
-                {leaving,6}],
+    Priority = [{invalid, 1}, {down, 2}, {joining, 3}, {valid, 4}, {exiting, 5},
+                {leaving, 6}],
     RingX1 = fresh(nodeA),
     RingX2 = add_member(nodeA, RingX1, nodeB),
     RingX3 = add_member(nodeA, RingX2, nodeC),
@@ -1831,17 +1839,17 @@ ring_version_test() ->
     %% RingA1 has most recent ring version
     {_, RingT1} = reconcile(RingA2#chstate{rvsn=vclock:increment(nodeA, RVsn)},
                             RingB2),
-    ?assertEqual(nodeA, index_owner(RingT1,0)),
+    ?assertEqual(nodeA, index_owner(RingT1, 0)),
 
     %% RingB1 has most recent ring version
     {_, RingT2} = reconcile(RingA2,
                             RingB2#chstate{rvsn=vclock:increment(nodeB, RVsn)}),
-    ?assertEqual(nodeB, index_owner(RingT2,0)),
+    ?assertEqual(nodeB, index_owner(RingT2, 0)),
 
     %% Divergent ring versions, merge based on claimant
     {_, RingT3} = reconcile(RingA2#chstate{rvsn=vclock:increment(nodeA, RVsn)},
                             RingB2#chstate{rvsn=vclock:increment(nodeB, RVsn)}),
-    ?assertEqual(nodeA, index_owner(RingT3,0)),
+    ?assertEqual(nodeA, index_owner(RingT3, 0)),
 
     %% Divergent ring versions, one valid claimant. Merge on claimant.
     RingA3 = RingA2#chstate{claimant=nodeA},
@@ -1850,10 +1858,10 @@ ring_version_test() ->
     RingB4 = remove_member(nodeB, RingB3, nodeA),
     {_, RingT4} = reconcile(RingA4#chstate{rvsn=vclock:increment(nodeA, RVsn)},
                             RingB3#chstate{rvsn=vclock:increment(nodeB, RVsn)}),
-    ?assertEqual(nodeA, index_owner(RingT4,0)),
+    ?assertEqual(nodeA, index_owner(RingT4, 0)),
     {_, RingT5} = reconcile(RingA3#chstate{rvsn=vclock:increment(nodeA, RVsn)},
                             RingB4#chstate{rvsn=vclock:increment(nodeB, RVsn)}),
-    ?assertEqual(nodeB, index_owner(RingT5,0)).
+    ?assertEqual(nodeB, index_owner(RingT5, 0)).
 
 reconcile_next_test() ->
     Next1 = [{0, nodeA, nodeB, [riak_pipe_vnode], awaiting},
@@ -1895,7 +1903,8 @@ resize_test() ->
     OrigIdx = element(1, hd(preflist(Key, Ring0))),
     %% for non-resize transitions index should be the same
     ?assertEqual(OrigIdx, future_index(Key, OrigIdx, undefined, Ring0)),
-    ?assertEqual(element(1, hd(preflist(Key, Ring2))), future_index(Key, OrigIdx, undefined, Ring3)).
+    ?assertEqual(element(1, hd(preflist(Key, Ring2))),
+                 future_index(Key, OrigIdx, undefined, Ring3)).
 
 resize_xfer_test_() ->
     {setup,

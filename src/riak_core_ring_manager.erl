@@ -81,8 +81,12 @@
          set_cluster_name/1,
          is_stable_ring/0]).
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-        terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -ifdef(TEST).
 
@@ -173,7 +177,7 @@ get_ring_id() ->
         [{_, Id}] ->
             Id;
         _ ->
-            {0,0}
+            {0, 0}
     end.
 
 %% @doc Return metadata for the given bucket. If a bucket
@@ -232,7 +236,7 @@ do_write_ringfile(Ring) ->
     case ring_dir() of
         "<nostore>" -> nop;
         Dir ->
-            {{Year, Month, Day},{Hour, Minute, Second}} = calendar:universal_time(),
+            {{Year, Month, Day}, {Hour, Minute, Second}} = calendar:universal_time(),
             TS = io_lib:format(".~B~2.10.0B~2.10.0B~2.10.0B~2.10.0B~2.10.0B",
                                [Year, Month, Day, Hour, Minute, Second]),
             Cluster = application:get_env(riak_core, cluster_name, undefined),
@@ -247,7 +251,7 @@ do_write_ringfile(Ring, FN) ->
     catch
         _:Err ->
             logger:error("Unable to write ring to \"~s\" - ~p\n", [FN, Err]),
-            {error,Err}
+            {error, Err}
     end.
 
 
@@ -258,7 +262,7 @@ find_latest_ringfile() ->
         {ok, Filenames} ->
             Cluster = application:get_env(riak_core, cluster_name, undefined),
             Timestamps = [list_to_integer(TS) || {"riak_core_ring", C1, TS} <-
-                                                     [list_to_tuple(string:tokens(FN, ".")) || FN <- Filenames],
+                                    [list_to_tuple(string:tokens(FN, ".")) || FN <- Filenames],
                                                  C1 =:= Cluster],
             SortedTimestamps = lists:reverse(lists:sort(Timestamps)),
             case SortedTimestamps of
@@ -286,7 +290,7 @@ prune_ringfiles() ->
         Dir ->
             Cluster = application:get_env(riak_core, cluster_name, undefined),
             case file:list_dir(Dir) of
-                {error,enoent} -> ok;
+                {error, enoent} -> ok;
                 {error, Reason} ->
                     {error, Reason};
                 {ok, []} -> ok;
@@ -296,18 +300,18 @@ prune_ringfiles() ->
                                         C1 =:= Cluster],
                     if Timestamps /= [] ->
                             %% there are existing ring files
-                            TSPat = [io_lib:fread("~4d~2d~2d~2d~2d~2d",TS) ||
+                            TSPat = [io_lib:fread("~4d~2d~2d~2d~2d~2d", TS) ||
                                         TS <- Timestamps],
                             TSL = lists:reverse(lists:sort([TS ||
-                                                               {ok,TS,[]} <- TSPat])),
+                                                               {ok, TS, []} <- TSPat])),
                             Keep = prune_list(TSL),
                             KeepTSs = [lists:flatten(
                                          io_lib:format(
-                                           "~B~2.10.0B~2.10.0B~2.10.0B~2.10.0B~2.10.0B",K))
+                                           "~B~2.10.0B~2.10.0B~2.10.0B~2.10.0B~2.10.0B", K))
                                        || K <- Keep],
                             DelFNs = [Dir ++ "/" ++ FN || FN <- Filenames,
                                                           lists:all(fun(TS) ->
-                                                                            string:str(FN,TS)=:=0
+                                                                            string:str(FN, TS)=:=0
                                                                     end, KeepTSs)],
                             _ = [file:delete(DelFN) || DelFN <- DelFNs],
                             ok;
@@ -342,7 +346,7 @@ init([Mode]) ->
     {ok, State}.
 
 reload_ring(test) ->
-    riak_core_ring:fresh(16,node());
+    riak_core_ring:fresh(16, node());
 reload_ring(live) ->
     case riak_core_ring_manager:find_latest_ringfile() of
         {ok, RingFile} ->
@@ -370,7 +374,7 @@ handle_call(get_raw_ring_chashbin, _From, #state{raw_ring=Ring} = State) ->
     {reply, {ok, Ring, CHBin}, State};
 handle_call({set_my_ring, Ring}, _From, State) ->
     State2 = prune_write_notify_ring(Ring, State),
-    {reply,ok,State2};
+    {reply, ok, State2};
 handle_call(refresh_my_ring, _From, State) ->
     %% This node is leaving the cluster so create a fresh ring file
     FreshRing = riak_core_ring:fresh(),
@@ -382,7 +386,7 @@ handle_call(refresh_my_ring, _From, State) ->
     %% so we can safely stop now.
     riak_core:stop("node removal completed, exiting."),
 
-    {reply,ok,State2};
+    {reply, ok, State2};
 handle_call({ring_trans, Fun, Args}, _From, State=#state{raw_ring=Ring}) ->
     case catch Fun(Ring, Args) of
         {new_ring, NewRing} ->
@@ -414,7 +418,7 @@ handle_call(is_stable_ring, _From, State) ->
     {reply, IsStable, State};
 
 handle_call(stop, _From, State) ->
-    {stop,normal, ok, State}.
+    {stop, normal, ok, State}.
 
 handle_cast({refresh_my_ring, ClusterName}, State) ->
     {ok, Ring} = get_my_ring(),
@@ -429,21 +433,21 @@ handle_cast(refresh_my_ring, State) ->
     {noreply, State2};
 
 handle_cast(write_ringfile, test) ->
-    {noreply,test};
+    {noreply, test};
 
 handle_cast(write_ringfile, State=#state{raw_ring=Ring}) ->
     ok = do_write_ringfile(Ring),
-    {noreply,State}.
+    {noreply, State}.
 
 
 handle_info(inactivity_timeout, State) ->
     case is_stable_ring(State) of
-        {true,DeltaMS} ->
+        {true, DeltaMS} ->
             logger:debug("Promoting ring after ~p", [DeltaMS]),
             promote_ring(),
             State2 = State#state{inactivity_timer=undefined},
             {noreply, State2};
-        {false,DeltaMS} ->
+        {false, DeltaMS} ->
             Remaining = ?PROMOTE_TIMEOUT - DeltaMS,
             State2 = set_timer(Remaining, State),
             {noreply, State2}
@@ -475,12 +479,12 @@ ring_dir() ->
     end.
 
 prune_list([X|Rest]) ->
-    lists:usort(lists:append([[X],back(1,X,Rest),back(2,X,Rest),
-                  back(3,X,Rest),back(4,X,Rest),back(5,X,Rest)])).
-back(_N,_X,[]) -> [];
-back(N,X,[H|T]) ->
-    case lists:nth(N,X) =:= lists:nth(N,H) of
-        true -> back(N,X,T);
+    lists:usort(lists:append([[X], back(1, X, Rest), back(2, X, Rest),
+                  back(3, X, Rest), back(4, X, Rest), back(5, X, Rest)])).
+back(_N, _X, []) -> [];
+back(N, X, [H|T]) ->
+    case lists:nth(N, X) =:= lists:nth(N, H) of
+        true -> back(N, X, T);
         false -> [H]
     end.
 
@@ -577,7 +581,7 @@ set_ring_global(Ring) ->
                         %% fixup the ring
                         NewBucketProps = run_fixups(Fixups, Bucket, MergedProps),
                         %% update the bucket in the ring
-                        riak_core_ring:update_meta({bucket,Bucket},
+                        riak_core_ring:update_meta({bucket, Bucket},
                             NewBucketProps,
                             AccRing)
                 end, Ring, Buckets)
@@ -598,13 +602,13 @@ set_ring_global(Ring) ->
     BucketMeta =
         [{{bucket, Bucket}, Meta}
          || Bucket <- riak_core_ring:get_buckets(TaintedRing),
-            {ok,Meta} <- [riak_core_ring:get_meta({bucket, Bucket}, TaintedRing)]],
+            {ok, Meta} <- [riak_core_ring:get_meta({bucket, Bucket}, TaintedRing)]],
     BucketMeta2 = lists:ukeysort(1, BucketMeta ++ BucketDefaults),
     CHBin = chashbin:create(riak_core_ring:chash(TaintedRing)),
     {Epoch, Id} = ets:lookup_element(?ETS, id, 2),
     Actions = [{ring, TaintedRing},
                {raw_ring, Ring},
-               {id, {Epoch,Id+1}},
+               {id, {Epoch, Id+1}},
                {chashbin, CHBin} | BucketMeta2],
     ets:insert(?ETS, Actions),
     ets:match_delete(?ETS, {{bucket, '_'}, undefined}),
@@ -645,27 +649,30 @@ is_stable_ring(#state{ring_changed_time=Then}) ->
 -ifdef(TEST).
 
 back_test() ->
-    X = [1,2,3],
-    List1 = [[1,2,3],[4,2,3], [7,8,3], [11,12,13], [1,2,3]],
-    List2 = [[7,8,9], [1,2,3]],
-    List3 = [[1,2,3]],
-    ?assertEqual([[4,2,3]], back(1, X, List1)),
-    ?assertEqual([[7,8,9]], back(1, X, List2)),
+    X = [1, 2, 3],
+    List1 = [[1, 2, 3], [4, 2, 3], [7, 8, 3], [11, 12, 13], [1, 2, 3]],
+    List2 = [[7, 8, 9], [1, 2, 3]],
+    List3 = [[1, 2, 3]],
+    ?assertEqual([[4, 2, 3]], back(1, X, List1)),
+    ?assertEqual([[7, 8, 9]], back(1, X, List2)),
     ?assertEqual([], back(1, X, List3)),
-    ?assertEqual([[7,8,3]], back(2, X, List1)),
-    ?assertEqual([[11,12,13]], back(3, X, List1)).
+    ?assertEqual([[7, 8, 3]], back(2, X, List1)),
+    ?assertEqual([[11, 12, 13]], back(3, X, List1)).
 
 prune_list_test() ->
-    TSList1 = [[2011,2,28,16,32,16],[2011,2,28,16,32,36],[2011,2,28,16,30,27],[2011,2,28,16,32,16],[2011,2,28,16,32,36]],
-    TSList2 = [[2011,2,28,16,32,36],[2011,2,28,16,31,16],[2011,2,28,16,30,27],[2011,2,28,16,32,16],[2011,2,28,16,32,36]],
-    PrunedList1 = [[2011,2,28,16,30,27],[2011,2,28,16,32,16]],
-    PrunedList2 = [[2011,2,28,16,31,16],[2011,2,28,16,32,36]],
+    TSList1 = [[2011, 2, 28, 16, 32, 16], [2011, 2, 28, 16, 32, 36], [2011, 2, 28, 16, 30, 27],
+               [2011, 2, 28, 16, 32, 16], [2011, 2, 28, 16, 32, 36]],
+
+    TSList2 = [[2011, 2, 28, 16, 32, 36], [2011, 2, 28, 16, 31, 16], [2011, 2, 28, 16, 30, 27],
+               [ 2011, 2, 28, 16, 32, 16], [2011, 2, 28, 16, 32, 36]],
+    PrunedList1 = [[2011, 2, 28, 16, 30, 27], [2011, 2, 28, 16, 32, 16]],
+    PrunedList2 = [[2011, 2, 28, 16, 31, 16], [2011, 2, 28, 16, 32, 36]],
     ?assertEqual(PrunedList1, prune_list(TSList1)),
     ?assertEqual(PrunedList2, prune_list(TSList2)).
 
 set_ring_global_test() ->
     setup_ets(test),
-    application:set_env(riak_core,ring_creation_size, 4),
+    application:set_env(riak_core, ring_creation_size, 4),
     Ring = riak_core_ring:fresh(),
     set_ring_global(Ring),
     promote_ring(),
@@ -674,7 +681,7 @@ set_ring_global_test() ->
 
 set_my_ring_test() ->
     setup_ets(test),
-    application:set_env(riak_core,ring_creation_size, 4),
+    application:set_env(riak_core, ring_creation_size, 4),
     Ring = riak_core_ring:fresh(),
     set_ring_global(Ring),
     {ok, MyRing} = get_my_ring(),
@@ -688,7 +695,7 @@ refresh_my_ring_test() ->
                          {ring_state_dir, "_build/test/tmp"},
                          {cluster_name, "test"}],
         [begin
-             put({?MODULE,AppKey}, application:get_env(riak_core, AppKey, undefined)),
+             put({?MODULE, AppKey}, application:get_env(riak_core, AppKey, undefined)),
              ok = application:set_env(riak_core, AppKey, Val)
          end || {AppKey, Val} <- Core_Settings],
         stop_core_processes(),
@@ -733,13 +740,13 @@ do_write_ringfile_test() ->
     %% Check write fails (create .tmp file with no write perms)
     ok = file:write_file(?TMP_RINGFILE, <<"no write for you">>),
     ok = file:change_mode(?TMP_RINGFILE, 8#00444),
-    ?assertMatch({error,_}, do_write_ringfile(GenR(tmp_perms), ?TEST_RINGFILE)),
+    ?assertMatch({error, _}, do_write_ringfile(GenR(tmp_perms), ?TEST_RINGFILE)),
     ok = file:change_mode(?TMP_RINGFILE, 8#00644),
     ok = file:delete(?TMP_RINGFILE),
 
     %% Check rename fails
     ok = file:change_mode(?TEST_RINGDIR, 8#00444),
-    ?assertMatch({error,_}, do_write_ringfile(GenR(ring_perms), ?TEST_RINGFILE)),
+    ?assertMatch({error, _}, do_write_ringfile(GenR(ring_perms), ?TEST_RINGFILE)),
     ok = file:change_mode(?TEST_RINGDIR, 8#00755),
 
     error_logger:tty(true),
@@ -749,13 +756,13 @@ do_write_ringfile_test() ->
     file:delete(RingFile).
 
 is_stable_ring_test() ->
-    {A,B,C} = Now = os:timestamp(),
+    {A, B, C} = Now = os:timestamp(),
     TimeoutSecs = ?PROMOTE_TIMEOUT div 1000,
     Within = {A, B - (TimeoutSecs div 2), C},
     Outside = {A, B - (TimeoutSecs + 1), C},
-    ?assertMatch({true,_},is_stable_ring(#state{ring_changed_time={0,0,0}})),
-    ?assertMatch({true,_},is_stable_ring(#state{ring_changed_time=Outside})),
-    ?assertMatch({false,_},is_stable_ring(#state{ring_changed_time=Within})),
-    ?assertMatch({false,_},is_stable_ring(#state{ring_changed_time=Now})).
+    ?assertMatch({true, _}, is_stable_ring(#state{ring_changed_time={0, 0, 0}})),
+    ?assertMatch({true, _}, is_stable_ring(#state{ring_changed_time=Outside})),
+    ?assertMatch({false, _}, is_stable_ring(#state{ring_changed_time=Within})),
+    ?assertMatch({false, _}, is_stable_ring(#state{ring_changed_time=Now})).
 
 -endif.

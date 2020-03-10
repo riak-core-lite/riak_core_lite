@@ -47,8 +47,12 @@
 
 -endif.
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -record(state, { status = up,
                  services = [],
@@ -718,7 +722,7 @@ health_fsm(checking, {'EXIT', Pid, Cause}, Service, #health_check{checking_pid =
                                                  callback_failures = Fails}};
         Fails < InCheck#health_check.max_callback_failures ->
             #health_check{health_failures = N, check_interval = Inter} = InCheck,
-            Tref = next_health_tref(N, Inter, Service), 
+            Tref = next_health_tref(N, Inter, Service),
             OutCheck = InCheck#health_check{checking_pid = undefined,
                 callback_failures = Fails, interval_tref = Tref},
             {ok, waiting, OutCheck};
