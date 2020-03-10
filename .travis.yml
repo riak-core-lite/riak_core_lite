@@ -13,6 +13,5 @@ script:
   - make xref
   - make dialyzer
   - make docs
-
 sudo: required
 dist: trusty
