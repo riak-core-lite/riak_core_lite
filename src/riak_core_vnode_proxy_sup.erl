@@ -21,6 +21,7 @@
 -behaviour(supervisor).
 
 -export([start_link/0, init/1]).
+
 -export([start_proxy/2, stop_proxy/2, start_proxies/1]).
 
 start_link() ->
@@ -31,17 +32,16 @@ init([]) ->
     %% modules. Ensures restart of proxies after a crash of this supervisor.
     Indices = get_indices(),
     VMods = riak_core:vnode_modules(),
-    Proxies = [proxy_ref(Mod, Index) || {_, Mod} <- VMods, Index <- Indices],
+    Proxies = [proxy_ref(Mod, Index)
+	       || {_, Mod} <- VMods, Index <- Indices],
     {ok, {{one_for_one, 5, 10}, Proxies}}.
 
 start_proxy(Mod, Index) ->
     Ref = proxy_ref(Mod, Index),
     Pid = case supervisor:start_child(?MODULE, Ref) of
-            {ok, Child} ->
-                Child;
-            {error, {already_started, Child}} ->
-                Child
-          end,
+	    {ok, Child} -> Child;
+	    {error, {already_started, Child}} -> Child
+	  end,
     Pid.
 
 stop_proxy(Mod, Index) ->
@@ -59,10 +59,7 @@ start_proxies(Mod) ->
 proxy_ref(Mod, Index) ->
     {{Mod, Index},
      {riak_core_vnode_proxy, start_link, [Mod, Index]},
-     permanent,
-     5000,
-     worker,
-     [riak_core_vnode_proxy]}.
+     permanent, 5000, worker, [riak_core_vnode_proxy]}.
 
 %% @private
 get_indices() ->

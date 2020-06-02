@@ -21,7 +21,8 @@
 %% -------------------------------------------------------------------
 -module(basho_stats_rv).
 
--export([uniform/0, exponential/1, poisson/1, normal/2]).
+-export([uniform/0, exponential/1, poisson/1,
+	 normal/2]).
 
 %% ====================================================================
 %% Public API
@@ -30,8 +31,7 @@
 %%
 %% Generates a uniformly-distributed random variable (wrapper for convenience)
 %%
-uniform() ->
-    rand:uniform().
+uniform() -> rand:uniform().
 
 %%
 %% Generates an exponential-distributed random variable, using inverse function
@@ -43,8 +43,7 @@ exponential(Lambda) ->
 %% Generates a Poisson-distributed random variable by summing exponential rvs
 %% (May be slow!!).
 %%
-poisson(Lambda) ->
-    poisson_rv_loop(Lambda, 0.0, -1).
+poisson(Lambda) -> poisson_rv_loop(Lambda, 0.0, -1).
 
 %%
 %% Generates a Normal-distributed random variable, using Box-Muller method
@@ -60,6 +59,6 @@ normal(Mean, Sigma) ->
 %% ====================================================================
 
 poisson_rv_loop(Lambda, Sum, N) when Sum < Lambda ->
-    poisson_rv_loop(Lambda, Sum - math:log(rand:uniform()), N + 1);
-poisson_rv_loop(_Lambda, _Sum, N) ->
-    N.
+    poisson_rv_loop(Lambda, Sum - math:log(rand:uniform()),
+		    N + 1);
+poisson_rv_loop(_Lambda, _Sum, N) -> N.
