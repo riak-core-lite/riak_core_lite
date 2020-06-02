@@ -35,7 +35,6 @@
          force_update/0,
          ring_sync_update/1,
          force_sync_update/0]).
-
 %% gen_event callbacks
 -export([init/1,
          handle_event/2,
@@ -44,7 +43,7 @@
          terminate/2,
          code_change/3]).
 
--record(state, { callback }).
+-record(state, {callback}).
 
 %% ===================================================================
 %% API functions
@@ -92,7 +91,7 @@ ring_sync_update(Ring) ->
 init([Fn]) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     Fn(Ring),
-    {ok, #state { callback = Fn }}.
+    {ok, #state{callback = Fn}}.
 
 handle_event({ring_update, Ring}, State) ->
     (State#state.callback)(Ring),
@@ -109,4 +108,3 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-

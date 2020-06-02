@@ -21,77 +21,33 @@
 %% @doc Various functions that are useful throughout Riak.
 -module(riak_core_util).
 
--export([moment/0,
-         make_tmp_dir/0,
-         replace_file/2,
-         compare_dates/2,
-         reload_all/1,
-         integer_to_list/2,
-         unique_id_62/0,
-         str_to_node/1,
-         chash_key/1, chash_key/2,
-         chash_std_keyfun/1,
-         chash_bucketonly_keyfun/1,
-         mkclientid/1,
-         start_app_deps/1,
-         build_tree/3,
-         orddict_delta/2,
-         safe_rpc/4,
-         safe_rpc/5,
-         rpc_every_member/4,
-         rpc_every_member_ann/4,
-         count/2,
-         keydelete/2,
-         multi_keydelete/2,
-         multi_keydelete/3,
-         compose/1,
-         compose/2,
-         pmap/2,
-         pmap/3,
-         multi_rpc/4,
-         multi_rpc/5,
-         multi_rpc_ann/4,
-         multi_rpc_ann/5,
-         multicall_ann/4,
-         multicall_ann/5,
-         shuffle/1,
-         is_arch/1,
-         format_ip_and_port/2,
-         peername/2,
-         sockname/2,
-         sha/1,
-         md5/1,
-         make_fold_req/1,
-         make_fold_req/2,
-         make_fold_req/4,
-         make_newest_fold_req/1,
-         proxy_spawn/1,
-         proxy/2,
-         enable_job_class/1,
-         enable_job_class/2,
-         disable_job_class/1,
-         disable_job_class/2,
-         job_class_enabled/1,
-         job_class_enabled/2,
-         job_class_disabled_message/2,
-         report_job_request_disposition/6,
-         responsible_preflists/1,
-         responsible_preflists/2,
-         get_index_n/1,
-         preflist_siblings/1,
-         posix_error/1
-        ]).
+-export([moment/0, make_tmp_dir/0, replace_file/2, compare_dates/2, reload_all/1,
+         integer_to_list/2, unique_id_62/0, str_to_node/1, chash_key/1, chash_key/2,
+         chash_std_keyfun/1, chash_bucketonly_keyfun/1, mkclientid/1, start_app_deps/1,
+         build_tree/3, orddict_delta/2, safe_rpc/4, safe_rpc/5, rpc_every_member/4,
+         rpc_every_member_ann/4, count/2, keydelete/2, multi_keydelete/2, multi_keydelete/3,
+         compose/1, compose/2, pmap/2, pmap/3, multi_rpc/4, multi_rpc/5, multi_rpc_ann/4,
+         multi_rpc_ann/5, multicall_ann/4, multicall_ann/5, shuffle/1, is_arch/1,
+         format_ip_and_port/2, peername/2, sockname/2, sha/1, md5/1, make_fold_req/1,
+         make_fold_req/2, make_fold_req/4, make_newest_fold_req/1, proxy_spawn/1, proxy/2,
+         enable_job_class/1, enable_job_class/2, disable_job_class/1, disable_job_class/2,
+         job_class_enabled/1, job_class_enabled/2, job_class_disabled_message/2,
+         report_job_request_disposition/6, responsible_preflists/1, responsible_preflists/2,
+         get_index_n/1, preflist_siblings/1, posix_error/1]).
 
 -include("riak_core_vnode.hrl").
 
 -ifdef(TEST).
 -ifdef(EQC).
+
 -include_lib("eqc/include/eqc.hrl").
+
 -endif. %% EQC
+
 -include_lib("eunit/include/eunit.hrl").
--export([counter_loop/1,
-         incr_counter/1,
-         decr_counter/1]).
+
+-export([counter_loop/1, incr_counter/1, decr_counter/1]).
+
 -endif. %% TEST
 
 -type riak_core_ring() :: riak_core_ring:riak_core_ring().
@@ -99,7 +55,7 @@
 -type index_n() :: {index(), pos_integer()}.
 
 %% R14 Compatibility
--compile({no_auto_import, [integer_to_list/2]}).
+-compile({no_auto_import, [{integer_to_list, 2}]}).
 
 %% ===================================================================
 %% Public API
@@ -110,10 +66,12 @@
 -define(SEC_TO_EPOCH, 62167219200).
 
 posix_error(Error) ->
-  case erl_posix_msg:message(Error) of
-    "unknown POSIX error" -> lists:flatten(io_lib:format("~p", [Error]));
-    Message -> Message
-  end.
+    case erl_posix_msg:message(Error) of
+      "unknown POSIX error" ->
+          lists:flatten(io_lib:format("~p", [Error]));
+      Message ->
+          Message
+    end.
 
 %% @spec moment() -> integer()
 %% @doc Get the current "moment".  Current implementation is the
@@ -122,12 +80,12 @@ posix_error(Error) ->
 
 moment() ->
     {Mega, Sec, _Micro} = os:timestamp(),
-    (Mega * 1000000) + Sec + ?SEC_TO_EPOCH.
+    Mega * 1000000 + Sec + ?SEC_TO_EPOCH.
 
 %% @spec compare_dates(string(), string()) -> boolean()
 %% @doc Compare two RFC1123 date strings or two now() tuples (or one
 %%      of each).  Return true if date A is later than date B.
-compare_dates(A={_, _, _}, B={_, _, _}) ->
+compare_dates(A = {_, _, _}, B = {_, _, _}) ->
     %% assume 3-tuples are now() times
     A > B;
 compare_dates(A, B) when is_list(A) ->
@@ -137,9 +95,8 @@ compare_dates(A, B) when is_list(B) ->
     compare_dates(A, rfc1123_to_now(B)).
 
 rfc1123_to_now(String) when is_list(String) ->
-    GSec = calendar:datetime_to_gregorian_seconds(
-             httpd_util:convert_request_date(String)),
-    ESec = GSec-?SEC_TO_EPOCH,
+    GSec = calendar:datetime_to_gregorian_seconds(httpd_util:convert_request_date(String)),
+    ESec = GSec - ?SEC_TO_EPOCH,
     Sec = ESec rem 1000000,
     MSec = ESec div 1000000,
     {MSec, Sec, 0}.
@@ -148,14 +105,14 @@ rfc1123_to_now(String) when is_list(String) ->
 %% @doc Create a unique directory in /tmp.  Returns the path
 %%      to the new directory.
 make_tmp_dir() ->
-    TmpId = io_lib:format("riptemp.~p",
-                          [erlang:phash2({riak_core_rand:uniform(), self()})]),
+    TmpId = io_lib:format("riptemp.~p", [erlang:phash2({riak_core_rand:uniform(), self()})]),
     TempDir = filename:join("/tmp", TmpId),
     case filelib:is_dir(TempDir) of
-        true -> make_tmp_dir();
-        false ->
-            ok = file:make_dir(TempDir),
-            TempDir
+      true ->
+          make_tmp_dir();
+      false ->
+          ok = file:make_dir(TempDir),
+          TempDir
     end.
 
 %% @doc Atomically/safely (to some reasonable level of durablity)
@@ -166,20 +123,21 @@ make_tmp_dir() ->
 replace_file(FN, Data) ->
     TmpFN = FN ++ ".tmp",
     case file:open(TmpFN, [write, raw]) of
-        {ok, FH} ->
-            try
-                ok = file:write(FH, Data),
-                ok = file:sync(FH),
-                ok = file:close(FH),
-                ok = file:rename(TmpFN, FN),
-                {ok, Contents} = read_file(FN),
-                true = (Contents == iolist_to_binary(Data)),
-                ok
-            catch _:Err ->
-                    {error, Err}
-            end;
-        Err ->
-            Err
+      {ok, FH} ->
+          try
+            ok = file:write(FH, Data),
+            ok = file:sync(FH),
+            ok = file:close(FH),
+            ok = file:rename(TmpFN, FN),
+            {ok, Contents} = read_file(FN),
+            true = Contents == iolist_to_binary(Data),
+            ok
+          catch
+            _:Err ->
+                {error, Err}
+          end;
+      Err ->
+          Err
     end.
 
 %% @doc Similar to {@link file:read_file/1} but uses raw file `I/O'
@@ -191,10 +149,10 @@ read_file(FName) ->
 
 read_file(FD, Acc) ->
     case file:read(FD, 4096) of
-        {ok, Data} ->
-            read_file(FD, [Data|Acc]);
-        eof ->
-            lists:reverse(Acc)
+      {ok, Data} ->
+          read_file(FD, [Data | Acc]);
+      eof ->
+          lists:reverse(Acc)
     end.
 
 %% @spec integer_to_list(Integer :: integer(), Base :: integer()) ->
@@ -204,11 +162,11 @@ read_file(FD, Acc) ->
 integer_to_list(I, 10) ->
     erlang:integer_to_list(I);
 integer_to_list(I, Base)
-  when is_integer(I), is_integer(Base), Base >= 2, Base =< 1+$Z-$A+10+1+$z-$a ->
+    when is_integer(I), is_integer(Base), Base >= 2, Base =< 1 + $Z - $A + 10 + 1 + $z - $a ->
     if I < 0 ->
-            [$-|integer_to_list(-I, Base, [])];
+           [$- | integer_to_list(-I, Base, [])];
        true ->
-            integer_to_list(I, Base, [])
+           integer_to_list(I, Base, [])
     end;
 integer_to_list(I, Base) ->
     erlang:error(badarg, [I, Base]).
@@ -218,16 +176,16 @@ integer_to_list(I0, Base, R0) ->
     D = I0 rem Base,
     I1 = I0 div Base,
     R1 = if D >= 36 ->
-         [D-36+$a|R0];
-        D >= 10 ->
-         [D-10+$A|R0];
-        true ->
-         [D+$0|R0]
-     end,
+                [D - 36 + $a | R0];
+            D >= 10 ->
+                [D - 10 + $A | R0];
+            true ->
+                [D + $0 | R0]
+         end,
     if I1 =:= 0 ->
-        R1;
+           R1;
        true ->
-        integer_to_list(I1, Base, R1)
+           integer_to_list(I1, Base, R1)
     end.
 
 sha(Bin) ->
@@ -250,13 +208,12 @@ unique_id_62() ->
 %% @doc Ask each member node of the riak ring to reload the given
 %%      Module.  Return is a list of the results of code:purge/1
 %%      and code:load_file/1 on each node.
--spec reload_all(Module :: atom()) ->
-         [{boolean(), {module, Module::atom()} | {error, term()}}].
+-spec reload_all(Module :: atom()) -> [{boolean(),
+                                        {module, Module :: atom()} | {error, term()}}].
 reload_all(Module) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
-    [{safe_rpc(Node, code, purge, [Module]),
-     safe_rpc(Node, code, load_file, [Module])} ||
-        Node <- riak_core_ring:all_members(Ring)].
+    [{safe_rpc(Node, code, purge, [Module]), safe_rpc(Node, code, load_file, [Module])}
+     || Node <- riak_core_ring:all_members(Ring)].
 
 %% @spec mkclientid(RemoteNode :: term()) -> ClientID :: list()
 %% @doc Create a unique-enough id for vclock clients.
@@ -268,7 +225,7 @@ mkclientid(RemoteNode) ->
 
 %% @spec chash_key(BKey :: riak_object:bkey()) -> chash:index()
 %% @doc Create a binary used for determining replica placement.
-chash_key({Bucket, _Key}=BKey) ->
+chash_key({Bucket, _Key} = BKey) ->
     BucketProps = riak_core_bucket:get_bucket(Bucket),
     chash_key(BKey, BucketProps).
 
@@ -276,43 +233,45 @@ chash_key({Bucket, _Key}=BKey) ->
 %%          chash:index()
 %% @doc Create a binary used for determining replica placement.
 chash_key({Bucket, Key}, _BucketProps) ->
-  %{_, {M, F}} = lists:keyfind(chash_keyfun, 1, BucketProps),
-  %M:F({Bucket,Key}).
-  % FIX static keyfun
-  chash_std_keyfun({Bucket, Key}).
+    %{_, {M, F}} = lists:keyfind(chash_keyfun, 1, BucketProps),
+    %M:F({Bucket,Key}).
+    % FIX static keyfun
+    chash_std_keyfun({Bucket, Key}).
 
 %% @spec chash_std_keyfun(BKey :: riak_object:bkey()) -> chash:index()
 %% @doc Default object/ring hashing fun, direct passthrough of bkey.
-chash_std_keyfun({Bucket, Key}) -> chash:key_of({Bucket, Key}).
+chash_std_keyfun({Bucket, Key}) ->
+    chash:key_of({Bucket, Key}).
 
 %% @spec chash_bucketonly_keyfun(BKey :: riak_object:bkey()) -> chash:index()
 %% @doc Object/ring hashing fun that ignores Key, only uses Bucket.
-chash_bucketonly_keyfun({Bucket, _Key}) -> chash:key_of(Bucket).
+chash_bucketonly_keyfun({Bucket, _Key}) ->
+    chash:key_of(Bucket).
 
 str_to_node(Node) when is_atom(Node) ->
     str_to_node(atom_to_list(Node));
 str_to_node(NodeStr) ->
     case string:tokens(NodeStr, "@") of
-        [NodeName] ->
-            %% Node name only; no host name. If the local node has a hostname,
-            %% append it
-            case node_hostname() of
-                [] ->
-                    list_to_atom(NodeName);
-                Hostname ->
-                    list_to_atom(NodeName ++ "@" ++ Hostname)
-            end;
-        _ ->
-            list_to_atom(NodeStr)
+      [NodeName] ->
+          %% Node name only; no host name. If the local node has a hostname,
+          %% append it
+          case node_hostname() of
+            [] ->
+                list_to_atom(NodeName);
+            Hostname ->
+                list_to_atom(NodeName ++ "@" ++ Hostname)
+          end;
+      _ ->
+          list_to_atom(NodeStr)
     end.
 
 node_hostname() ->
     NodeStr = atom_to_list(node()),
     case string:tokens(NodeStr, "@") of
-        [_NodeName, Hostname] ->
-            Hostname;
-        _ ->
-            []
+      [_NodeName, Hostname] ->
+          Hostname;
+      _ ->
+          []
     end.
 
 %% @spec start_app_deps(App :: atom()) -> ok
@@ -322,25 +281,26 @@ start_app_deps(App) ->
     _ = [ensure_started(A) || A <- DepApps],
     ok.
 
-
 %% @spec ensure_started(Application :: atom()) -> ok
 %% @doc Start the named application if not already started.
 ensure_started(App) ->
     case application:start(App) of
-    ok ->
-        ok;
-    {error, {already_started, App}} ->
-        ok
+      ok ->
+          ok;
+      {error, {already_started, App}} ->
+          ok
     end.
 
 %% @doc Applies `Pred' to each element in `List', and returns a count of how many
 %% applications returned `true'.
 -spec count(fun((term()) -> boolean()), [term()]) -> non_neg_integer().
 count(Pred, List) ->
-    FoldFun = fun(E, A) ->
+    FoldFun = fun (E, A) ->
                       case Pred(E) of
-                          false -> A;
-                          true -> A + 1
+                        false ->
+                            A;
+                        true ->
+                            A + 1
                       end
               end,
     lists:foldl(FoldFun, 0, List).
@@ -364,17 +324,18 @@ multi_keydelete(KeysToDelete, TupleList) ->
 %% there is such a tuple.
 -spec multi_keydelete([atom()], non_neg_integer(), [tuple()]) -> [tuple()].
 multi_keydelete(KeysToDelete, N, TupleList) ->
-    lists:foldl(
-      fun(Key, Acc) -> lists:keydelete(Key, N, Acc) end,
-      TupleList,
-      KeysToDelete).
+    lists:foldl(fun (Key, Acc) ->
+                        lists:keydelete(Key, N, Acc)
+                end,
+                TupleList,
+                KeysToDelete).
 
 %% @doc Function composition: returns a function that is the composition of
 %% `F' and `G'.
 -spec compose(F :: fun((B) -> C), G :: fun((A) -> B)) -> fun((A) -> C).
 compose(F, G) when is_function(F, 1), is_function(G, 1) ->
-    fun(X) ->
-        F(G(X))
+    fun (X) ->
+            F(G(X))
     end.
 
 %% @doc Function composition: returns a function that is the composition of all
@@ -385,133 +346,141 @@ compose(F, G) when is_function(F, 1), is_function(G, 1) ->
 compose([Fun]) ->
     Fun;
 compose(Funs) when is_list(Funs) ->
-    [Fun|Rest] = lists:reverse(Funs),
+    [Fun | Rest] = lists:reverse(Funs),
     lists:foldl(fun compose/2, Fun, Rest).
 
 %% @doc Invoke function `F' over each element of list `L' in parallel,
 %%      returning the results in the same order as the input list.
--spec pmap(F, L1) -> L2 when
-      F :: fun((A) -> B),
-      L1 :: [A],
-      L2 :: [B].
+-spec pmap(F, L1) -> L2 when F :: fun((A) -> B), L1 :: [A], L2 :: [B].
 pmap(F, L) ->
     Parent = self(),
-    lists:foldl(
-      fun(X, N) ->
-              spawn_link(fun() ->
-                                 Parent ! {pmap, N, F(X)}
-                         end),
-              N+1
-      end, 0, L),
-    L2 = [receive {pmap, N, R} -> {N, R} end || _ <- L],
+    lists:foldl(fun (X, N) ->
+                        spawn_link(fun () ->
+                                           Parent ! {pmap, N, F(X)}
+                                   end),
+                        N + 1
+                end,
+                0,
+                L),
+    L2 = [receive
+            {pmap, N, R} ->
+                {N, R}
+          end
+          || _ <- L],
     L3 = lists:keysort(1, L2),
     [R || {_, R} <- L3].
 
--record(pmap_acc, {
-                  mapper,
-                  fn,
-                  n_pending=0,
-                  pending=sets:new(),
-                  n_done=0,
-                  done=[],
-                  max_concurrent=1
-                  }).
+-record(pmap_acc,
+        {mapper,
+         fn,
+         n_pending = 0,
+         pending = sets:new(),
+         n_done = 0,
+         done = [],
+         max_concurrent = 1}).
 
 %% @doc Parallel map with a cap on the number of concurrent worker processes.
 %% Note: Worker processes are linked to the parent, so a crash propagates.
--spec pmap(Fun::function(), List::list(), MaxP::integer()) -> list().
+-spec pmap(Fun :: function(), List :: list(), MaxP :: integer()) -> list().
 pmap(Fun, List, MaxP) when MaxP < 1 ->
     pmap(Fun, List, 1);
 pmap(Fun, List, MaxP) when is_function(Fun), is_list(List), is_integer(MaxP) ->
     Mapper = self(),
-    #pmap_acc{pending=Pending, done=Done} =
-                 lists:foldl(fun pmap_worker/2,
-                             #pmap_acc{mapper=Mapper,
-                                       fn=Fun,
-                                       max_concurrent=MaxP},
-                             List),
+    #pmap_acc{pending = Pending, done = Done} = lists:foldl(fun pmap_worker/2,
+                                                            #pmap_acc{mapper = Mapper,
+                                                                      fn = Fun,
+                                                                      max_concurrent = MaxP},
+                                                            List),
     All = pmap_collect_rest(Pending, Done),
     % Restore input order
     Sorted = lists:keysort(1, All),
-    [ R || {_, R} <- Sorted ].
+    [R || {_, R} <- Sorted].
 
 %% @doc Fold function for {@link pmap/3} that spawns up to a max number of
 %% workers to execute the mapping function over the input list.
-pmap_worker(X, Acc = #pmap_acc{n_pending=NP,
-                               pending=Pending,
-                               n_done=ND,
-                               max_concurrent=MaxP,
-                               mapper=Mapper,
-                               fn=Fn})
-  when NP < MaxP ->
-    Worker =
-        spawn_link(fun() ->
-                           R = Fn(X),
-                           Mapper ! {pmap_result, self(), {NP+ND, R}}
-                   end),
-    Acc#pmap_acc{n_pending=NP+1, pending=sets:add_element(Worker, Pending)};
-pmap_worker(X, Acc = #pmap_acc{n_pending=NP,
-                               pending=Pending,
-                               n_done=ND,
-                               done=Done,
-                               max_concurrent=MaxP})
-  when NP == MaxP ->
+pmap_worker(X,
+            Acc = #pmap_acc{n_pending = NP,
+                            pending = Pending,
+                            n_done = ND,
+                            max_concurrent = MaxP,
+                            mapper = Mapper,
+                            fn = Fn})
+    when NP < MaxP ->
+    Worker = spawn_link(fun () ->
+                                R = Fn(X),
+                                Mapper ! {pmap_result, self(), {NP + ND, R}}
+                        end),
+    Acc#pmap_acc{n_pending = NP + 1, pending = sets:add_element(Worker, Pending)};
+pmap_worker(X,
+            Acc = #pmap_acc{n_pending = NP,
+                            pending = Pending,
+                            n_done = ND,
+                            done = Done,
+                            max_concurrent = MaxP})
+    when NP == MaxP ->
     {Result, NewPending} = pmap_collect_one(Pending),
-    pmap_worker(X, Acc#pmap_acc{n_pending=NP-1, pending=NewPending,
-                                n_done=ND+1, done=[Result|Done]}).
+    pmap_worker(X,
+                Acc#pmap_acc{n_pending = NP - 1,
+                             pending = NewPending,
+                             n_done = ND + 1,
+                             done = [Result | Done]}).
 
 %% @doc Waits for one pending pmap task to finish
 pmap_collect_one(Pending) ->
     receive
-        {pmap_result, Pid, Result} ->
-            Size = sets:size(Pending),
-            NewPending = sets:del_element(Pid, Pending),
-            case sets:size(NewPending) of
-                Size ->
-                    pmap_collect_one(Pending);
-                _ ->
-                    {Result, NewPending}
-            end
+      {pmap_result, Pid, Result} ->
+          Size = sets:size(Pending),
+          NewPending = sets:del_element(Pid, Pending),
+          case sets:size(NewPending) of
+            Size ->
+                pmap_collect_one(Pending);
+            _ ->
+                {Result, NewPending}
+          end
     end.
 
 pmap_collect_rest(Pending, Done) ->
     case sets:size(Pending) of
-        0 ->
-            Done;
-        _ ->
-            {Result, NewPending} = pmap_collect_one(Pending),
-            pmap_collect_rest(NewPending, [Result | Done])
+      0 ->
+          Done;
+      _ ->
+          {Result, NewPending} = pmap_collect_one(Pending),
+          pmap_collect_rest(NewPending, [Result | Done])
     end.
-
 
 %% @doc Wraps an rpc:call/4 in a try/catch to handle the case where the
 %%      'rex' process is not running on the remote node. This is safe in
 %%      the sense that it won't crash the calling process if the rex
 %%      process is down.
--spec safe_rpc(Node :: node(), Module :: atom(), Function :: atom(),
-        Args :: [any()]) -> {'badrpc', any()} | any().
+-spec safe_rpc(Node :: node(),
+               Module :: atom(),
+               Function :: atom(),
+               Args :: [any()]) -> {badrpc, any()} | any().
 safe_rpc(Node, Module, Function, Args) ->
     try rpc:call(Node, Module, Function, Args) of
-        Result ->
-            Result
+      Result ->
+          Result
     catch
-        exit:{noproc, _NoProcDetails} ->
-            {badrpc, rpc_process_down}
+      exit:{noproc, _NoProcDetails} ->
+          {badrpc, rpc_process_down}
     end.
 
 %% @doc Wraps an rpc:call/5 in a try/catch to handle the case where the
 %%      'rex' process is not running on the remote node. This is safe in
 %%      the sense that it won't crash the calling process if the rex
 %%      process is down.
--spec safe_rpc(Node :: node(), Module :: atom(), Function :: atom(),
-        Args :: [any()], Timeout :: timeout()) -> {'badrpc', any()} | any().
+-spec safe_rpc(Node :: node(),
+               Module :: atom(),
+               Function :: atom(),
+               Args :: [any()],
+               Timeout :: timeout()) -> {badrpc, any()} | any().
 safe_rpc(Node, Module, Function, Args, Timeout) ->
     try rpc:call(Node, Module, Function, Args, Timeout) of
-        Result ->
-            Result
+      Result ->
+          Result
     catch
-        'EXIT':{noproc, _NoProcDetails} ->
-            {badrpc, rpc_process_down}
+      'EXIT':{noproc, _NoProcDetails} ->
+          {badrpc, rpc_process_down}
     end.
 
 %% @spec rpc_every_member(atom(), atom(), [term()], integer()|infinity)
@@ -542,23 +511,22 @@ multi_rpc(Nodes, Mod, Fun, Args) ->
 %%      results in the same order as the input list.
 -spec multi_rpc([node()], module(), atom(), [any()], timeout()) -> [any()].
 multi_rpc(Nodes, Mod, Fun, Args, Timeout) ->
-    pmap(fun(Node) ->
+    pmap(fun (Node) ->
                  safe_rpc(Node, Mod, Fun, Args, Timeout)
-         end, Nodes).
+         end,
+         Nodes).
 
 %% @doc Perform an RPC call to a list of nodes in parallel, returning the
 %%      results in the same order as the input list. Each result is tagged
 %%      with the corresponding node name.
--spec multi_rpc_ann([node()], module(), atom(), [any()])
-                   -> [{node(), any()}].
+-spec multi_rpc_ann([node()], module(), atom(), [any()]) -> [{node(), any()}].
 multi_rpc_ann(Nodes, Mod, Fun, Args) ->
     multi_rpc_ann(Nodes, Mod, Fun, Args, infinity).
 
 %% @doc Perform an RPC call to a list of nodes in parallel, returning the
 %%      results in the same order as the input list. Each result is tagged
 %%      with the corresponding node name.
--spec multi_rpc_ann([node()], module(), atom(), [any()], timeout())
-                   -> [{node(), any()}].
+-spec multi_rpc_ann([node()], module(), atom(), [any()], timeout()) -> [{node(), any()}].
 multi_rpc_ann(Nodes, Mod, Fun, Args, Timeout) ->
     Results = multi_rpc(Nodes, Mod, Fun, Args, Timeout),
     lists:zip(Nodes, Results).
@@ -568,8 +536,8 @@ multi_rpc_ann(Nodes, Mod, Fun, Args, Timeout) ->
 %%      of nodes that are down/unreachable. The results will be returned in
 %%      the same order as the input list, and each result is tagged with the
 %%      corresponding node name.
--spec multicall_ann([node()], module(), atom(), [any()])
-                   -> {Results :: [{node(), any()}], Down :: [node()]}.
+-spec multicall_ann([node()], module(), atom(), [any()]) -> {Results :: [{node(), any()}],
+                                                             Down :: [node()]}.
 multicall_ann(Nodes, Mod, Fun, Args) ->
     multicall_ann(Nodes, Mod, Fun, Args, infinity).
 
@@ -578,14 +546,15 @@ multicall_ann(Nodes, Mod, Fun, Args) ->
 %%      of nodes that are down/unreachable. The results will be returned in
 %%      the same order as the input list, and each result is tagged with the
 %%      corresponding node name.
--spec multicall_ann([node()], module(), atom(), [any()], timeout())
-                   -> {Results :: [{node(), any()}], Down :: [node()]}.
+-spec multicall_ann([node()], module(), atom(), [any()], timeout()) -> {Results ::
+                                                                            [{node(), any()}],
+                                                                        Down :: [node()]}.
 multicall_ann(Nodes, Mod, Fun, Args, Timeout) ->
     L = multi_rpc_ann(Nodes, Mod, Fun, Args, Timeout),
-    {Results, DownAnn} =
-        lists:partition(fun({_, Result}) ->
-                                Result /= {badrpc, nodedown}
-                        end, L),
+    {Results, DownAnn} = lists:partition(fun ({_, Result}) ->
+                                                 Result /= {badrpc, nodedown}
+                                         end,
+                                         L),
     {Down, _} = lists:unzip(DownAnn),
     {Results, Down}.
 
@@ -596,45 +565,54 @@ multicall_ann(Nodes, Mod, Fun, Args, Timeout) ->
 %%      the array is logically wrapped around to ensure leaf nodes also
 %%      have children by giving them backedges to other elements.
 
--spec build_tree(N :: integer(), Nodes :: [term()], Opts :: [term()])
-                -> orddict:orddict().
+-spec build_tree(N :: integer(),
+                 Nodes :: [term()],
+                 Opts :: [term()]) -> orddict:orddict().
 build_tree(N, Nodes, Opts) ->
     case lists:member(cycles, Opts) of
-        true ->
-            Expand = lists:flatten(lists:duplicate(N+1, Nodes));
-        false ->
-            Expand = Nodes
+      true ->
+          Expand = lists:flatten(lists:duplicate(N + 1, Nodes));
+      false ->
+          Expand = Nodes
     end,
-    {Tree, _} =
-        lists:foldl(fun(Elm, {Result, Worklist}) ->
-                            Len = erlang:min(N, length(Worklist)),
-                            {Children, Rest} = lists:split(Len, Worklist),
-                            NewResult = [{Elm, Children} | Result],
-                            {NewResult, Rest}
-                    end, {[], tl(Expand)}, Nodes),
+    {Tree, _} = lists:foldl(fun (Elm, {Result, Worklist}) ->
+                                    Len = erlang:min(N, length(Worklist)),
+                                    {Children, Rest} = lists:split(Len, Worklist),
+                                    NewResult = [{Elm, Children} | Result],
+                                    {NewResult, Rest}
+                            end,
+                            {[], tl(Expand)},
+                            Nodes),
     orddict:from_list(Tree).
 
 orddict_delta(A, B) ->
     %% Pad both A and B to the same length
     DummyA = [{Key, '$none'} || {Key, _} <- B],
-    A2 = orddict:merge(fun(_, Value, _) ->
+    A2 = orddict:merge(fun (_, Value, _) ->
                                Value
-                       end, A, DummyA),
+                       end,
+                       A,
+                       DummyA),
 
     DummyB = [{Key, '$none'} || {Key, _} <- A],
-    B2 = orddict:merge(fun(_, Value, _) ->
+    B2 = orddict:merge(fun (_, Value, _) ->
                                Value
-                       end, B, DummyB),
+                       end,
+                       B,
+                       DummyB),
 
     %% Merge and filter out equal values
-    Merged = orddict:merge(fun(_, AVal, BVal) ->
+    Merged = orddict:merge(fun (_, AVal, BVal) ->
                                    {AVal, BVal}
-                           end, A2, B2),
-    Diff = orddict:filter(fun(_, {Same, Same}) ->
+                           end,
+                           A2,
+                           B2),
+    Diff = orddict:filter(fun (_, {Same, Same}) ->
                                   false;
-                             (_, _) ->
+                              (_, _) ->
                                   true
-                          end, Merged),
+                          end,
+                          Merged),
     Diff.
 
 shuffle(L) ->
@@ -644,47 +622,57 @@ shuffle(L) ->
     L3.
 
 %% Returns a forced-lowercase architecture for this node
--spec get_arch () -> string().
-get_arch () -> string:to_lower(erlang:system_info(system_architecture)).
+-spec get_arch() -> string().
+get_arch() ->
+    string:to_lower(erlang:system_info(system_architecture)).
 
 %% Checks if this node is of a given architecture
--spec is_arch (atom()) -> boolean().
-is_arch (linux) -> string:str(get_arch(), "linux") > 0;
-is_arch (darwin) -> string:str(get_arch(), "darwin") > 0;
-is_arch (sunos) -> string:str(get_arch(), "sunos") > 0;
-is_arch (osx) -> is_arch(darwin);
-is_arch (solaris) -> is_arch(sunos);
-is_arch (Arch) -> throw({unsupported_architecture, Arch}).
+-spec is_arch(atom()) -> boolean().
+is_arch(linux) ->
+    string:str(get_arch(), "linux") > 0;
+is_arch(darwin) ->
+    string:str(get_arch(), "darwin") > 0;
+is_arch(sunos) ->
+    string:str(get_arch(), "sunos") > 0;
+is_arch(osx) ->
+    is_arch(darwin);
+is_arch(solaris) ->
+    is_arch(sunos);
+is_arch(Arch) ->
+    throw({unsupported_architecture, Arch}).
 
 format_ip_and_port(Ip, Port) when is_list(Ip) ->
     lists:flatten(io_lib:format("~s:~p", [Ip, Port]));
 format_ip_and_port(Ip, Port) when is_tuple(Ip) ->
     lists:flatten(io_lib:format("~s:~p", [inet_parse:ntoa(Ip), Port])).
+
 peername(Socket, Transport) ->
     case Transport:peername(Socket) of
-        {ok, {Ip, Port}} ->
-            format_ip_and_port(Ip, Port);
-        {error, Reason} ->
-            %% just return a string so JSON doesn't blow up
-            lists:flatten(io_lib:format("error:~p", [Reason]))
+      {ok, {Ip, Port}} ->
+          format_ip_and_port(Ip, Port);
+      {error, Reason} ->
+          %% just return a string so JSON doesn't blow up
+          lists:flatten(io_lib:format("error:~p", [Reason]))
     end.
 
 sockname(Socket, Transport) ->
     case Transport:sockname(Socket) of
-        {ok, {Ip, Port}} ->
-            format_ip_and_port(Ip, Port);
-        {error, Reason} ->
-            %% just return a string so JSON doesn't blow up
-            lists:flatten(io_lib:format("error:~p", [Reason]))
+      {ok, {Ip, Port}} ->
+          format_ip_and_port(Ip, Port);
+      {error, Reason} ->
+          %% just return a string so JSON doesn't blow up
+          lists:flatten(io_lib:format("error:~p", [Reason]))
     end.
 
 %% @doc Convert a #riak_core_fold_req_v? record to the cluster's maximum
 %%      supported record version.
 
-make_fold_req(#riak_core_fold_req_v1{foldfun=FoldFun, acc0=Acc0}) ->
+make_fold_req(#riak_core_fold_req_v1{foldfun = FoldFun, acc0 = Acc0}) ->
     make_fold_req(FoldFun, Acc0, false, []);
-make_fold_req(#riak_core_fold_req_v2{foldfun=FoldFun, acc0=Acc0,
-                       forwardable=Forwardable, opts=Opts}) ->
+make_fold_req(#riak_core_fold_req_v2{foldfun = FoldFun,
+                                     acc0 = Acc0,
+                                     forwardable = Forwardable,
+                                     opts = Opts}) ->
     make_fold_req(FoldFun, Acc0, Forwardable, Opts).
 
 make_fold_req(FoldFun, Acc0) ->
@@ -696,7 +684,7 @@ make_fold_req(FoldFun, Acc0, Forwardable, Opts) ->
 %% @doc Force a #riak_core_fold_req_v? record to the latest version,
 %%      regardless of cluster support
 
-make_newest_fold_req(#riak_core_fold_req_v1{foldfun=FoldFun, acc0=Acc0}) ->
+make_newest_fold_req(#riak_core_fold_req_v1{foldfun = FoldFun, acc0 = Acc0}) ->
     make_fold_reqv(v2, FoldFun, Acc0, false, []);
 make_newest_fold_req(#riak_core_fold_req_v2{} = F) ->
     F.
@@ -710,31 +698,31 @@ proxy_spawn(Fun) ->
     MRef = monitor(process, Pid),
     Pid ! {proxy, MRef},
     receive
-        {proxy_reply, MRef, Result} ->
-            demonitor(MRef, [flush]),
-            Result;
-        {'DOWN', MRef, _, _, Reason} ->
-            {error, Reason}
+      {proxy_reply, MRef, Result} ->
+          demonitor(MRef, [flush]),
+          Result;
+      {'DOWN', MRef, _, _, Reason} ->
+          {error, Reason}
     end.
-
 
 %% @private
 make_fold_reqv(_, FoldFun, Acc0, Forwardable, Opts)
-  when is_function(FoldFun, 3)
-       andalso (Forwardable == true orelse Forwardable == false)
-       andalso is_list(Opts) ->
-    #riak_core_fold_req_v2{foldfun=FoldFun, acc0=Acc0,
-              forwardable=Forwardable, opts=Opts}.
+    when is_function(FoldFun, 3) andalso
+           (Forwardable == true orelse Forwardable == false) andalso is_list(Opts) ->
+    #riak_core_fold_req_v2{foldfun = FoldFun,
+                           acc0 = Acc0,
+                           forwardable = Forwardable,
+                           opts = Opts}.
 
 %% @private - used with proxy_spawn
 proxy(Parent, Fun) ->
     _ = monitor(process, Parent),
     receive
-        {proxy, MRef} ->
-            Result = Fun(),
-            Parent ! {proxy_reply, MRef, Result};
-        {'DOWN', _, _, _, _} ->
-            ok
+      {proxy, MRef} ->
+          Result = Fun(),
+          Parent ! {proxy_reply, MRef, Result};
+      {'DOWN', _, _, _, _} ->
+          ok
     end.
 
 -spec enable_job_class(atom(), atom()) -> ok | {error, term()}.
@@ -743,7 +731,7 @@ proxy(Parent, Fun) ->
 %% WARNING: This function is not suitable for parallel execution with itself
 %% or its complement disable_job_class/2.
 enable_job_class(Application, Operation)
-        when erlang:is_atom(Application) andalso erlang:is_atom(Operation) ->
+    when erlang:is_atom(Application) andalso erlang:is_atom(Operation) ->
     enable_job_class({Application, Operation});
 enable_job_class(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
@@ -754,7 +742,7 @@ enable_job_class(Application, Operation) ->
 %% WARNING: This function is not suitable for parallel execution with itself
 %% or its complement enable_job_class/2.
 disable_job_class(Application, Operation)
-        when erlang:is_atom(Application) andalso erlang:is_atom(Operation) ->
+    when erlang:is_atom(Application) andalso erlang:is_atom(Operation) ->
     disable_job_class({Application, Operation});
 disable_job_class(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
@@ -763,7 +751,7 @@ disable_job_class(Application, Operation) ->
 %% @doc Reports whether the specified Application/Operation job class is enabled.
 %% This is the public API for use via RPC.
 job_class_enabled(Application, Operation)
-        when erlang:is_atom(Application) andalso erlang:is_atom(Operation) ->
+    when erlang:is_atom(Application) andalso erlang:is_atom(Operation) ->
     job_class_enabled({Application, Operation});
 job_class_enabled(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
@@ -776,16 +764,15 @@ job_class_enabled(Application, Operation) ->
 %% You are STRONGLY advised to use enable_job_class/2.
 enable_job_class(Class) ->
     case application:get_env(riak_core, job_accept_class, undefined) of
-        [_|_] = EnabledClasses ->
-            case lists:member(Class, EnabledClasses) of
-                true ->
-                    ok;
-                _ ->
-                    application:set_env(
-                        riak_core, job_accept_class, [Class | EnabledClasses])
-            end;
-        _ ->
-            application:set_env(riak_core, job_accept_class, [Class])
+      [_ | _] = EnabledClasses ->
+          case lists:member(Class, EnabledClasses) of
+            true ->
+                ok;
+            _ ->
+                application:set_env(riak_core, job_accept_class, [Class | EnabledClasses])
+          end;
+      _ ->
+          application:set_env(riak_core, job_accept_class, [Class])
     end.
 
 -spec disable_job_class(Class :: term()) -> ok | {error, term()}.
@@ -796,16 +783,17 @@ enable_job_class(Class) ->
 %% You are STRONGLY advised to use disable_job_class/2.
 disable_job_class(Class) ->
     case application:get_env(riak_core, job_accept_class, undefined) of
-        [_|_] = EnabledClasses ->
-            case lists:member(Class, EnabledClasses) of
-                false ->
-                    ok;
-                _ ->
-                    application:set_env(riak_core, job_accept_class,
-                        lists:delete(Class, EnabledClasses))
-            end;
-        _ ->
-            ok
+      [_ | _] = EnabledClasses ->
+          case lists:member(Class, EnabledClasses) of
+            false ->
+                ok;
+            _ ->
+                application:set_env(riak_core,
+                                    job_accept_class,
+                                    lists:delete(Class, EnabledClasses))
+          end;
+      _ ->
+          ok
     end.
 
 -spec job_class_enabled(Class :: term()) -> boolean().
@@ -816,24 +804,23 @@ disable_job_class(Class) ->
 %% You are STRONGLY advised to use job_class_enabled/2.
 job_class_enabled(Class) ->
     case application:get_env(riak_core, job_accept_class, undefined) of
-        undefined ->
-            true;
-        [] ->
-            false;
-        [_|_] = EnabledClasses ->
-            lists:member(Class, EnabledClasses);
-        Other ->
-            % Don't crash if it's not a list - that should never be the case,
-            % but since the value *can* be manipulated externally be more
-            % accommodating. If someone mucks it up, nothing's going to be
-            % allowed, but give them a chance to catch on instead of crashing.
-            _ = logger:error(
-                "riak_core.job_accept_class is not a list: ~p", [Other]),
-            false
+      undefined ->
+          true;
+      [] ->
+          false;
+      [_ | _] = EnabledClasses ->
+          lists:member(Class, EnabledClasses);
+      Other ->
+          % Don't crash if it's not a list - that should never be the case,
+          % but since the value *can* be manipulated externally be more
+          % accommodating. If someone mucks it up, nothing's going to be
+          % allowed, but give them a chance to catch on instead of crashing.
+          _ = logger:error("riak_core.job_accept_class is not a list: ~p", [Other]),
+          false
     end.
 
--spec job_class_disabled_message(ReturnType :: atom(), Class :: term())
-        -> binary() | string().
+-spec job_class_disabled_message(ReturnType :: atom(), Class :: term()) -> binary() |
+                                                                           string().
 %% @doc The error message to be returned to a client for a disabled job class.
 %% WARNING:
 %% * This function is likely to be extended to accept a Job as well as a Class
@@ -843,9 +830,12 @@ job_class_disabled_message(binary, Class) ->
 job_class_disabled_message(text, Class) ->
     lists:flatten(io_lib:format("Operation '~p' is not enabled", [Class])).
 
--spec report_job_request_disposition(Accepted :: boolean(), Class :: term(),
-    Mod :: module(), Func :: atom(), Line :: pos_integer(), Client :: term())
-        -> ok | {error, term()}.
+-spec report_job_request_disposition(Accepted :: boolean(),
+                                     Class :: term(),
+                                     Mod :: module(),
+                                     Func :: atom(),
+                                     Line :: pos_integer(),
+                                     Client :: term()) -> ok | {error, term()}.
 %% @doc Report/record the disposition of an async job request.
 %%
 %% Logs an appropriate message and reports to whoever needs to know.
@@ -864,11 +854,13 @@ job_class_disabled_message(text, Class) ->
 %%    request was received.
 %%
 report_job_request_disposition(true, Class, Mod, Func, Line, Client) ->
-    logger:debug("Request '~p' accepted from ~p", [Class, Client],
-        #{pid => erlang:self(), module => Mod, function => Func, line => Line});
+    logger:debug("Request '~p' accepted from ~p",
+                 [Class, Client],
+                 #{pid => erlang:self(), module => Mod, function => Func, line => Line});
 report_job_request_disposition(false, Class, Mod, Func, Line, Client) ->
-    logger:warning("Request '~p' disabled from ~p", [Class, Client],
-        #{pid => erlang:self(), module => Mod, function => Func, line => Line}).
+    logger:warning("Request '~p' disabled from ~p",
+                   [Class, Client],
+                   #{pid => erlang:self(), module => Mod, function => Func, line => Line}).
 
 %% ===================================================================
 %% Preflist utility functions
@@ -903,8 +895,8 @@ preflist_siblings(Index, N, Ring) ->
     PL = riak_core_ring:preflist(IndexBin, Ring),
     Indices = [Idx || {Idx, _} <- PL],
     RevIndices = lists:reverse(Indices),
-    {Succ, _} = lists:split(N-1, Indices),
-    {Pred, _} = lists:split(N-1, tl(RevIndices)),
+    {Succ, _} = lists:split(N - 1, Indices),
+    {Pred, _} = lists:split(N - 1, tl(RevIndices)),
     lists:reverse(Pred) ++ Succ.
 
 -spec responsible_preflists(index()) -> [index_n()].
@@ -917,22 +909,23 @@ responsible_preflists(Index, Ring) ->
     AllN = determine_all_n(Ring),
     responsible_preflists(Index, AllN, Ring).
 
--spec responsible_preflists(index(), [pos_integer(), ...], riak_core_ring())
-                           -> [index_n()].
+-spec responsible_preflists(index(),
+                            [pos_integer(), ...],
+                            riak_core_ring()) -> [index_n()].
 responsible_preflists(Index, AllN, Ring) ->
     IndexBin = <<Index:160/integer>>,
     PL = riak_core_ring:preflist(IndexBin, Ring),
     Indices = [Idx || {Idx, _} <- PL],
     RevIndices = lists:reverse(Indices),
-    lists:flatmap(fun(N) ->
+    lists:flatmap(fun (N) ->
                           responsible_preflists_n(RevIndices, N)
-                  end, AllN).
+                  end,
+                  AllN).
 
 -spec responsible_preflists_n([index()], pos_integer()) -> [index_n()].
 responsible_preflists_n(RevIndices, N) ->
     {Pred, _} = lists:split(N, RevIndices),
     [{Idx, N} || Idx <- lists:reverse(Pred)].
-
 
 -spec determine_max_n(riak_core_ring()) -> pos_integer().
 determine_max_n(Ring) ->
@@ -944,12 +937,13 @@ determine_all_n(Ring) ->
     BucketProps = [riak_core_bucket:get_bucket(Bucket, Ring) || Bucket <- Buckets],
     Default = application:get_env(riak_core, default_bucket_props, undefined),
     DefaultN = proplists:get_value(n_val, Default),
-    AllN = lists:foldl(fun(Props, AllN) ->
+    AllN = lists:foldl(fun (Props, AllN) ->
                                N = proplists:get_value(n_val, Props),
                                ordsets:add_element(N, AllN)
-                       end, [DefaultN], BucketProps),
+                       end,
+                       [DefaultN],
+                       BucketProps),
     AllN.
-
 
 %% ===================================================================
 %% EUnit tests
@@ -962,23 +956,20 @@ moment_test() ->
     ?assert(M2 >= M1).
 
 clientid_uniqueness_test() ->
-    ClientIds = [mkclientid('somenode@somehost') || _I <- lists:seq(0, 10000)],
+    ClientIds = [mkclientid(somenode@somehost) || _I <- lists:seq(0, 10000)],
     length(ClientIds) =:= length(sets:to_list(sets:from_list(ClientIds))).
 
 build_tree_test() ->
-    Flat = [1,
-            11, 12,
-            111, 112, 121, 122,
-            1111, 1112, 1121, 1122, 1211, 1212, 1221, 1222],
+    Flat = [1, 11, 12, 111, 112, 121, 122, 1111, 1112, 1121, 1122, 1211, 1212, 1221, 1222],
 
     %% 2-ary tree decomposition
-    ATree = [{1,    [  11,   12]},
-             {11,   [ 111,  112]},
-             {12,   [ 121,  122]},
-             {111,  [1111, 1112]},
-             {112,  [1121, 1122]},
-             {121,  [1211, 1212]},
-             {122,  [1221, 1222]},
+    ATree = [{1, [11, 12]},
+             {11, [111, 112]},
+             {12, [121, 122]},
+             {111, [1111, 1112]},
+             {112, [1121, 1122]},
+             {121, [1211, 1212]},
+             {122, [1221, 1222]},
              {1111, []},
              {1112, []},
              {1121, []},
@@ -989,46 +980,45 @@ build_tree_test() ->
              {1222, []}],
 
     %% 2-ary tree decomposition with cyclic wrap-around
-    CTree = [{1,    [  11,   12]},
-             {11,   [ 111,  112]},
-             {12,   [ 121,  122]},
-             {111,  [1111, 1112]},
-             {112,  [1121, 1122]},
-             {121,  [1211, 1212]},
-             {122,  [1221, 1222]},
-             {1111, [   1,   11]},
-             {1112, [  12,  111]},
-             {1121, [ 112,  121]},
-             {1122, [ 122, 1111]},
+    CTree = [{1, [11, 12]},
+             {11, [111, 112]},
+             {12, [121, 122]},
+             {111, [1111, 1112]},
+             {112, [1121, 1122]},
+             {121, [1211, 1212]},
+             {122, [1221, 1222]},
+             {1111, [1, 11]},
+             {1112, [12, 111]},
+             {1121, [112, 121]},
+             {1122, [122, 1111]},
              {1211, [1112, 1121]},
              {1212, [1122, 1211]},
              {1221, [1212, 1221]},
-             {1222, [1222,    1]}],
+             {1222, [1222, 1]}],
 
     ?assertEqual(ATree, build_tree(2, Flat, [])),
     ?assertEqual(CTree, build_tree(2, Flat, [cycles])),
     ok.
 
-
 counter_loop(N) ->
     receive
-        {up, Pid} ->
-            N2=N+1,
-            Pid ! {counter_value, N2},
-            counter_loop(N2);
-        down ->
-            counter_loop(N-1);
-        exit ->
-            exit(normal)
+      {up, Pid} ->
+          N2 = N + 1,
+          Pid ! {counter_value, N2},
+          counter_loop(N2);
+      down ->
+          counter_loop(N - 1);
+      exit ->
+          exit(normal)
     end.
 
 incr_counter(CounterPid) ->
     CounterPid ! {up, self()},
     receive
-        {counter_value, N} -> N
-    after
-        3000 ->
-            ?assert(false)
+      {counter_value, N} ->
+          N
+      after 3000 ->
+                ?assert(false)
     end.
 
 decr_counter(CounterPid) ->
@@ -1042,47 +1032,72 @@ multi_keydelete_test_() ->
                  {ocaml, 1996},
                  {clojure, 2007},
                  {elixir, 2012}],
-    ?_assertMatch(
-       [{lisp, _}, {ml, _}, {erlang, _}, {haskell, _}],
-       multi_keydelete([ocaml, clojure, elixir], Languages)).
+    ?_assertMatch([{lisp, _}, {ml, _}, {erlang, _}, {haskell, _}],
+                  multi_keydelete([ocaml, clojure, elixir], Languages)).
 
 compose_test_() ->
     Upper = fun string:to_upper/1,
     Reverse = fun lists:reverse/1,
-    Strip = fun(S) -> string:strip(S, both, $!) end,
+    Strip = fun (S) ->
+                    string:strip(S, both, $!)
+            end,
     StripReverseUpper = compose([Upper, Reverse, Strip]),
 
-    Increment = fun(N) when is_integer(N) -> N + 1 end,
-    Double = fun(N) when is_integer(N) -> N * 2 end,
-    Square = fun(N) when is_integer(N) -> N * N end,
+    Increment = fun (N) when is_integer(N) ->
+                        N + 1
+                end,
+    Double = fun (N) when is_integer(N) ->
+                     N * 2
+             end,
+    Square = fun (N) when is_integer(N) ->
+                     N * N
+             end,
     SquareDoubleIncrement = compose([Increment, Double, Square]),
 
     CompatibleTypes = compose(Increment,
-                              fun(X) when is_list(X) -> list_to_integer(X) end),
+                              fun (X) when is_list(X) ->
+                                      list_to_integer(X)
+                              end),
     IncompatibleTypes = compose(Increment,
-                                fun(X) when is_binary(X) -> binary_to_list(X) end),
+                                fun (X) when is_binary(X) ->
+                                        binary_to_list(X)
+                                end),
     [?_assertEqual("DLROW OLLEH", StripReverseUpper("Hello world!")),
      ?_assertEqual(Increment(Double(Square(3))), SquareDoubleIncrement(3)),
      ?_assertMatch(4, CompatibleTypes("3")),
      ?_assertError(function_clause, IncompatibleTypes(<<"42">>)),
-     ?_assertError(function_clause, compose(fun(X, Y) -> {X, Y} end, fun(X) -> X end))].
+     ?_assertError(function_clause,
+                   compose(fun (X, Y) ->
+                                   {X, Y}
+                           end,
+                           fun (X) ->
+                                   X
+                           end))].
 
 pmap_test_() ->
-    Fgood = fun(X) -> 2 * X end,
-    Fbad = fun(3) -> throw(die_on_3);
-              (X) -> Fgood(X)
+    Fgood = fun (X) ->
+                    2 * X
+            end,
+    Fbad = fun (3) ->
+                   throw(die_on_3);
+               (X) ->
+                   Fgood(X)
            end,
     Lin = [1, 2, 3, 4],
     Lout = [2, 4, 6, 8],
     {setup,
-     fun() -> error_logger:tty(false) end,
-     fun(_) -> error_logger:tty(true) end,
-     [fun() ->
+     fun () ->
+             error_logger:tty(false)
+     end,
+     fun (_) ->
+             error_logger:tty(true)
+     end,
+     [fun () ->
               % Test simple map case
               ?assertEqual(Lout, pmap(Fgood, Lin)),
               % Verify a crashing process will not stall pmap
               Parent = self(),
-              Pid = spawn(fun() ->
+              Pid = spawn(fun () ->
                                   % Caller trapping exits causes stall!!
                                   % TODO: Consider pmapping in a spawned proc
                                   % process_flag(trap_exit, true),
@@ -1092,70 +1107,69 @@ pmap_test_() ->
                           end),
               MonRef = monitor(process, Pid),
               receive
-                  {'DOWN', MonRef, _, _, _} ->
-                      ok;
-                  no_crash_yo ->
-                      ?assert(pmap_did_not_crash_as_expected)
+                {'DOWN', MonRef, _, _, _} ->
+                    ok;
+                no_crash_yo ->
+                    ?assert(pmap_did_not_crash_as_expected)
               end
-      end
-     ]}.
+      end]}.
 
 bounded_pmap_test_() ->
-    Fun1 = fun(X) -> X+2 end,
-    Tests =
-    fun(CountPid) ->
-        GFun = fun(Max) ->
-                    fun(X) ->
-                            ?assert(incr_counter(CountPid) =< Max),
-                            timer:sleep(1),
-                            decr_counter(CountPid),
-                            Fun1(X)
-                    end
-               end,
-        [
-         fun() ->
-             ?assertEqual(lists:seq(Fun1(1), Fun1(N)),
-                          pmap(GFun(MaxP),
-                               lists:seq(1, N), MaxP))
-         end ||
-         MaxP <- lists:seq(1, 20),
-         N <- lists:seq(0, 10)
-        ]
-    end,
+    Fun1 = fun (X) ->
+                   X + 2
+           end,
+    Tests = fun (CountPid) ->
+                    GFun = fun (Max) ->
+                                   fun (X) ->
+                                           ?assert(incr_counter(CountPid) =< Max),
+                                           timer:sleep(1),
+                                           decr_counter(CountPid),
+                                           Fun1(X)
+                                   end
+                           end,
+                    [fun () ->
+                             ?assertEqual(lists:seq(Fun1(1), Fun1(N)),
+                                          pmap(GFun(MaxP), lists:seq(1, N), MaxP))
+                     end
+                     || MaxP <- lists:seq(1, 20), N <- lists:seq(0, 10)]
+            end,
     {setup,
-      fun() ->
-          Pid = spawn_link(?MODULE, counter_loop, [0]),
-          monitor(process, Pid),
-          Pid
-      end,
-      fun(Pid) ->
-          Pid ! exit,
-          receive
-              {'DOWN', _Ref, process, Pid, _Info} -> ok
-          after
-                  3000 ->
-                  ?debugMsg("pmap counter process did not go down in time"),
-                  ?assert(false)
-          end,
-          ok
-      end,
-      Tests
-     }.
+     fun () ->
+             Pid = spawn_link(?MODULE, counter_loop, [0]),
+             monitor(process, Pid),
+             Pid
+     end,
+     fun (Pid) ->
+             Pid ! exit,
+             receive
+               {'DOWN', _Ref, process, Pid, _Info} ->
+                   ok
+               after 3000 ->
+                         ?debugMsg("pmap counter process did not go down in time"),
+                         ?assert(false)
+             end,
+             ok
+     end,
+     Tests}.
 
 proxy_spawn_test() ->
-    A = proxy_spawn(fun() -> a end),
+    A = proxy_spawn(fun () ->
+                            a
+                    end),
     ?assertEqual(a, A),
-    B = proxy_spawn(fun() -> exit(killer_fun) end),
+    B = proxy_spawn(fun () ->
+                            exit(killer_fun)
+                    end),
     ?assertEqual({error, killer_fun}, B),
 
     %% Ensure no errant 'DOWN' messages
     receive
-        {'DOWN', _, _, _, _}=Msg ->
-            throw({error, {badmsg, Msg}});
-        _ ->
-            ok
-    after 1000 ->
-        ok
+      {'DOWN', _, _, _, _} = Msg ->
+          throw({error, {badmsg, Msg}});
+      _ ->
+          ok
+      after 1000 ->
+                ok
     end.
 
 -ifdef(EQC).
@@ -1164,8 +1178,13 @@ count_test() ->
     ?assert(eqc:quickcheck(prop_count_correct())).
 
 prop_count_correct() ->
-    ?FORALL(List, list(bool()),
-            count(fun(E) -> E end, List) =:= length([E || E <- List, E])).
+    ?FORALL(List,
+            list(bool()),
+            count(fun (E) ->
+                          E
+                  end,
+                  List)
+              =:= length([E || E <- List, E])).
 
 -endif. %% EQC
 -endif. %% TEST

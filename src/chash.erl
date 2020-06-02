@@ -54,10 +54,12 @@
 
 -export_type([chash/0, index/0, index_as_int/0]).
 
--define(RINGTOP, trunc(math:pow(2, 160)-1)).  % SHA-1 space
+-define(RINGTOP, trunc(math:pow(2, 160) - 1)).  % SHA-1 space
 
 -ifdef(TEST).
+
 -include_lib("eunit/include/eunit.hrl").
+
 -endif.
 
 -type chash() :: {num_partitions(), [node_entry()]}.
@@ -86,12 +88,11 @@ contains_name(Name, CHash) ->
 %%      initially all partitions are owned by the seednode.  If NumPartitions
 %%      is not much larger than the intended eventual number of
 %%       participating nodes, then performance will suffer.
--spec fresh(NumPartitions :: num_partitions(), SeedNode :: chash_node())
-            -> chash().
+-spec fresh(NumPartitions :: num_partitions(), SeedNode :: chash_node()) -> chash().
 fresh(NumPartitions, SeedNode) ->
     Inc = ring_increment(NumPartitions),
-    {NumPartitions, [{IndexAsInt, SeedNode} ||
-           IndexAsInt <- lists:seq(0, (?RINGTOP-1), Inc)]}.
+    {NumPartitions,
+     [{IndexAsInt, SeedNode} || IndexAsInt <- lists:seq(0, ?RINGTOP - 1, Inc)]}.
 
 %% @doc Find the Node that owns the partition identified by IndexAsInt.
 -spec lookup(IndexAsInt :: index_as_int(), CHash :: chash()) -> chash_node().
@@ -123,15 +124,15 @@ members(CHash) ->
 merge_rings(CHashA, CHashB) ->
     {NumPartitions, NodesA} = CHashA,
     {NumPartitions, NodesB} = CHashB,
-    {NumPartitions, [{I, random_node(A, B)} ||
-           {{I, A}, {I, B}} <- lists:zip(NodesA, NodesB)]}.
+    {NumPartitions,
+     [{I, random_node(A, B)} || {{I, A}, {I, B}} <- lists:zip(NodesA, NodesB)]}.
 
 %% @doc Given the integer representation of a chash key,
 %%      return the next ring index integer value.
 -spec next_index(IntegerKey :: integer(), CHash :: chash()) -> index_as_int().
 next_index(IntegerKey, {NumPartitions, _}) ->
-        Inc = ring_increment(NumPartitions),
-        (((IntegerKey div Inc) + 1) rem NumPartitions) * Inc.
+    Inc = ring_increment(NumPartitions),
+    (IntegerKey div Inc + 1) rem NumPartitions * Inc.
 
 %% @doc Return the entire set of NodeEntries in the ring.
 -spec nodes(CHash :: chash()) -> [node_entry()].
@@ -144,21 +145,21 @@ nodes(CHash) ->
 ordered_from(Index, {NumPartitions, Nodes}) ->
     <<IndexAsInt:160/integer>> = Index,
     Inc = ring_increment(NumPartitions),
-    {A, B} = lists:split((IndexAsInt div Inc)+1, Nodes),
+    {A, B} = lists:split(IndexAsInt div Inc + 1, Nodes),
     B ++ A.
 
 %% @doc Given an object key, return all NodeEntries in reverse order
 %%      starting at Index.
--spec predecessors(Index :: index() | index_as_int(), CHash :: chash())
-                    -> [node_entry()].
+-spec predecessors(Index :: index() | index_as_int(), CHash :: chash()) -> [node_entry()].
 predecessors(Index, CHash) ->
     {NumPartitions, _Nodes} = CHash,
     predecessors(Index, CHash, NumPartitions).
+
 %% @doc Given an object key, return the next N NodeEntries in reverse order
 %%      starting at Index.
 -spec predecessors(Index :: index() | index_as_int(),
-                    CHash :: chash(), N :: integer())
-                  -> [node_entry()].
+                   CHash :: chash(),
+                   N :: integer()) -> [node_entry()].
 predecessors(Index, CHash, N) when is_integer(Index) ->
     predecessors(<<Index:160/integer>>, CHash, N);
 predecessors(Index, CHash, N) ->
@@ -186,8 +187,7 @@ successors(Index, CHash) ->
 
 %% @doc Given an object key, return the next N NodeEntries in order
 %%      starting at Index.
--spec successors(Index :: index(), CHash :: chash(), N :: integer())
-                -> [node_entry()].
+-spec successors(Index :: index(), CHash :: chash(), N :: integer()) -> [node_entry()].
 successors(Index, CHash, N) ->
     Num = max_n(N, CHash),
     Ordered = ordered_from(Index, CHash),
@@ -201,9 +201,8 @@ successors(Index, CHash, N) ->
 
 %% @doc Make the partition beginning at IndexAsInt owned by Name'd node.
 -spec update(IndexAsInt :: index_as_int(),
-                Name :: chash_node(),
-                CHash :: chash())
-                    -> chash().
+             Name :: chash_node(),
+             CHash :: chash()) -> chash().
 update(IndexAsInt, Name, CHash) ->
     {NumPartitions, Nodes} = CHash,
     NewNodes = lists:keyreplace(IndexAsInt, 1, Nodes, {IndexAsInt, Name}),
@@ -222,8 +221,10 @@ max_n(N, {NumPartitions, _Nodes}) ->
 
 %% @private
 -spec random_node(NodeA :: chash_node(), NodeB :: chash_node()) -> chash_node().
-random_node(NodeA, NodeA) -> NodeA;
-random_node(NodeA, NodeB) -> lists:nth(rand:uniform(2), [NodeA, NodeB]).
+random_node(NodeA, NodeA) ->
+    NodeA;
+random_node(NodeA, NodeB) ->
+    lists:nth(rand:uniform(2), [NodeA, NodeB]).
 
 %% ===================================================================
 %% EUnit tests
@@ -231,22 +232,24 @@ random_node(NodeA, NodeB) -> lists:nth(rand:uniform(2), [NodeA, NodeB]).
 -ifdef(TEST).
 
 update_test() ->
-    Node = 'old@host', NewNode = 'new@host',
+    Node = old@host,
+    NewNode = new@host,
 
     % Create a fresh ring...
     CHash = chash:fresh(5, Node),
-    GetNthIndex =
-         fun(N, {_, Nodes}) -> {Index, _} =
-         lists:nth(N, Nodes), Index end,
+    GetNthIndex = fun (N, {_, Nodes}) ->
+                          {Index, _} = lists:nth(N, Nodes),
+                          Index
+                  end,
 
     % Test update...
     FirstIndex = GetNthIndex(1, CHash),
     ThirdIndex = GetNthIndex(3, CHash),
     {5, [{_, NewNode}, {_, Node}, {_, Node}, {_, Node}, {_, Node}, {_, Node}]} =
-         update(FirstIndex, NewNode, CHash),
+        update(FirstIndex, NewNode, CHash),
 
     {5, [{_, Node}, {_, Node}, {_, NewNode}, {_, Node}, {_, Node}, {_, Node}]} =
-         update(ThirdIndex, NewNode, CHash).
+        update(ThirdIndex, NewNode, CHash).
 
 contains_test() ->
     CHash = chash:fresh(8, the_node),
@@ -262,8 +265,8 @@ simple_size_test() ->
     ?assertEqual(8, length(chash:nodes(chash:fresh(8, the_node)))).
 
 successors_length_test() ->
-    ?assertEqual(8, length(chash:successors(chash:key_of(0),
-                                            chash:fresh(8, the_node)))).
+    ?assertEqual(8, length(chash:successors(chash:key_of(0), chash:fresh(8, the_node)))).
+
 inverse_pred_test() ->
     CHash = chash:fresh(8, the_node),
     S = [I || {I, _} <- chash:successors(chash:key_of(4), CHash)],

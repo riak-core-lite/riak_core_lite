@@ -32,7 +32,6 @@
          add_sup_callback/1,
          add_guarded_callback/1,
          service_update/1]).
-
 %% gen_event callbacks
 -export([init/1,
          handle_event/2,
@@ -41,7 +40,7 @@
          terminate/2,
          code_change/3]).
 
--record(state, { callback }).
+-record(state, {callback}).
 
 %% ===================================================================
 %% API functions
@@ -71,7 +70,6 @@ add_guarded_callback(Fn) when is_function(Fn) ->
 service_update(Services) ->
     gen_event:notify(?MODULE, {service_update, Services}).
 
-
 %% ===================================================================
 %% gen_event callbacks
 %% ===================================================================
@@ -79,7 +77,7 @@ service_update(Services) ->
 init([Fn]) ->
     %% Get the initial list of available services
     Fn(riak_core_node_watcher:services()),
-    {ok, #state { callback = Fn }}.
+    {ok, #state{callback = Fn}}.
 
 handle_event({service_update, Services}, State) ->
     (State#state.callback)(Services),
@@ -96,4 +94,3 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-

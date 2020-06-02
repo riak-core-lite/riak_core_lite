@@ -62,34 +62,40 @@ urlencode(Base64) when is_list(Base64) ->
     Padded = [urlencode_digit(D) || D <- Base64],
     string:strip(Padded, both, $=);
 urlencode(Base64) when is_binary(Base64) ->
-    Padded = << << (urlencode_digit(D)) >> || <<D>> <= Base64 >>,
+    Padded = << <<(urlencode_digit(D))>>  || <<D>> <= Base64 >>,
     binary:replace(Padded, <<"=">>, <<"">>, [global]).
 
 urldecode(Base64url) when is_list(Base64url) ->
-    Prepad = [urldecode_digit(D) || D <- Base64url ],
+    Prepad = [urldecode_digit(D) || D <- Base64url],
     Padding = padding(Prepad),
     Prepad ++ Padding;
 urldecode(Base64url) when is_binary(Base64url) ->
-    Prepad = << << (urldecode_digit(D)) >> || <<D>> <= Base64url >>,
+    Prepad = << <<(urldecode_digit(D))>>  || <<D>> <= Base64url >>,
     Padding = padding(Prepad),
     <<Prepad/binary, Padding/binary>>.
 
 padding(Base64) when is_binary(Base64) ->
-   case byte_size(Base64) rem 4 of
-        2 ->
-            <<"==">>;
-        3 ->
-            <<"=">>;
-        _ ->
-            <<"">>
+    case byte_size(Base64) rem 4 of
+      2 ->
+          <<"==">>;
+      3 ->
+          <<"=">>;
+      _ ->
+          <<"">>
     end;
 padding(Base64) when is_list(Base64) ->
     binary_to_list(padding(list_to_binary(Base64))).
 
-urlencode_digit($/) -> $_;
-urlencode_digit($+) -> $-;
-urlencode_digit(D)  -> D.
+urlencode_digit($/) ->
+    $_;
+urlencode_digit($+) ->
+    $-;
+urlencode_digit(D) ->
+    D.
 
-urldecode_digit($_) -> $/;
-urldecode_digit($-) -> $+;
-urldecode_digit(D)  -> D.
+urldecode_digit($_) ->
+    $/;
+urldecode_digit($-) ->
+    $+;
+urldecode_digit(D) ->
+    D.

@@ -33,25 +33,22 @@
 
 -behaviour(gen_server).
 
--export([start_link/0,
-         stop/0]).
-
+-export([start_link/0, stop/0]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
          handle_info/2,
          terminate/2,
          code_change/3]).
-
--export ([distribute_ring/1,
-          send_ring/1, send_ring/2,
-          remove_from_cluster/2,
-          remove_from_cluster/3,
-          random_gossip/1,
-          recursive_gossip/1,
-          random_recursive_gossip/1,
-          rejoin/2]).
-
+-export([distribute_ring/1,
+         send_ring/1,
+         send_ring/2,
+         remove_from_cluster/2,
+         remove_from_cluster/3,
+         random_gossip/1,
+         recursive_gossip/1,
+         random_recursive_gossip/1,
+         rejoin/2]).
 
 %% Default gossip rate: allow at most 45 gossip messages every 10 seconds
 -define(DEFAULT_LIMIT, {45, 10000}).
@@ -69,7 +66,8 @@ distribute_ring(Ring) ->
 
 %% send_ring/1 -
 %% Send the current node's ring to some other node.
-send_ring(ToNode) -> send_ring(node(), ToNode).
+send_ring(ToNode) ->
+    send_ring(node(), ToNode).
 
 %% send_ring/2 -
 %% Send the ring from one node to another node.
@@ -91,10 +89,10 @@ rejoin(Node, Ring) ->
 %% @doc Gossip state to a random node in the ring.
 random_gossip(Ring) ->
     case riak_core_ring:random_other_active_node(Ring) of
-        no_node -> % must be single node cluster
-            ok;
-        RandomNode ->
-            send_ring(node(), RandomNode)
+      no_node -> % must be single node cluster
+          ok;
+      RandomNode ->
+          send_ring(node(), RandomNode)
     end.
 
 %% @doc Gossip state to a fixed set of nodes determined from a binary
@@ -111,15 +109,16 @@ recursive_gossip(Ring, Node) ->
     Children = orddict:fetch(Node, Tree),
     _ = [send_ring(node(), OtherNode) || OtherNode <- Children],
     ok.
+
 recursive_gossip(Ring) ->
     %% A non-active member will not show-up in the tree decomposition
     %% and therefore we fallback to random_recursive_gossip as necessary.
     Active = riak_core_ring:active_members(Ring),
     case lists:member(node(), Active) of
-        true ->
-            recursive_gossip(Ring, node());
-        false ->
-            random_recursive_gossip(Ring)
+      true ->
+          recursive_gossip(Ring, node());
+      false ->
+          random_recursive_gossip(Ring)
     end.
 
 random_recursive_gossip(Ring) ->
@@ -142,26 +141,24 @@ handle_call(_, _From, State) ->
     {reply, ok, State}.
 
 %% @private
-handle_cast({send_ring_to, _Node}, State=#state{gossip_tokens=0}) ->
+handle_cast({send_ring_to, _Node}, State = #state{gossip_tokens = 0}) ->
     %% Out of gossip tokens, ignore the send request
     {noreply, State};
 handle_cast({send_ring_to, Node}, State) ->
     {ok, RingOut} = riak_core_ring_manager:get_raw_ring(),
     riak_core_ring:check_tainted(RingOut,
-                                 "Error: riak_core_gossip/send_ring_to :: "
-                                 "Sending tainted ring over gossip"),
+                                 "Error: riak_core_gossip/send_ring_to :: Sending tainted ring "
+                                 "over gossip"),
     gen_server:cast({?MODULE, Node}, {reconcile_ring, RingOut}),
     Tokens = State#state.gossip_tokens - 1,
-    {noreply, State#state{gossip_tokens=Tokens}};
-
+    {noreply, State#state{gossip_tokens = Tokens}};
 handle_cast({distribute_ring, Ring}, State) ->
     Nodes = riak_core_ring:active_members(Ring),
     riak_core_ring:check_tainted(Ring,
-                                 "Error: riak_core_gossip/distribute_ring :: "
-                                 "Sending tainted ring over gossip"),
+                                 "Error: riak_core_gossip/distribute_ring :: Sending tainted "
+                                 "ring over gossip"),
     gen_server:abcast(Nodes, ?MODULE, {reconcile_ring, Ring}),
     {noreply, State};
-
 handle_cast({reconcile_ring, OtherRing}, State) ->
     %% Compare the two rings, see if there is anything that
     %% must be done to make them equal...
@@ -169,32 +166,30 @@ handle_cast({reconcile_ring, OtherRing}, State) ->
     % riak_core_stat:update(gossip_received),
     riak_core_ring_manager:ring_trans(fun reconcile/2, [OtherRing]),
     {noreply, State};
-
 handle_cast(gossip_ring, State) ->
     % Gossip the ring to some random other node...
     {ok, MyRing} = riak_core_ring_manager:get_raw_ring(),
 
     random_gossip(MyRing),
     {noreply, State};
-
 handle_cast({rejoin, OtherRing}, State) ->
     {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
-    SameCluster = (riak_core_ring:cluster_name(Ring) =:=
-                       riak_core_ring:cluster_name(OtherRing)),
+    SameCluster = riak_core_ring:cluster_name(Ring) =:=
+                    riak_core_ring:cluster_name(OtherRing),
     case SameCluster of
-        true ->
-            OtherNode = riak_core_ring:owner_node(OtherRing),
-            case riak_core:join(node(), OtherNode, true, true) of
-                ok -> ok;
-                {error, Reason} ->
-                    logger:error("Could not rejoin cluster: ~p", [Reason]),
-                    ok
-            end,
-            {noreply, State};
-        false ->
-            {noreply, State}
+      true ->
+          OtherNode = riak_core_ring:owner_node(OtherRing),
+          case riak_core:join(node(), OtherNode, true, true) of
+            ok ->
+                ok;
+            {error, Reason} ->
+                logger:error("Could not rejoin cluster: ~p", [Reason]),
+                ok
+          end,
+          {noreply, State};
+      false ->
+          {noreply, State}
     end;
-
 handle_cast(_, State) ->
     {noreply, State}.
 
@@ -202,9 +197,9 @@ handle_info(reset_tokens, State) ->
     schedule_next_reset(),
     gen_server:cast(?MODULE, gossip_ring),
     {Tokens, _} = application:get_env(riak_core, gossip_limit, ?DEFAULT_LIMIT),
-    {noreply, State#state{gossip_tokens=Tokens}};
-
-handle_info(_Info, State) -> {noreply, State}.
+    {noreply, State#state{gossip_tokens = Tokens}};
+handle_info(_Info, State) ->
+    {noreply, State}.
 
 %% @private
 terminate(_Reason, _State) ->
@@ -213,7 +208,6 @@ terminate(_Reason, _State) ->
 %% @private
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
 
 %% ===================================================================
 %% Internal functions
@@ -229,44 +223,41 @@ reconcile(Ring0, [OtherRing0]) ->
     Node = node(),
     OtherNode = riak_core_ring:owner_node(OtherRing),
     Members = riak_core_ring:reconcile_members(Ring, OtherRing),
-    WrongCluster = (riak_core_ring:cluster_name(Ring) /=
-                    riak_core_ring:cluster_name(OtherRing)),
+    WrongCluster = riak_core_ring:cluster_name(Ring) /=
+                     riak_core_ring:cluster_name(OtherRing),
     PreStatus = riak_core_ring:member_status(Members, OtherNode),
-    IgnoreGossip = (WrongCluster or
-                    (PreStatus =:= invalid) or
-                    (PreStatus =:= down)),
+    IgnoreGossip = WrongCluster or (PreStatus =:= invalid) or (PreStatus =:= down),
     case IgnoreGossip of
-        true ->
-            Ring2 = Ring,
-            Changed = false;
-        false ->
-            {Changed, Ring2} =
-                riak_core_ring:reconcile(OtherRing, Ring)
+      true ->
+          Ring2 = Ring,
+          Changed = false;
+      false ->
+          {Changed, Ring2} = riak_core_ring:reconcile(OtherRing, Ring)
     end,
     OtherStatus = riak_core_ring:member_status(Ring2, OtherNode),
     case {WrongCluster, OtherStatus, Changed} of
-        {true, _, _} ->
-            %% TODO: Tell other node to stop gossiping to this node.
-            %% STATS
-            % riak_core_stat:update(ignored_gossip),
-            ignore;
-        {_, down, _} ->
-            %% Tell other node to rejoin the cluster.
-            riak_core_gossip:rejoin(OtherNode, Ring2),
-            ignore;
-        {_, invalid, _} ->
-            %% Exiting/Removed node never saw shutdown cast, re-send.
-            ClusterName = riak_core_ring:cluster_name(Ring),
-            riak_core_ring_manager:refresh_ring(OtherNode, ClusterName),
-            ignore;
-        {_, _, new_ring} ->
-            Ring3 = riak_core_ring:ring_changed(Node, Ring2),
-            %% STATS
-            % riak_core_stat:update(rings_reconciled),
-            log_membership_changes(Ring, Ring3),
-            {reconciled_ring, Ring3};
-        {_, _, _} ->
-            ignore
+      {true, _, _} ->
+          %% TODO: Tell other node to stop gossiping to this node.
+          %% STATS
+          % riak_core_stat:update(ignored_gossip),
+          ignore;
+      {_, down, _} ->
+          %% Tell other node to rejoin the cluster.
+          riak_core_gossip:rejoin(OtherNode, Ring2),
+          ignore;
+      {_, invalid, _} ->
+          %% Exiting/Removed node never saw shutdown cast, re-send.
+          ClusterName = riak_core_ring:cluster_name(Ring),
+          riak_core_ring_manager:refresh_ring(OtherNode, ClusterName),
+          ignore;
+      {_, _, new_ring} ->
+          Ring3 = riak_core_ring:ring_changed(Node, Ring2),
+          %% STATS
+          % riak_core_stat:update(rings_reconciled),
+          log_membership_changes(Ring, Ring3),
+          {reconciled_ring, Ring3};
+      {_, _, _} ->
+          ignore
     end.
 
 log_membership_changes(OldRing, NewRing) ->
@@ -277,28 +268,28 @@ log_membership_changes(OldRing, NewRing) ->
 
 do_log_membership_changes([], []) ->
     ok;
-do_log_membership_changes([{Node, Status}|Old], [{Node, Status}|New]) ->
+do_log_membership_changes([{Node, Status} | Old], [{Node, Status} | New]) ->
     %% No change
     do_log_membership_changes(Old, New);
-do_log_membership_changes([{Node, Status1}|Old], [{Node, Status2}|New]) ->
+do_log_membership_changes([{Node, Status1} | Old], [{Node, Status2} | New]) ->
     %% State changed, did not join or leave
     log_node_changed(Node, Status1, Status2),
     do_log_membership_changes(Old, New);
-do_log_membership_changes([{OldNode, _OldStatus}|_]=Old, [{NewNode, NewStatus}|New])
-    when NewNode < OldNode->
+do_log_membership_changes([{OldNode, _OldStatus} | _] = Old, [{NewNode, NewStatus} | New])
+    when NewNode < OldNode ->
     %% Node added
     log_node_added(NewNode, NewStatus),
     do_log_membership_changes(Old, New);
-do_log_membership_changes([{OldNode, OldStatus}|Old], [{NewNode, _NewStatus}|_]=New)
+do_log_membership_changes([{OldNode, OldStatus} | Old], [{NewNode, _NewStatus} | _] = New)
     when OldNode < NewNode ->
     %% Node removed
     log_node_removed(OldNode, OldStatus),
     do_log_membership_changes(Old, New);
-do_log_membership_changes([{OldNode, OldStatus}|Old], []) ->
+do_log_membership_changes([{OldNode, OldStatus} | Old], []) ->
     %% Trailing nodes were removed
     log_node_removed(OldNode, OldStatus),
     do_log_membership_changes(Old, []);
-do_log_membership_changes([], [{NewNode, NewStatus}|New]) ->
+do_log_membership_changes([], [{NewNode, NewStatus} | New]) ->
     %% Trailing nodes were added
     log_node_added(NewNode, NewStatus),
     do_log_membership_changes([], New).
@@ -320,69 +311,80 @@ remove_from_cluster(Ring, ExitingNode, Seed) ->
     AllOwners = riak_core_ring:all_owners(Ring),
 
     % Transfer indexes to other nodes...
-    ExitRing =
-        case attempt_simple_transfer(Seed, Ring, AllOwners, ExitingNode) of
-            {ok, NR} ->
-                NR;
-            target_n_fail ->
-                %% re-diagonalize
-                %% first hand off all claims to *any* one else,
-                %% just so rebalance doesn't include exiting node
-                Members = riak_core_ring:claiming_members(Ring),
-                Other = hd(lists:delete(ExitingNode, Members)),
-                TempRing = lists:foldl(
-                             fun({I, N}, R) when N == ExitingNode ->
-                                     riak_core_ring:transfer_node(I, Other, R);
-                                (_, R) -> R
-                             end,
-                             Ring,
-                             AllOwners),
-                riak_core_claim:claim_rebalance_n(TempRing, Other)
-        end,
+    ExitRing = case attempt_simple_transfer(Seed, Ring, AllOwners, ExitingNode) of
+                 {ok, NR} ->
+                     NR;
+                 target_n_fail ->
+                     %% re-diagonalize
+                     %% first hand off all claims to *any* one else,
+                     %% just so rebalance doesn't include exiting node
+                     Members = riak_core_ring:claiming_members(Ring),
+                     Other = hd(lists:delete(ExitingNode, Members)),
+                     TempRing = lists:foldl(fun ({I, N}, R) when N == ExitingNode ->
+                                                    riak_core_ring:transfer_node(I, Other, R);
+                                                (_, R) ->
+                                                    R
+                                            end,
+                                            Ring,
+                                            AllOwners),
+                     riak_core_claim:claim_rebalance_n(TempRing, Other)
+               end,
     ExitRing.
 
 attempt_simple_transfer(Seed, Ring, Owners, ExitingNode) ->
     TargetN = application:get_env(riak_core, target_n_val, undefined),
-    attempt_simple_transfer(Seed, Ring, Owners,
+    attempt_simple_transfer(Seed,
+                            Ring,
+                            Owners,
                             TargetN,
-                            ExitingNode, 0,
-                            [{O, -TargetN} || O <- riak_core_ring:claiming_members(Ring),
-                                             O /= ExitingNode]).
-attempt_simple_transfer(Seed, Ring, [{P, Exit}|Rest], TargetN, Exit, Idx, Last) ->
+                            ExitingNode,
+                            0,
+                            [{O, -TargetN}
+                             || O <- riak_core_ring:claiming_members(Ring), O /= ExitingNode]).
+
+attempt_simple_transfer(Seed, Ring, [{P, Exit} | Rest], TargetN, Exit, Idx, Last) ->
     %% handoff
-    case [ N || {N, I} <- Last, Idx-I >= TargetN ] of
-        [] ->
-            target_n_fail;
-        Candidates ->
-            %% these nodes don't violate target_n in the reverse direction
-            StepsToNext = fun(Node) ->
-                                  length(lists:takewhile(
-                                           fun({_, Owner}) -> Node /= Owner end,
-                                           Rest))
-                          end,
-            case lists:filter(fun(N) ->
-                                 Next = StepsToNext(N),
-                                 (Next+1 >= TargetN)
-                                          orelse (Next == length(Rest))
-                              end,
-                              Candidates) of
-                [] ->
-                    target_n_fail;
-                Qualifiers ->
-                    %% these nodes don't violate target_n forward
-                    {Rand, Seed2} = riak_core_rand:uniform_s(length(Qualifiers), Seed),
-                    Chosen = lists:nth(Rand, Qualifiers),
-                    %% choose one, and do the rest of the ring
-                    attempt_simple_transfer(
-                      Seed2,
-                      riak_core_ring:transfer_node(P, Chosen, Ring),
-                      Rest, TargetN, Exit, Idx+1,
-                      lists:keyreplace(Chosen, 1, Last, {Chosen, Idx}))
-            end
+    case [N || {N, I} <- Last, Idx - I >= TargetN] of
+      [] ->
+          target_n_fail;
+      Candidates ->
+          %% these nodes don't violate target_n in the reverse direction
+          StepsToNext = fun (Node) ->
+                                length(lists:takewhile(fun ({_, Owner}) ->
+                                                               Node /= Owner
+                                                       end,
+                                                       Rest))
+                        end,
+          case lists:filter(fun (N) ->
+                                    Next = StepsToNext(N),
+                                    Next + 1 >= TargetN orelse Next == length(Rest)
+                            end,
+                            Candidates)
+              of
+            [] ->
+                target_n_fail;
+            Qualifiers ->
+                %% these nodes don't violate target_n forward
+                {Rand, Seed2} = riak_core_rand:uniform_s(length(Qualifiers), Seed),
+                Chosen = lists:nth(Rand, Qualifiers),
+                %% choose one, and do the rest of the ring
+                attempt_simple_transfer(Seed2,
+                                        riak_core_ring:transfer_node(P, Chosen, Ring),
+                                        Rest,
+                                        TargetN,
+                                        Exit,
+                                        Idx + 1,
+                                        lists:keyreplace(Chosen, 1, Last, {Chosen, Idx}))
+          end
     end;
-attempt_simple_transfer(Seed, Ring, [{_, N}|Rest], TargetN, Exit, Idx, Last) ->
+attempt_simple_transfer(Seed, Ring, [{_, N} | Rest], TargetN, Exit, Idx, Last) ->
     %% just keep track of seeing this node
-    attempt_simple_transfer(Seed, Ring, Rest, TargetN, Exit, Idx+1,
+    attempt_simple_transfer(Seed,
+                            Ring,
+                            Rest,
+                            TargetN,
+                            Exit,
+                            Idx + 1,
                             lists:keyreplace(N, 1, Last, {N, Idx}));
 attempt_simple_transfer(_, Ring, [], _, _, _, _) ->
     {ok, Ring}.

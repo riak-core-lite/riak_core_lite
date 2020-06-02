@@ -21,11 +21,7 @@
 %% -------------------------------------------------------------------
 -module(basho_stats_rv).
 
--export([uniform/0,
-         exponential/1,
-         poisson/1,
-         normal/2]).
-
+-export([uniform/0, exponential/1, poisson/1, normal/2]).
 
 %% ====================================================================
 %% Public API
@@ -56,15 +52,14 @@ poisson(Lambda) ->
 normal(Mean, Sigma) ->
     Rv1 = rand:uniform(),
     Rv2 = rand:uniform(),
-    Rho = math:sqrt(-2 * math:log(1-Rv2)),
+    Rho = math:sqrt(-2 * math:log(1 - Rv2)),
     Rho * math:cos(2 * math:pi() * Rv1) * Sigma + Mean.
-
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
 poisson_rv_loop(Lambda, Sum, N) when Sum < Lambda ->
-    poisson_rv_loop(Lambda, Sum - math:log(rand:uniform()), N+1);
+    poisson_rv_loop(Lambda, Sum - math:log(rand:uniform()), N + 1);
 poisson_rv_loop(_Lambda, _Sum, N) ->
     N.

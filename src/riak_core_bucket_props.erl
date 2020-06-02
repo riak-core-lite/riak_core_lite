@@ -19,53 +19,65 @@
 %% -------------------------------------------------------------------
 -module(riak_core_bucket_props).
 
--export([merge/2,
-         validate/4,
-         resolve/2,
-         defaults/0,
-         append_defaults/1]).
+-export([merge/2, validate/4, resolve/2, defaults/0, append_defaults/1]).
 
 -ifdef(TEST).
+
 -include_lib("eunit/include/eunit.hrl").
+
 -endif.
 
 -spec merge([{atom(), any()}], [{atom(), any()}]) -> [{atom(), any()}].
 merge(Overriding, Other) ->
-    lists:ukeymerge(1, lists:ukeysort(1, Overriding),
-                    lists:ukeysort(1, Other)).
-
+    lists:ukeymerge(1, lists:ukeysort(1, Overriding), lists:ukeysort(1, Other)).
 
 -spec validate(create | update,
                {riak_core_bucket:bucket_type(), undefined | binary()} | binary(),
-                undefined | [{atom(), any()}],
-                [{atom(), any()}])
-                -> {ok, [{atom(), any()}]} | {error, [{atom(), atom()}]}.
+               undefined | [{atom(), any()}],
+               [{atom(), any()}]) -> {ok, [{atom(), any()}]} | {error, [{atom(), atom()}]}.
 validate(CreateOrUpdate, Bucket, ExistingProps, BucketProps) ->
     ReservedErrors = validate_reserved_names(Bucket),
     CoreErrors = validate_core_props(CreateOrUpdate, Bucket, ExistingProps, BucketProps),
-    validate(CreateOrUpdate, Bucket, ExistingProps, BucketProps,
-             riak_core:bucket_validators(), [ReservedErrors, CoreErrors]).
+    validate(CreateOrUpdate,
+             Bucket,
+             ExistingProps,
+             BucketProps,
+             riak_core:bucket_validators(),
+             [ReservedErrors, CoreErrors]).
 
 validate(_CreateOrUpdate, _Bucket, _ExistingProps, Props, [], ErrorLists) ->
     case lists:flatten(ErrorLists) of
-        [] -> {ok, Props};
-        Errors -> {error, Errors}
+      [] ->
+          {ok, Props};
+      Errors ->
+          {error, Errors}
     end;
-validate(CreateOrUpdate, Bucket, ExistingProps, BucketProps0, [{_App, Validator}|T], Errors0) ->
-    {BucketProps, Errors} = Validator:validate(CreateOrUpdate, Bucket, ExistingProps, BucketProps0),
-    validate(CreateOrUpdate, Bucket, ExistingProps, BucketProps, T, [Errors|Errors0]).
+validate(CreateOrUpdate,
+         Bucket,
+         ExistingProps,
+         BucketProps0,
+         [{_App, Validator} | T],
+         Errors0) ->
+    {BucketProps, Errors} = Validator:validate(CreateOrUpdate,
+                                               Bucket,
+                                               ExistingProps,
+                                               BucketProps0),
+    validate(CreateOrUpdate, Bucket, ExistingProps, BucketProps, T, [Errors | Errors0]).
 
 validate_core_props(CreateOrUpdate, Bucket, ExistingProps, BucketProps) ->
-    lists:foldl(fun(Prop, Errors) ->
+    lists:foldl(fun (Prop, Errors) ->
                         case validate_core_prop(CreateOrUpdate, Bucket, ExistingProps, Prop) of
-                            true ->  Errors;
-                            Error -> [Error | Errors]
+                          true ->
+                              Errors;
+                          Error ->
+                              [Error | Errors]
                         end
-                end, [], BucketProps).
+                end,
+                [],
+                BucketProps).
 
-validate_core_prop(create, {_Bucket, undefined},
-                   undefined, {claimant, Claimant})
-                   when Claimant =:= node()->
+validate_core_prop(create, {_Bucket, undefined}, undefined, {claimant, Claimant})
+    when Claimant =:= node() ->
     %% claimant valid on first call to create if claimant is this node
     true;
 validate_core_prop(create, {_Bucket, undefined}, undefined, {claimant, _BadClaimant}) ->
@@ -74,9 +86,12 @@ validate_core_prop(create, {_Bucket, undefined}, undefined, {claimant, _BadClaim
 validate_core_prop(create, {_Bucket, undefined}, Existing, {claimant, Claimant}) ->
     %% subsequent creation calls cannot modify claimant and it should exist
     case lists:keyfind(claimant, 1, Existing) of
-        false -> {claimant, "No claimant details found in existing properties"};
-        {claimant, Claimant} -> true;
-        {claimant, _Other} -> {claimant, "Cannot modify claimant property"}
+      false ->
+          {claimant, "No claimant details found in existing properties"};
+      {claimant, Claimant} ->
+          true;
+      {claimant, _Other} ->
+          {claimant, "Cannot modify claimant property"}
     end;
 validate_core_prop(update, {_Bucket, _BucketName}, _Existing, {claimant, _Claimant}) ->
     %% cannot update claimant
@@ -110,8 +125,10 @@ validate_core_prop(_, _, _, _) ->
 
 validate_reserved_names(Bucket) ->
     case validate_reserved_name(Bucket) of
-        ok -> [];
-        ErrStr -> [{reserved_name, ErrStr}]
+      ok ->
+          [];
+      ErrStr ->
+          [{reserved_name, ErrStr}]
     end.
 
 validate_reserved_name({<<"any">>, _}) ->
@@ -128,26 +145,27 @@ append_defaults(Items) when is_list(Items) ->
     OldDefaults = application:get_env(riak_core, default_bucket_props, []),
     NewDefaults = merge(OldDefaults, Items),
     FixedDefaults = case riak_core:bucket_fixups() of
-        [] -> NewDefaults;
-        Fixups ->
-            riak_core_ring_manager:run_fixups(Fixups, default, NewDefaults)
-    end,
+                      [] ->
+                          NewDefaults;
+                      Fixups ->
+                          riak_core_ring_manager:run_fixups(Fixups, default, NewDefaults)
+                    end,
     application:set_env(riak_core, default_bucket_props, FixedDefaults),
     %% do a noop transform on the ring, to make the fixups re-run
-    catch(riak_core_ring_manager:ring_trans(fun(Ring, _) ->
+    catch riak_core_ring_manager:ring_trans(fun (Ring, _) ->
                                                     {new_ring, Ring}
-                                            end, undefined)),
+                                            end,
+                                            undefined),
     ok.
 
 -spec resolve([{atom(), any()}], [{atom(), any()}]) -> [{atom(), any()}].
 %%noinspection ErlangUnusedVariable
-resolve(PropsA, PropsB) when is_list(PropsA) andalso
-                             is_list(PropsB) ->
+resolve(PropsA, PropsB) when is_list(PropsA) andalso is_list(PropsB) ->
     PropsASorted = lists:ukeysort(1, PropsA),
     PropsBSorted = lists:ukeysort(1, PropsB),
-    {_, Resolved} = lists:foldl(fun({KeyA, _}=PropA, {[{KeyA, _}=PropB | RestB], Acc}) ->
+    {_, Resolved} = lists:foldl(fun ({KeyA, _} = PropA, {[{KeyA, _} = PropB | RestB], Acc}) ->
                                         {RestB, [{KeyA, resolve_prop(PropA, PropB)} | Acc]};
-                                   (PropA, {RestB, Acc}) ->
+                                    (PropA, {RestB, Acc}) ->
                                         {RestB, [PropA | Acc]}
                                 end,
                                 {PropsBSorted, []},
@@ -268,4 +286,3 @@ simple_resolve_test() ->
     ?assertEqual(lists:ukeysort(1, Expected), lists:ukeysort(1, resolve(Props1, Props2))).
 
 -endif.
-

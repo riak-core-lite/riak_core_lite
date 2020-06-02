@@ -19,27 +19,24 @@
 %% -------------------------------------------------------------------
 
 -module(riak_core_handoff_receiver_sup).
+
 -behaviour(supervisor).
 
 %% beahvior functions
--export([start_link/0,
-         init/1]).
-
+-export([start_link/0, init/1]).
 %% public functions
 -export([start_receiver/0]).
 
 -define(CHILD(I, Type), {I, {I, start_link, []}, temporary, brutal_kill, Type, [I]}).
 
 %% begins the supervisor, init/1 will be called
-start_link () ->
+start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @private
-init ([]) ->
-    {ok, {{simple_one_for_one, 10, 10},
-         [?CHILD(riak_core_handoff_receiver, worker)
-         ]}}.
+init([]) ->
+    {ok, {{simple_one_for_one, 10, 10}, [?CHILD(riak_core_handoff_receiver, worker)]}}.
 
 %% start a sender process
-start_receiver () ->
+start_receiver() ->
     supervisor:start_child(?MODULE, []).

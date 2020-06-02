@@ -44,26 +44,24 @@ validate_ring_state_directory_exists() ->
     riak_core_util:start_app_deps(riak_core),
     {ok, RingStateDir} = application:get_env(riak_core, ring_state_dir),
     case filelib:ensure_dir(filename:join(RingStateDir, "dummy")) of
-        ok ->
-            ok;
-        {error, RingReason} ->
-            logger:critical(
-              "Ring state directory ~p does not exist, " "and could not be created: ~p",
-              [RingStateDir, riak_core_util:posix_error(RingReason)]),
-            throw({error, invalid_ring_state_dir})
+      ok ->
+          ok;
+      {error, RingReason} ->
+          logger:critical("Ring state directory ~p does not exist, and could not be created: ~p",
+                          [RingStateDir, riak_core_util:posix_error(RingReason)]),
+          throw({error, invalid_ring_state_dir})
     end.
-
 
 start_riak_core_sup() ->
     %% Spin up the supervisor; prune ring files as necessary
     case riak_core_sup:start_link() of
-        {ok, Pid} ->
-            ok = register_applications(),
-            ok = add_ring_event_handler(),
+      {ok, Pid} ->
+          ok = register_applications(),
+          ok = add_ring_event_handler(),
 
-            {ok, Pid};
-        {error, Reason} ->
-            {error, Reason}
+          {ok, Pid};
+      {error, Reason} ->
+          {error, Reason}
     end.
 
 register_applications() ->
@@ -71,4 +69,3 @@ register_applications() ->
 
 add_ring_event_handler() ->
     ok = riak_core_ring_events:add_guarded_handler(riak_core_ring_handler, []).
-
