@@ -2,7 +2,7 @@ PULSE_TESTS = worker_pool_pulse
 
 REBAR ?= ./rebar3
 
-.PHONY: deps test docs xref dialyzer
+.PHONY: deps test docs xref dialyzer format
 
 all: compile
 
@@ -32,6 +32,9 @@ clean-test:
 pulse:
 	${REBAR} compile -D PULSE
 	${REBAR} eunit -D PULSE skip_deps=true suite=$(PULSE_TESTS)
+
+format: 
+	${REBAR} format
 
 test: compile
 	${REBAR} eunit

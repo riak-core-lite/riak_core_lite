@@ -23,13 +23,17 @@
 %% @doc supervise riak_vnode processes
 
 -module(riak_core_vnode_sup).
+
 -behaviour(supervisor).
--export([start_link/0,
-         init/1]).
+
+-export([start_link/0, init/1]).
+
 -export([start_vnode/3]).
 
-start_vnode(Mod, Index, ForwardTo) when is_integer(Index) ->
-    supervisor:start_child(?MODULE, [Mod, Index, ForwardTo]).
+start_vnode(Mod, Index, ForwardTo)
+    when is_integer(Index) ->
+    supervisor:start_child(?MODULE,
+			   [Mod, Index, ForwardTo]).
 
 start_link() ->
     %% This simple_one_for_one supervisor can do a controlled shutdown.
@@ -42,6 +46,5 @@ start_link() ->
 init([]) ->
     {ok,
      {{simple_one_for_one, 10, 10},
-      [{undefined,
-        {riak_core_vnode, start_link, []},
-      temporary, 300000, worker, dynamic}]}}.
+      [{undefined, {riak_core_vnode, start_link, []},
+	temporary, 300000, worker, dynamic}]}}.

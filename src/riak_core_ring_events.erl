@@ -24,34 +24,23 @@
 -behaviour(gen_event).
 
 %% API
--export([start_link/0,
-         add_handler/2,
-         add_sup_handler/2,
-         add_guarded_handler/2,
-         add_callback/1,
-         add_sup_callback/1,
-         add_guarded_callback/1,
-         ring_update/1,
-         force_update/0,
-         ring_sync_update/1,
-         force_sync_update/0]).
+-export([start_link/0, add_handler/2, add_sup_handler/2,
+	 add_guarded_handler/2, add_callback/1,
+	 add_sup_callback/1, add_guarded_callback/1,
+	 ring_update/1, force_update/0, ring_sync_update/1,
+	 force_sync_update/0]).
 
 %% gen_event callbacks
--export([init/1,
-         handle_event/2,
-         handle_call/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([init/1, handle_event/2, handle_call/2,
+	 handle_info/2, terminate/2, code_change/3]).
 
--record(state, { callback }).
+-record(state, {callback}).
 
 %% ===================================================================
 %% API functions
 %% ===================================================================
 
-start_link() ->
-    gen_event:start_link({local, ?MODULE}).
+start_link() -> gen_event:start_link({local, ?MODULE}).
 
 add_handler(Handler, Args) ->
     gen_event:add_handler(?MODULE, Handler, Args).
@@ -60,16 +49,20 @@ add_sup_handler(Handler, Args) ->
     gen_event:add_sup_handler(?MODULE, Handler, Args).
 
 add_guarded_handler(Handler, Args) ->
-    riak_core:add_guarded_event_handler(?MODULE, Handler, Args).
+    riak_core:add_guarded_event_handler(?MODULE, Handler,
+					Args).
 
 add_callback(Fn) when is_function(Fn) ->
-    gen_event:add_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
+    gen_event:add_handler(?MODULE, {?MODULE, make_ref()},
+			  [Fn]).
 
 add_sup_callback(Fn) when is_function(Fn) ->
-    gen_event:add_sup_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
+    gen_event:add_sup_handler(?MODULE,
+			      {?MODULE, make_ref()}, [Fn]).
 
 add_guarded_callback(Fn) when is_function(Fn) ->
-    riak_core:add_guarded_event_handler(?MODULE, {?MODULE, make_ref()}, [Fn]).
+    riak_core:add_guarded_event_handler(?MODULE,
+					{?MODULE, make_ref()}, [Fn]).
 
 force_update() ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
@@ -92,21 +85,15 @@ ring_sync_update(Ring) ->
 init([Fn]) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     Fn(Ring),
-    {ok, #state { callback = Fn }}.
+    {ok, #state{callback = Fn}}.
 
 handle_event({ring_update, Ring}, State) ->
-    (State#state.callback)(Ring),
-    {ok, State}.
+    (State#state.callback)(Ring), {ok, State}.
 
-handle_call(_Request, State) ->
-    {ok, ok, State}.
+handle_call(_Request, State) -> {ok, ok, State}.
 
-handle_info(_Info, State) ->
-    {ok, State}.
+handle_info(_Info, State) -> {ok, State}.
 
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, _State) -> ok.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
+code_change(_OldVsn, State, _Extra) -> {ok, State}.
