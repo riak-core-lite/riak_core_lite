@@ -135,8 +135,7 @@ ring_status() ->
 get_rings() ->
     {RawRings, Down} = riak_core_util:rpc_every_member(
                          riak_core_ring_manager, get_my_ring, [], 30000),
-%%    RawRings2 = [R || {ok, R} <- RawRings],
-    Rings = orddict:from_list([{riak_core_ring:owner_node(R), R} || R <- RawRings]),
+    Rings = orddict:from_list([{riak_core_ring:owner_node(R), R} || {ok, R} <- RawRings]),
     {lists:sort(Down), Rings}.
 
 %% Produce a hash of the 'chash' portion of the ring
@@ -179,3 +178,31 @@ partitions(Node, Ring) ->
 %% Return the list of partitions owned by a node
 owned_partitions(Owners, Node) ->
     [P || {P, Owner} <- Owners, Owner =:= Node].
+
+
+
+
+
+%% ===================================================================
+%% Unit tests
+%% ===================================================================
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+-define(TEST_RINGDIR, "_build/test_ring").
+-define(TEST_RINGFILE, (?TEST_RINGDIR ++ "/ring")).
+-define(TMP_RINGFILE,  (?TEST_RINGFILE ++ ".tmp")).
+
+
+set_my_ring_test() ->
+  riak_core_ring_manager:setup_ets(test),
+
+  application:set_env(riak_core, ring_creation_size, 4),
+  Ring = riak_core_ring:fresh(),
+  riak_core_ring_manager:set_ring_global(Ring),
+  {ok, MyRing} = riak_core_ring_manager:get_my_ring(),
+  ?assert(riak_core_ring:nearly_equal(Ring, MyRing)),
+  %% this call should not crash
+  get_rings(),
+  riak_core_ring_manager:cleanup_ets(test).
+-endif.

@@ -102,7 +102,7 @@
         inactivity_timer
     }).
 
--export([setup_ets/1, cleanup_ets/1, set_ring_global/1]). %% For EUnit testing
+-export([setup_ets/1, cleanup_ets/1, set_ring_global/1, promote_ring/0]). %% For EUnit testing
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
@@ -124,7 +124,7 @@ start_link(test) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [test], []).
 
 
-%% @spec get_my_ring() -> {ok, riak_core_ring:riak_core_ring()} | {error, Reason}
+-spec get_my_ring() -> {ok, riak_core_ring:riak_core_ring()} | {error, any()}.
 get_my_ring() ->
     Ring = case persistent_term:get(?RING_KEY, undefined) of
                ets ->
