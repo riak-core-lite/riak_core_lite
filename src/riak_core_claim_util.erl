@@ -27,8 +27,7 @@
 -export([ring_stats/2, violation_stats/2,
 	 balance_stats/1, diversity_stats/2]).
 
--export([print_failure_analysis/3, failure_analysis/3,
-	 node_sensitivity/3, node_load/3, print_analysis/1,
+-export([node_load/3, print_analysis/1,
 	 print_analysis/2, sort_by_down_fbmax/1]).
 
 -export([adjacency_matrix/1, summarize_am/1,
@@ -104,26 +103,6 @@ diversity_stats(R, TN) ->
 %% Failure analysis
 %% -------------------------------------------------------------------
 
-%% Print failure analysis on standard_io
-print_failure_analysis(R, TargetN, NumFailures) ->
-    print_analysis(failure_analysis(R, TargetN,
-				    NumFailures)).
-
-failure_analysis(R, TargetN, NumFailures) ->
-    sort_by_down_fbmax(node_sensitivity(R, TargetN,
-					NumFailures)).
-
-%% Mark each node down in turn and see how the spread of load is.
-%%
-%% Return a list of failures records, one for each case examined
-node_sensitivity(R, NVal, Depth) ->
-    Members = riak_core_ring:all_members(R),
-    DownCombos = down_combos(Depth, Members),
-    LoadCombos = [{Down, node_load(R, NVal, Down)}
-		  || Down <- DownCombos],
-    [analyze_load(Down, Load)
-     || {Down, Load} <- LoadCombos].
-
 %% For a given ring, with a list of downed nodes, compute
 %% all preference lists then count up the number that
 %% each node participates in.
@@ -159,21 +138,6 @@ vnode_load(R, NVal, DownNodes) ->
 %% @private Normalize fallbacks
 norm_fb(_, 0) -> 0;
 norm_fb(Num, Tot) -> Num / Tot.
-
-%% @private analyze the load on each
-analyze_load(Down, Load) ->
-    FBStats = lists:foldl(fun (#load{num_fb = NumFB},
-			       Acc) ->
-				  basho_stats_histogram:update(NumFB, Acc)
-			  end,
-			  basho_stats_histogram:new(1, 1024, 1024), Load),
-    {FBMin, FBMean, FBMax, _FBVar, FBStdDev} =
-	basho_stats_histogram:summary_stats(FBStats),
-    FB10 = basho_stats_histogram:quantile(0.10, FBStats),
-    FB90 = basho_stats_histogram:quantile(0.90, FBStats),
-    #failure{down = Down, load = Load, fbmin = FBMin,
-	     fbmean = FBMean, fbstddev = FBStdDev, fb10 = FB10,
-	     fb90 = FB90, fbmax = FBMax}.
 
 %%
 %% Print the load analysis for each of the combinations of down nodes analyzed
