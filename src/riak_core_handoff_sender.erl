@@ -453,7 +453,7 @@ get_handoff_ip(Node) when is_atom(Node) ->
 
 get_handoff_port(Node) when is_atom(Node) ->
     gen_server:call({riak_core_handoff_listener, Node},
-		    handoff_port, infinity).
+                    handoff_port, infinity).
 
 get_handoff_receive_timeout() ->
     application:get_env(riak_core, handoff_timeout,
