@@ -24,7 +24,7 @@
 
 -include("riak_core_handoff.hrl").
 
--behaviour(riak_core_gen_server).
+-behaviour(gen_server).
 
 -export([start_link/0, set_socket/2,
          supports_batching/0]).
@@ -47,11 +47,10 @@
 %% set the timeout for the vnode to process the handoff_data msg to 60s
 -define(VNODE_TIMEOUT, 60000).
 
-start_link() ->
-    riak_core_gen_server:start_link(?MODULE, [], []).
+start_link() -> gen_server:start_link(?MODULE, [], []).
 
 set_socket(Pid, Socket) ->
-    riak_core_gen_server:call(Pid, {set_socket, Socket}).
+    gen_server:call(Pid, {set_socket, Socket}).
 
 supports_batching() -> true.
 

@@ -46,8 +46,7 @@ start_link() ->
                              [IpAddr, PortNum]).
 
 get_handoff_ip() ->
-    riak_core_gen_server:call(?MODULE, handoff_ip,
-                              infinity).
+    gen_server:call(?MODULE, handoff_ip, infinity).
 
 init([IpAddr, PortNum]) ->
     register(?MODULE, self()),
