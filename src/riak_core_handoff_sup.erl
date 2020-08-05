@@ -26,8 +26,8 @@
 -export([start_link/0, init/1]).
 
 -define(CHILD(I, Type),
-	{I, {I, start_link, []}, permanent, brutal_kill, Type,
-	 [I]}).
+        {I, {I, start_link, []}, permanent, brutal_kill, Type,
+         [I]}).
 
 %% begins the supervisor, init/1 will be called
 start_link() ->

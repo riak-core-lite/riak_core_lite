@@ -29,21 +29,21 @@
 -export([start_link/0]).
 
 -export([init/1, handle_call/3, handle_cast/2,
-	 handle_info/2, terminate/2, code_change/3]).
+         handle_info/2, terminate/2, code_change/3]).
 
 -export([get_handoff_ip/0, sock_opts/0,
-	 new_connection/2]).
+         new_connection/2]).
 
 -record(state,
-	{ipaddr  :: string(), portnum  :: integer()}).
+        {ipaddr  :: string(), portnum  :: integer()}).
 
 start_link() ->
     PortNum = application:get_env(riak_core, handoff_port,
-				  undefined),
+                                  undefined),
     IpAddr = application:get_env(riak_core, handoff_ip,
-				 undefined),
+                                 undefined),
     gen_nb_server:start_link(?MODULE, IpAddr, PortNum,
-			     [IpAddr, PortNum]).
+                             [IpAddr, PortNum]).
 
 get_handoff_ip() ->
     gen_server:call(?MODULE, handoff_ip, infinity).
@@ -56,10 +56,10 @@ sock_opts() ->
     [binary, {packet, 4}, {reuseaddr, true}, {backlog, 64}].
 
 handle_call(handoff_ip, _From,
-	    State = #state{ipaddr = I}) ->
+            State = #state{ipaddr = I}) ->
     {reply, {ok, I}, State};
 handle_call(handoff_port, _From,
-	    State = #state{portnum = P}) ->
+            State = #state{portnum = P}) ->
     {reply, {ok, P}, State}.
 
 handle_cast(_Msg, State) -> {noreply, State}.
@@ -73,12 +73,12 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 new_connection(Socket, State) ->
     case riak_core_handoff_manager:add_inbound() of
       {ok, Pid} ->
-	  ok = gen_tcp:controlling_process(Socket, Pid),
-	  ok = riak_core_handoff_receiver:set_socket(Pid, Socket),
-	  {ok, State};
+          ok = gen_tcp:controlling_process(Socket, Pid),
+          ok = riak_core_handoff_receiver:set_socket(Pid, Socket),
+          {ok, State};
       {error, _Reason} ->
-	  %% STATS
-	  %%            riak_core_stat:update(rejected_handoffs),
-	  gen_tcp:close(Socket),
-	  {ok, State}
+          %% STATS
+          %%            riak_core_stat:update(rejected_handoffs),
+          gen_tcp:close(Socket),
+          {ok, State}
     end.
