@@ -40,18 +40,6 @@
 -export([num_perms/2, num_combs/2, fac/1, perm_gen/1,
 	 down_combos/2, rotations/1, substitutions/2]).
 
--ifdef(TEST).
-
--ifdef(EQC).
-
--include_lib("eqc/include/eqc.hrl").
-
--endif.
-
--include_lib("eunit/include/eunit.hrl").
-
--endif.
-
 -record(load,
 	{node,    % Node name
 	 num_pri, % Number of primaries
@@ -596,56 +584,4 @@ substitute(Names, Mapping, L) ->
 %% Unit Tests
 %% -------------------------------------------------------------------
 
--ifdef(TEST).
-
--ifdef(EQC).
-
-property_adjacency_summary_test_() ->
-    {timeout, 60,
-     ?_test((eqc:quickcheck(eqc:testing_time(30,
-					     prop_adjacency_summary()))))}.
-
-longer_list(K, G) ->
-    ?SIZED(Size,
-	   (resize(trunc(K * Size), list(resize(Size, G))))).
-
-%% Compare directly constructing the adjacency matrix against
-%% one using prepend/fixup.
-prop_adjacency_summary() ->
-    ?FORALL({OwnersSeed, S},
-	    {non_empty(longer_list(40, largeint())),
-	     ?LET(X, (int()), (1 + abs(X)))},
-	    begin
-	      Owners = [list_to_atom("n" ++
-				       integer_to_list(1 + abs(I) rem S))
-			|| I <- OwnersSeed],
-	      AM = adjacency_matrix(Owners),
-	      AS = summarize_am(AM),
-	      {Owners2, _DAM2, FixDAM2} = build(Owners),
-	      AS2 = summarize_am(dict:to_list(FixDAM2)),
-	      ?WHENFAIL(begin
-			  io:format(user, "S=~p\nOwners =~p\n", [S, Owners]),
-			  io:format(user, "=== AM ===\n~p\n", [AM]),
-			  io:format(user, "=== FixAM2 ===\n~p\n",
-				    [dict:to_list(FixDAM2)]),
-			  io:format(user, "=== AS2 ===\n~p\n", [AS2])
-			end,
-			(conjunction([{owners, equals(Owners, Owners2)},
-				      {am2,
-				       equals(lists:sort(AS),
-					      lists:sort(AS2))}])))
-	    end).
-
-build(Owners) ->
-    build(lists:usort(Owners), lists:reverse(Owners), [],
-	  dict:new()).
-
-build(_M, [], Owners, DAM) ->
-    {Owners, DAM, fixup_dam(Owners, DAM)};
-build(M, [N | Rest], Owners, DAM) ->
-    {Owners1, DAM1} = prepend(M, N, Owners, DAM),
-    build(M, Rest, Owners1, DAM1).
-
--endif. % EQC
-
--endif. % TEST.
+%See test - pqc - riak_core_claim_util_qc

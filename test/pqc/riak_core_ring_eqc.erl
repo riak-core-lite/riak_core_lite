@@ -21,15 +21,15 @@
 
 -module(riak_core_ring_eqc).
 
--ifdef(EQC).
+-ifdef(PROPER).
 -export([prop_future_index/0]).
 
--include_lib("eqc/include/eqc.hrl").
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TEST_ITERATIONS, 10000).
 -define(QC_OUT(P),
-        eqc:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
+        proper:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
 
 
 eqc_test_() ->
@@ -43,7 +43,7 @@ eqc_test_() ->
           {timeout, 60000, % timeout is in msec
            %% Indicate the number of test iterations for each property here
            ?_assertEqual(true,
-                         quickcheck(numtests(?TEST_ITERATIONS,
+                         proper:quickcheck(numtests(?TEST_ITERATIONS,
                                              ?QC_OUT(prop_future_index()))))
           }]}]}]}.
 

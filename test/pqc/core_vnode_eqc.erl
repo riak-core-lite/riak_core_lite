@@ -23,9 +23,9 @@
 %% @doc  QuickCheck tests for riak_core_vnode code
 
 -module(core_vnode_eqc).
--ifdef(EQC).
--include_lib("eqc/include/eqc.hrl").
--include_lib("eqc/include/eqc_fsm.hrl").
+-ifdef(TEST).
+-ifdef(PORPER).
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("riak_core/include/riak_core_vnode.hrl").
 -compile([export_all]).
@@ -37,7 +37,7 @@
         end).
 
 -define(QC_OUT(P),
-        eqc:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
+        proper:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
 
 -record(qcst, {started,
                counters, % Dict of counters for each index
@@ -60,7 +60,7 @@ simple_test_() ->
          ok
      end,
      {timeout, 600,
-      ?_assertEqual(true, quickcheck(?QC_OUT(numtests(100, prop_simple()))))}}.
+     ?_assertEqual(true, proper:quickcheck(?QC_OUT(numtests(100, prop_simple()))))}}.
 
 setup_simple() ->
     %% call `meck:unload' here because there are other tests that have
@@ -88,7 +88,7 @@ setup_simple() ->
     OldVars.
 
 test(N) ->
-    quickcheck(numtests(N, prop_simple())).
+    proper:quickcheck(numtests(N, prop_simple())).
 
 eqc_setup() ->
     OldVars = setup_simple(),
@@ -101,10 +101,10 @@ eqc_setup() ->
 
 prop_simple() ->
     ?SETUP(fun eqc_setup/0,
-           ?FORALL(Cmds, commands(?MODULE, {setup, initial_state_data()}),
+           ?FORALL(Cmds, proper_fsm:commands(?MODULE, {setup, initial_state_data()}),
                    aggregate(command_names(Cmds),
                              begin
-                                 {H,{_SN,S},Res} = run_commands(?MODULE, Cmds),
+                                 {H,{_SN,S},Res} = proper_fsm:run_commands(?MODULE, Cmds),
                                  timer:sleep(500), %% Adjust this to make shutdown sensitive stuff pass/fail
                                  %% Do a sync operation on all the started vnodes
                                  %% to ensure any of the noreply commands have executed before
@@ -213,10 +213,12 @@ next_state_data(_From,_To,S,_R,_C) ->
 
 setup(S) ->
     [{setup,   {call,?MODULE,enable_async,[gen_async_pool()]}},
-     {stopped, {call,?MODULE,prepare,[S#qcst.async_size]}}].
+     {stopped, {call,?MODULE,prepare,[S#qcst.async_size]}}
+    ].
 
 stopped(S) ->
-    [{running, {call,?MODULE,start_vnode,[index(S)]}}].
+    [{running, {call,?MODULE,start_vnode,[index(S)]}}
+    ].
 
 running(S) ->
     [
@@ -449,4 +451,5 @@ filter_work(Work, Pid) ->
                          end
                  end, Work).
 
+-endif.
 -endif.

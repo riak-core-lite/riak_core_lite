@@ -35,6 +35,12 @@
 %% TEST API
 -ifdef(TEST).
 
+-ifdef(PROPER).
+
+-compile(export_all).
+
+-endif.
+
 -export([avsn/0, set_broadcast_module/2]).
 
 -endif.

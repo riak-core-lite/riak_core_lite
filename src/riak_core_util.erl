@@ -47,18 +47,19 @@
 
 -ifdef(TEST).
 
--ifdef(EQC).
+-ifdef(PROPER).
 
--include_lib("eqc/include/eqc.hrl").
+-include_lib("proper/include/proper.hrl").
 
--endif. %% EQC
+%-compile(export_all).
+-endif.
 
 -include_lib("eunit/include/eunit.hrl").
 
 -export([counter_loop/1, incr_counter/1,
 	 decr_counter/1]).
 
--endif. %% TEST
+-endif.
 
 -type
      riak_core_ring() :: riak_core_ring:riak_core_ring().
@@ -1133,10 +1134,10 @@ proxy_spawn_test() ->
       after 1000 -> ok
     end.
 
--ifdef(EQC).
+-ifdef(PROPER).
 
 count_test() ->
-    ?assert((eqc:quickcheck(prop_count_correct()))).
+    ?assert((proper:quickcheck(prop_count_correct()))).
 
 prop_count_correct() ->
     ?FORALL(List, (list(bool())),
