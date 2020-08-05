@@ -28,36 +28,36 @@
 -export([start_link/0, init/1]).
 
 -export([start_guarded_handler/3,
-	 start_guarded_handler/4, stop_guarded_handler/3]).
+         start_guarded_handler/4, stop_guarded_handler/3]).
 
 start_guarded_handler(HandlerMod, Handler, Args) ->
     start_guarded_handler(HandlerMod, Handler, Args,
-			  undefined).
+                          undefined).
 
 start_guarded_handler(HandlerMod, Handler, Args,
-		      ExitFun) ->
+                      ExitFun) ->
     case supervisor:start_child(?MODULE,
-				handler_spec(HandlerMod, Handler, Args,
-					     ExitFun))
-	of
+                                handler_spec(HandlerMod, Handler, Args,
+                                             ExitFun))
+        of
       {ok, _Pid} -> ok;
       Other -> Other
     end.
 
 stop_guarded_handler(HandlerMod, Handler, Args) ->
     case lists:member(Handler,
-		      gen_event:which_handlers(HandlerMod))
-	of
+                      gen_event:which_handlers(HandlerMod))
+        of
       true ->
-	  case gen_event:delete_handler(HandlerMod, Handler, Args)
-	      of
-	    {error, module_not_found} -> {error, module_not_found};
-	    O ->
-		Id = {HandlerMod, Handler},
-		ok = supervisor:terminate_child(?MODULE, Id),
-		ok = supervisor:delete_child(?MODULE, Id),
-		O
-	  end;
+          case gen_event:delete_handler(HandlerMod, Handler, Args)
+              of
+            {error, module_not_found} -> {error, module_not_found};
+            O ->
+                Id = {HandlerMod, Handler},
+                ok = supervisor:terminate_child(?MODULE, Id),
+                ok = supervisor:delete_child(?MODULE, Id),
+                O
+          end;
       false -> {error, module_not_found}
     end.
 

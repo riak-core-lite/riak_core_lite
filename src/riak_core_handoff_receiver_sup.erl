@@ -29,8 +29,8 @@
 -export([start_receiver/0]).
 
 -define(CHILD(I, Type),
-	{I, {I, start_link, []}, temporary, brutal_kill, Type,
-	 [I]}).
+        {I, {I, start_link, []}, temporary, brutal_kill, Type,
+         [I]}).
 
 %% begins the supervisor, init/1 will be called
 start_link() ->
