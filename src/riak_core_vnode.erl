@@ -27,7 +27,7 @@
 
      -export([init/1, started/3,
      active/3,
-     handle_info/3, terminate/3, code_change/4]).
+     terminate/3, code_change/4]).
 
 -export([reply/2, monitor/1]).
 
@@ -754,6 +754,76 @@ active({call, From}, core_status,
 %%%%% TEST
 active({call, From}, current_state, State) ->
     {next_state, active, State, [{reply, From, {active, State}}]};
+%% INFO
+active(info, {'$vnode_proxy_ping', From, Ref, Msgs},
+        State) ->
+    riak_core_vnode_proxy:cast(From,
+                   {vnode_proxy_pong, Ref, Msgs}),
+    {next_state, active, State,
+     State#state.inactivity_timeout};
+active(info, {'EXIT', Pid, Reason},
+        State = #state{mod = Mod, index = Index, pool_pid = Pid,
+               pool_config = PoolConfig}) ->
+    case Reason of
+      Reason when Reason == normal; Reason == shutdown ->
+      continue(State#state{pool_pid = undefined});
+      _ ->
+      logger:error("~p ~p worker pool crashed ~p\n",
+               [Index, Mod, Reason]),
+      {pool, WorkerModule, PoolSize, WorkerArgs} = PoolConfig,
+      logger:debug("starting worker pool ~p with size of "
+               "~p for vnode ~p.",
+               [WorkerModule, PoolSize, Index]),
+      {ok, NewPoolPid} =
+          riak_core_vnode_worker_pool:start_link(WorkerModule,
+                             PoolSize, Index,
+                             WorkerArgs, worker_props),
+      continue(State#state{pool_pid = NewPoolPid})
+    end;
+active(info, {'DOWN', _Ref, process, _Pid, normal},
+         State = #state{modstate = {deleted, _}}) ->
+    %% these messages are produced by riak_kv_vnode's aae tree
+    %% monitors; they are harmless, so don't yell about them. also
+    %% only dustbin them in the deleted modstate, because pipe vnodes
+    %% need them in other states
+    continue(State);
+active({_C, _F}, Info,
+        State = #state{mod = Mod, modstate = {deleted, _},
+               index = Index}) ->
+    logger:info("~p ~p ignored handle_info ~p - vnode "
+        "unregistering\n",
+        [Index, Mod, Info]),
+    continue(State);
+active({_C, _F}, {'EXIT', Pid, Reason},
+        State = #state{mod = Mod, modstate = ModState}) ->
+    %% A linked processes has died so use the
+    %% handle_exit callback to allow the vnode
+    %% process to take appropriate action.
+    %% If the function is not implemented default
+    %% to crashing the process.
+    try case Mod:handle_exit(Pid, Reason, ModState) of
+      {noreply, NewModState} ->
+          {next_state, active,
+           State#state{modstate = NewModState},
+           State#state.inactivity_timeout};
+      {stop, Reason1, NewModState} ->
+          {stop, Reason1, State#state{modstate = NewModState}}
+    end
+    catch
+      _ErrorType:undef -> {stop, linked_process_crash, State}
+    end;
+active({_C, _F}, Info,
+        State = #state{mod = Mod, modstate = ModState}) ->
+    case erlang:function_exported(Mod, handle_info, 2) of
+      true ->
+        {ok, NewModState} = Mod:handle_info(Info, ModState),
+         {next_state, active,
+            State#state{modstate = NewModState},
+            State#state.inactivity_timeout};
+      false ->
+        {next_state, active, State,
+            State#state.inactivity_timeout}
+    end;
 %%
 active({_C, From}, _MSG, State) ->
     {next_state, active, State,
@@ -1083,75 +1153,75 @@ mark_delete_complete(Idx, Mod) ->
 %     {reply, {Mode, Status}, StateName, State,
 %      State#state.inactivity_timeout}.
 
-handle_info({'$vnode_proxy_ping', From, Ref, Msgs},
-        StateName, State) ->
-    riak_core_vnode_proxy:cast(From,
-                   {vnode_proxy_pong, Ref, Msgs}),
-    {next_state, StateName, State,
-     State#state.inactivity_timeout};
-handle_info({'EXIT', Pid, Reason}, _StateName,
-        State = #state{mod = Mod, index = Index, pool_pid = Pid,
-               pool_config = PoolConfig}) ->
-    case Reason of
-      Reason when Reason == normal; Reason == shutdown ->
-      continue(State#state{pool_pid = undefined});
-      _ ->
-      logger:error("~p ~p worker pool crashed ~p\n",
-               [Index, Mod, Reason]),
-      {pool, WorkerModule, PoolSize, WorkerArgs} = PoolConfig,
-      logger:debug("starting worker pool ~p with size of "
-               "~p for vnode ~p.",
-               [WorkerModule, PoolSize, Index]),
-      {ok, NewPoolPid} =
-          riak_core_vnode_worker_pool:start_link(WorkerModule,
-                             PoolSize, Index,
-                             WorkerArgs, worker_props),
-      continue(State#state{pool_pid = NewPoolPid})
-    end;
-handle_info({'DOWN', _Ref, process, _Pid, normal},
-        _StateName, State = #state{modstate = {deleted, _}}) ->
-    %% these messages are produced by riak_kv_vnode's aae tree
-    %% monitors; they are harmless, so don't yell about them. also
-    %% only dustbin them in the deleted modstate, because pipe vnodes
-    %% need them in other states
-    continue(State);
-handle_info(Info, _StateName,
-        State = #state{mod = Mod, modstate = {deleted, _},
-               index = Index}) ->
-    logger:info("~p ~p ignored handle_info ~p - vnode "
-        "unregistering\n",
-        [Index, Mod, Info]),
-    continue(State);
-handle_info({'EXIT', Pid, Reason}, StateName,
-        State = #state{mod = Mod, modstate = ModState}) ->
-    %% A linked processes has died so use the
-    %% handle_exit callback to allow the vnode
-    %% process to take appropriate action.
-    %% If the function is not implemented default
-    %% to crashing the process.
-    try case Mod:handle_exit(Pid, Reason, ModState) of
-      {noreply, NewModState} ->
-          {next_state, StateName,
-           State#state{modstate = NewModState},
-           State#state.inactivity_timeout};
-      {stop, Reason1, NewModState} ->
-          {stop, Reason1, State#state{modstate = NewModState}}
-    end
-    catch
-      _ErrorType:undef -> {stop, linked_process_crash, State}
-    end;
-handle_info(Info, StateName,
-        State = #state{mod = Mod, modstate = ModState}) ->
-    case erlang:function_exported(Mod, handle_info, 2) of
-      true ->
-      {ok, NewModState} = Mod:handle_info(Info, ModState),
-      {next_state, StateName,
-       State#state{modstate = NewModState},
-       State#state.inactivity_timeout};
-      false ->
-      {next_state, StateName, State,
-       State#state.inactivity_timeout}
-    end.
+% handle_info({'$vnode_proxy_ping', From, Ref, Msgs},
+%         StateName, State) ->
+%     riak_core_vnode_proxy:cast(From,
+%                    {vnode_proxy_pong, Ref, Msgs}),
+%     {next_state, StateName, State,
+%      State#state.inactivity_timeout};
+% handle_info({'EXIT', Pid, Reason}, _StateName,
+%         State = #state{mod = Mod, index = Index, pool_pid = Pid,
+%                pool_config = PoolConfig}) ->
+%     case Reason of
+%       Reason when Reason == normal; Reason == shutdown ->
+%       continue(State#state{pool_pid = undefined});
+%       _ ->
+%       logger:error("~p ~p worker pool crashed ~p\n",
+%                [Index, Mod, Reason]),
+%       {pool, WorkerModule, PoolSize, WorkerArgs} = PoolConfig,
+%       logger:debug("starting worker pool ~p with size of "
+%                "~p for vnode ~p.",
+%                [WorkerModule, PoolSize, Index]),
+%       {ok, NewPoolPid} =
+%           riak_core_vnode_worker_pool:start_link(WorkerModule,
+%                              PoolSize, Index,
+%                              WorkerArgs, worker_props),
+%       continue(State#state{pool_pid = NewPoolPid})
+%     end;
+% handle_info({'DOWN', _Ref, process, _Pid, normal},
+%         _StateName, State = #state{modstate = {deleted, _}}) ->
+%     %% these messages are produced by riak_kv_vnode's aae tree
+%     %% monitors; they are harmless, so don't yell about them. also
+%     %% only dustbin them in the deleted modstate, because pipe vnodes
+%     %% need them in other states
+%     continue(State);
+% handle_info(Info, _StateName,
+%         State = #state{mod = Mod, modstate = {deleted, _},
+%                index = Index}) ->
+%     logger:info("~p ~p ignored handle_info ~p - vnode "
+%         "unregistering\n",
+%         [Index, Mod, Info]),
+%     continue(State);
+% handle_info({'EXIT', Pid, Reason}, StateName,
+%         State = #state{mod = Mod, modstate = ModState}) ->
+%     %% A linked processes has died so use the
+%     %% handle_exit callback to allow the vnode
+%     %% process to take appropriate action.
+%     %% If the function is not implemented default
+%     %% to crashing the process.
+%     try case Mod:handle_exit(Pid, Reason, ModState) of
+%       {noreply, NewModState} ->
+%           {next_state, StateName,
+%            State#state{modstate = NewModState},
+%            State#state.inactivity_timeout};
+%       {stop, Reason1, NewModState} ->
+%           {stop, Reason1, State#state{modstate = NewModState}}
+%     end
+%     catch
+%       _ErrorType:undef -> {stop, linked_process_crash, State}
+%     end;
+% handle_info(Info, StateName,
+%         State = #state{mod = Mod, modstate = ModState}) ->
+%     case erlang:function_exported(Mod, handle_info, 2) of
+%       true ->
+%       {ok, NewModState} = Mod:handle_info(Info, ModState),
+%       {next_state, StateName,
+%        State#state{modstate = NewModState},
+%        State#state.inactivity_timeout};
+%       false ->
+%       {next_state, StateName, State,
+%        State#state.inactivity_timeout}
+%     end.
 
 terminate(Reason, _StateName,
       #state{mod = Mod, modstate = ModState,
