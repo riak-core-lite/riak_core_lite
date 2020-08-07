@@ -271,16 +271,16 @@ start_fold(TargetNode, Module, {Type, Opts},
       exit({shutdown, timeout});
       exit:{shutdown, {error, Reason}} ->
       ?LOG_FAIL("because of ~p", [Reason]),
-      gen_fsm_compat:send_event(ParentPid,
+      gen_statem:cast(ParentPid,
                     {handoff_error, fold_error, Reason}),
       exit({shutdown, {error, Reason}});
       {be_quiet, Err, Reason} ->
-      gen_fsm_compat:send_event(ParentPid,
+      gen_statem:cast(ParentPid,
                     {handoff_error, Err, Reason});
       Err:Reason:Stacktrace ->
       ?LOG_FAIL("because of ~p:~p ~p",
             [Err, Reason, Stacktrace]),
-      gen_fsm_compat:send_event(ParentPid,
+      gen_statem:cast(ParentPid,
                     {handoff_error, Err, Reason})
     end.
 

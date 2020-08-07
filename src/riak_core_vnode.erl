@@ -22,24 +22,31 @@
 
 -include("riak_core_vnode.hrl").
 -export([callback_mode/0]).
--export([start_link/3, start_link/4, wait_for_init/1,
-     send_command/2, send_command_after/2]).
+-export([start_link/3, start_link/4,
+      send_command_after/2]).
 
-     -export([init/1, started/3,
-     active/3,
+-export([init/1, started/3, active/3,
      terminate/3, code_change/4]).
 
 -export([reply/2, monitor/1]).
 
--export([get_mod_index/1, get_modstate/1,
-     set_forwarding/2, trigger_handoff/2, trigger_handoff/3,
-     trigger_delete/1, core_status/1, handoff_error/3]).
+-export([
+        wait_for_init/1, %% #1
+        send_command/2, %% #2
+        handoff_error/3, %% #3
+        get_mod_index/1, %% #4
+        set_forwarding/2, %% #5
+        trigger_handoff/3, %% #6
+        trigger_handoff/2, %% #7
+        trigger_delete/1, %% #8
+        core_status/1 %% #9
+    ]).
 
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([test_link/2, current_state/1]).
+-export([test_link/2, current_state/1, get_modstate/1]).
 
 -endif.
 
@@ -220,6 +227,116 @@
 
 -define(LOCK_RETRY_TIMEOUT, 10000).
 
+%% ========
+%% API
+%% ========
+
+start_link(Mod, Index, Forward) ->
+    start_link(Mod, Index, 0, Forward).
+
+start_link(Mod, Index, InitialInactivityTimeout,
+       Forward) ->
+    gen_statem:start_link(?MODULE,
+                  [Mod, Index, InitialInactivityTimeout, Forward],
+                  []).
+
+
+
+%% #1 call - State started
+wait_for_init(Vnode) ->
+    gen_statem:call(Vnode, wait_for_init).
+
+
+%% #2 cast
+%% Send a command message for the vnode module by Pid -
+%% typically to do some deferred processing after returning yourself
+send_command(Pid, Request) ->
+    gen_statem:cast(Pid,
+                  #riak_vnode_req_v1{request = Request}).
+
+%% #3 cast
+handoff_error(Vnode, Err, Reason) ->
+    gen_statem:cast(Vnode, {handoff_error, Err, Reason}).
+
+%% #4 call
+get_mod_index(VNode) ->
+    gen_statem:call(VNode, get_mod_index).
+
+%% #5 cast
+set_forwarding(VNode, ForwardTo) ->
+    gen_statem:cast(VNode,
+                    {set_forwarding, ForwardTo}).
+
+%% #6 cast
+trigger_handoff(VNode, TargetIdx, TargetNode) ->
+    gen_statem:cast(VNode,
+                    {trigger_handoff, TargetIdx,
+                    TargetNode}).
+
+%% #7 cast
+trigger_handoff(VNode, TargetNode) ->
+    gen_statem:cast(VNode, {trigger_handoff, TargetNode}).
+
+%% #8 cast
+trigger_delete(VNode) ->
+    gen_statem:cast(VNode, trigger_delete).
+
+%% #9 cast
+core_status(VNode) ->
+    gen_statem:call(VNode, core_status).
+
+
+%% #10 %TODO
+%% Sends a command to the FSM that called it after Time
+%% has passed.
+-spec send_command_after(integer(), term()) -> reference().
+send_command_after(Time, Request) ->
+    %gen_fsm_compat:send_event_after(Time, #riak_vnode_req_v1{request = Request}).
+    erlang:start_timer(Time, self(), {'$gen_cast', #riak_vnode_req_v1{request = Request}}).
+
+
+%% @doc Send a reply to a vnode request.  If
+%%      the Ref is undefined just send the reply
+%%      for compatibility with pre-0.12 requestors.
+%%      If Ref is defined, send it along with the
+%%      reply.
+%%      NOTE: We *always* send the reply using unreliable delivery.
+%%
+-spec reply(sender(), term()) -> any().
+
+reply({fsm, undefined, From}, Reply) ->
+    riak_core_send_msg:send_event_unreliable(From, Reply);
+reply({fsm, Ref, From}, Reply) ->
+    riak_core_send_msg:send_event_unreliable(From,
+                         {Ref, Reply});
+reply({server, undefined, From}, Reply) ->
+    riak_core_send_msg:reply_unreliable(From, Reply);
+reply({server, Ref, From}, Reply) ->
+    riak_core_send_msg:reply_unreliable(From, {Ref, Reply});
+reply({raw, Ref, From}, Reply) ->
+    riak_core_send_msg:bang_unreliable(From, {Ref, Reply});
+reply(ignore, _Reply) -> ok.
+
+%% @doc Set up a monitor for the pid named by a {@type sender()} vnode
+%% argument.  If `Sender' was the atom `ignore', this function sets up
+%% a monitor on `self()' in order to return a valid (if useless)
+%% monitor reference.
+-spec monitor(Sender :: sender()) -> Monitor ::
+                     reference().
+
+monitor({fsm, _, From}) ->
+    erlang:monitor(process, From);
+monitor({server, _, {Pid, _Ref}}) ->
+    erlang:monitor(process, Pid);
+monitor({raw, _, From}) ->
+    erlang:monitor(process, From);
+monitor(ignore) -> erlang:monitor(process, self()).
+
+%% ========================
+%% ========
+%% State, Mode, Init, Terminate
+%% ========
+%% ========================
 -record(state,
     {index  :: partition(), mod  :: module(),
      modstate  :: term(),
@@ -233,31 +350,8 @@
      manager_event_timer  :: reference() | undefined,
      inactivity_timeout  :: non_neg_integer()}).
 
-start_link(Mod, Index, Forward) ->
-    start_link(Mod, Index, 0, Forward).
-
-start_link(Mod, Index, InitialInactivityTimeout,
-       Forward) ->
-    gen_statem:start_link(?MODULE,
-                  [Mod, Index, InitialInactivityTimeout, Forward],
-                  []).
 callback_mode()-> %TODO
     state_functions.%[handle_event_function, state_enter].
-
-%% Send a command message for the vnode module by Pid -
-%% typically to do some deferred processing after returning yourself
-send_command(Pid, Request) ->
-    gen_statem:cast(Pid,
-                  #riak_vnode_req_v1{request = Request}).
-
-%% Sends a command to the FSM that called it after Time
-%% has passed.
--spec send_command_after(integer(),
-            term()) -> reference().
-
-send_command_after(Time, Request) ->
-    %gen_statem:send_event_after(Time, #riak_vnode_req_v1{request = Request}).
-    erlang:start_timer(Time, self(), {'$gen_event', #riak_vnode_req_v1{request = Request}}).
 
 init([Mod, Index, InitialInactivityTimeout, Forward]) ->
     process_flag(trap_exit, true),
@@ -266,6 +360,46 @@ init([Mod, Index, InitialInactivityTimeout, Forward]) ->
            inactivity_timeout = InitialInactivityTimeout},
     {ok, started, State, 0}.
 
+
+terminate(Reason, _StateName,
+    #state{mod = Mod, modstate = ModState,
+       pool_pid = Pool}) ->
+  %% Shutdown if the pool is still alive and a normal `Reason' is
+  %% given - there could be a race on delivery of the unregistered
+  %% event and successfully shutting down the pool.
+  try case is_pid(Pool) andalso
+         is_process_alive(Pool) andalso (?NORMAL_REASON(Reason))
+      of
+    true ->
+        riak_core_vnode_worker_pool:shutdown_pool(Pool, 60000);
+    _ -> ok
+  end
+  catch
+    Type:Reason:Stacktrace ->
+    logger:error("Error while shutting down vnode worker "
+             "pool ~p:~p trace : ~p",
+             [Type, Reason, Stacktrace])
+  after
+    case ModState of
+  %% Handoff completed, Mod:delete has been called, now terminate.
+  {deleted, ModState1} ->
+      Mod:terminate(Reason, ModState1);
+  _ -> Mod:terminate(Reason, ModState)
+    end
+  end.
+
+code_change(_OldVsn, StateName, State, _Extra) ->
+   {ok, StateName, State}.
+
+%% ========================
+%% ========
+%% States
+%% ========
+%% ========================
+
+
+%% started
+%% ========
 started(timeout, _MSG,
     State = #state{inactivity_timeout =
                InitialInactivityTimeout}) ->
@@ -275,7 +409,8 @@ started(timeout, _MSG,
       {error, Reason} -> {stop, Reason}
     end;
 
-started({_C, From}, wait_for_init,
+%% #1
+started({call, From}, wait_for_init,
     State = #state{inactivity_timeout =
                InitialInactivityTimeout}) ->
                 logger:debug("test1 started"),
@@ -284,9 +419,400 @@ started({_C, From}, wait_for_init,
         {next_state, active, State2, [InitialInactivityTimeout, {reply, From, ok}]};
       {error, Reason} -> {stop, Reason}
     end;
+
+%% only test
 started({call, From}, current_state, State) ->
         {next_state, started, State,
             {reply, From, {started, State}}}.
+
+%% active
+%% ========
+%% #timeout
+active(timeout, _MSG,
+       State = #state{mod = Mod, index = Idx}) ->
+    riak_core_vnode_manager:vnode_event(Mod, Idx, self(),
+                    inactive),
+    continue(State);
+
+
+
+
+
+
+%% #3
+active(cast, {handoff_error, _Err, _Reason}, State) ->
+    State2 = start_manager_event_timer(handoff_error,
+                       State),
+    continue(State2);
+
+
+%% #4
+active({call, From}, get_mod_index,
+          State = #state{index = Idx, mod = Mod}) ->
+    {next_state, active, State,
+        [State#state.inactivity_timeout, {reply, From, {Mod, Idx}}]};
+
+
+
+%% #5
+active(cast, {set_forwarding, undefined},
+    State = #state{modstate = {deleted, _ModState}}) ->
+%% The vnode must forward requests when in the deleted state, therefore
+%% ignore requests to stop forwarding.
+    continue(State);
+
+
+
+%% #5
+active(cast, {set_forwarding, ForwardTo},
+    State) ->
+        logger:debug("vnode fwd :: ~p/~p :: ~p -> ~p~n",
+        [State#state.mod, State#state.index,
+        State#state.forward, ForwardTo]),
+        State2 = mod_set_forwarding(ForwardTo, State),
+        continue(State2#state{forward = ForwardTo});
+
+
+%% #6
+active(cast, {trigger_handoff, TargetIdx, TargetNode},
+       State) ->
+    maybe_handoff(TargetIdx, TargetNode, State);
+
+
+%% #7
+active(cast, {trigger_handoff, TargetNode}, State) ->
+    active(cast, {trigger_handoff, State#state.index, TargetNode},
+       State);
+
+
+
+%% #8
+active(cast, trigger_delete,
+       State = #state{mod = Mod, modstate = ModState,
+              index = Idx}) ->
+    case mark_delete_complete(Idx, Mod) of
+      {ok, _NewRing} ->
+        {ok, NewModState} = Mod:delete(ModState),
+        logger:debug("~p ~p vnode deleted", [Idx, Mod]);
+      _ -> NewModState = ModState
+    end,
+    maybe_shutdown_pool(State),
+    riak_core_vnode_manager:unregister_vnode(Idx, Mod),
+    continue(State#state{modstate =
+                 {deleted, NewModState}});
+
+
+
+%% #9
+active({call, From}, core_status,
+          State = #state{index = Index, mod = Mod,
+                 modstate = ModState, handoff_target = HT,
+                 forward = FN}) ->
+    Mode = case {FN, HT} of
+         {undefined, none} -> active;
+         {undefined, HT} -> handoff;
+         {FN, none} -> forward;
+         _ -> undefined
+       end,
+    Status = [{index, Index}, {mod, Mod}] ++
+           case FN of
+         undefined -> [];
+         _ -> [{forward, FN}]
+           end
+         ++
+         case HT of
+           none -> [];
+           _ -> [{handoff_target, HT}]
+         end
+           ++
+           case ModState of
+             {deleted, _} -> [deleted];
+             _ -> []
+           end,
+    {next_state, active, State,
+        [State#state.inactivity_timeout, {reply, From, {Mode, Status}}]};
+
+
+
+
+%% external
+%%%%%%%%%%%
+
+%% # riak_core_vnode_manager - handle_vnode_event
+active(cast, finish_handoff,
+    State = #state{modstate = {deleted, _ModState}}) ->
+        stop_manager_event_timer(State),
+        continue(State#state{handoff_target = none});
+
+
+%% # riak_core_vnode_manager - handle_vnode_event
+active(cast, finish_handoff,
+        State = #state{mod = Mod, modstate = ModState,
+        handoff_target = Target}) ->
+            stop_manager_event_timer(State),
+            case Target of
+                none -> continue(State);
+                _ ->
+                    {ok, NewModState} = Mod:handoff_finished(Target,
+                      ModState),
+                    finish_handoff(State#state{modstate = NewModState})
+            end;
+
+
+%% # riak_core_vnode_manager - handle_vnode_event
+active(cast, cancel_handoff,
+    State = #state{mod = Mod, modstate = ModState}) ->
+    %% it would be nice to pass {Err, Reason} to the vnode but the
+    %% API doesn't currently allow for that.
+        stop_manager_event_timer(State),
+        case State#state.handoff_target of
+            none -> continue(State);
+            _ ->
+                {ok, NewModState} = Mod:handoff_cancelled(ModState),
+            continue(State#state{handoff_target = none,
+              handoff_type = undefined,
+              modstate = NewModState})
+        end;
+
+
+%% # riak:core_handoff_sender - start_fold_
+active(cast, handoff_complete, State) ->
+    State2 = start_manager_event_timer(handoff_complete,
+                       State),
+    continue(State2);
+
+
+%% # riak:core_handoff_sender - start_fold_
+active(cast, {resize_transfer_complete, SeenIdxs},
+       State = #state{mod = Mod, modstate = ModState,
+              handoff_target = Target}) ->
+    case Target of
+      none -> continue(State);
+      _ ->
+      %% TODO: refactor similarties w/ finish_handoff handle_event
+      {ok, NewModState} = Mod:handoff_finished(Target,
+                           ModState),
+      finish_handoff(SeenIdxs,
+             State#state{modstate = NewModState})
+    end;
+
+%% # riak_core_handoff_receiver - process_message
+active({call, From}, {handoff_data, _BinObj},
+          State = #state{modstate = {deleted, _ModState}}) ->
+    {next_state, active, State,
+        [State#state.inactivity_timeout,
+         {reply, From, {error, vnode_exiting}}]};
+    %{reply, {error, vnode_exiting}, StateName, State,
+    % State#state.inactivity_timeout};
+
+
+%% # riak_core_handoff_receiver - process_message
+active({call, From}, {handoff_data, BinObj},
+          State = #state{mod = Mod, modstate = ModState}) ->
+    case Mod:handle_handoff_data(BinObj, ModState) of
+      {reply, ok, NewModState} ->
+        {next_state, active, State#state{modstate = NewModState},
+            [State#state.inactivity_timeout, {reply, From, ok}]};
+        % {reply, ok, StateName,
+        %     State#state{modstate = NewModState},
+        %     State#state.inactivity_timeout};
+      {reply, {error, Err}, NewModState} ->
+        logger:error("~p failed to store handoff obj: ~p",
+               [Mod, Err]),
+        {next_state, active, State#state{modstate = NewModState},
+            [State#state.inactivity_timeout, {reply, From, {error, Err}}]}
+        % {reply, {error, Err}, StateName,
+        %     State#state{modstate = NewModState},
+        %     State#state.inactivity_timeout}
+    end;
+
+%% # riak_core_vnode_proxy - handle_cast
+active(cast, unregistered,
+       State = #state{mod = Mod, index = Index}) ->
+    %% Add exclusion so the ring handler will not try to spin this vnode
+    %% up until it receives traffic.
+    riak_core_handoff_manager:add_exclusion(Mod, Index),
+    logger:debug("~p ~p vnode excluded and unregistered.",
+         [Index, Mod]),
+    {stop, normal,
+         State#state{handoff_target = none,
+         handoff_type = undefined, pool_pid = undefined}};
+
+
+
+%% internal
+%%%%%%%%%%%%
+
+%% # riak_core_vnode - start_manager_event_timer
+active(cast, {send_manager_event, Event}, State) ->
+    State2 = start_manager_event_timer(Event, State),
+    continue(State2);
+
+
+
+
+%TODO ===========
+%%
+active(_C, #riak_coverage_req_v1{keyspaces = KeySpaces,
+                 request = Request, sender = Sender},
+       State) ->
+    %% Coverage request handled in handoff and non-handoff.  Will be forwarded if set.
+    vnode_coverage(Sender, Request, KeySpaces, State);
+
+
+%%
+active(_C, #riak_vnode_req_v1{sender = Sender,
+              request = {resize_forward, Request}},
+       State) ->
+        vnode_command(Sender, Request, State);
+
+
+%% # finish_handoff?,
+active(_C, #riak_vnode_req_v1{sender = Sender,
+              request = Request},
+       State = #state{handoff_target = HT})
+    when HT =:= none ->
+    forward_or_vnode_command(Sender, Request, State);
+
+
+%%
+active(_C, #riak_vnode_req_v1{sender = Sender,
+              request = Request},
+       State = #state{handoff_type = resize,
+              handoff_target = {HOIdx, HONode}, index = Index,
+              forward = Forward, mod = Mod}) ->
+    RequestHash = Mod:request_hash(Request),
+    case RequestHash of
+      %% will never have enough information to forward request so only handle locally
+      undefined -> vnode_command(Sender, Request, State);
+      _ ->
+      {ok, R} = riak_core_ring_manager:get_my_ring(),
+      FutureIndex = riak_core_ring:future_index(RequestHash,
+                            Index, R),
+      case FutureIndex of
+        %% request for portion of keyspace currently being transferred
+        HOIdx ->
+        vnode_handoff_command(Sender, Request, {HOIdx, HONode},
+                      State);
+        %% some portions of keyspace already transferred
+        _Other when is_list(Forward) ->
+        vnode_resize_command(Sender, Request, FutureIndex,
+                     State);
+        %% some portions of keyspace not already transferred
+        _Other -> vnode_command(Sender, Request, State)
+      end
+    end;
+
+%%
+active(cast, #riak_vnode_req_v1{sender = Sender,
+              request = Request},
+       State) ->
+    vnode_handoff_command(Sender, Request,
+              State#state.handoff_target, State);
+
+%%
+active(info, {'$vnode_proxy_ping', From, Ref, Msgs},
+        State) ->
+    riak_core_vnode_proxy:cast(From,
+                   {vnode_proxy_pong, Ref, Msgs}),
+    {next_state, active, State,
+     State#state.inactivity_timeout};
+
+
+
+active(info, {'EXIT', Pid, Reason},
+        State = #state{mod = Mod, index = Index, pool_pid = Pid,
+               pool_config = PoolConfig}) ->
+    case Reason of
+      Reason when Reason == normal; Reason == shutdown ->
+      continue(State#state{pool_pid = undefined});
+      _ ->
+      logger:error("~p ~p worker pool crashed ~p\n",
+               [Index, Mod, Reason]),
+      {pool, WorkerModule, PoolSize, WorkerArgs} = PoolConfig,
+      logger:debug("starting worker pool ~p with size of "
+               "~p for vnode ~p.",
+               [WorkerModule, PoolSize, Index]),
+      {ok, NewPoolPid} =
+          riak_core_vnode_worker_pool:start_link(WorkerModule,
+                             PoolSize, Index,
+                             WorkerArgs, worker_props),
+      continue(State#state{pool_pid = NewPoolPid})
+    end;
+
+
+
+active(info, {'DOWN', _Ref, process, _Pid, normal},
+         State = #state{modstate = {deleted, _}}) ->
+    %% these messages are produced by riak_kv_vnode's aae tree
+    %% monitors; they are harmless, so don't yell about them. also
+    %% only dustbin them in the deleted modstate, because pipe vnodes
+    %% need them in other states
+    continue(State);
+
+
+
+active({info, _F}, Info,
+        State = #state{mod = Mod, modstate = {deleted, _},
+               index = Index}) ->
+    logger:info("~p ~p ignored handle_info ~p - vnode "
+        "unregistering\n",
+        [Index, Mod, Info]),
+    continue(State);
+
+
+
+active({info, _F}, {'EXIT', Pid, Reason},
+        State = #state{mod = Mod, modstate = ModState}) ->
+    %% A linked processes has died so use the
+    %% handle_exit callback to allow the vnode
+    %% process to take appropriate action.
+    %% If the function is not implemented default
+    %% to crashing the process.
+    try case Mod:handle_exit(Pid, Reason, ModState) of
+      {noreply, NewModState} ->
+          {next_state, active,
+           State#state{modstate = NewModState},
+           State#state.inactivity_timeout};
+      {stop, Reason1, NewModState} ->
+          {stop, Reason1, State#state{modstate = NewModState}}
+    end
+    catch
+      _ErrorType:undef -> {stop, linked_process_crash, State}
+    end;
+
+
+
+active({info, _F}, Info,
+        State = #state{mod = Mod, modstate = ModState}) ->
+    case erlang:function_exported(Mod, handle_info, 2) of
+      true ->
+        {ok, NewModState} = Mod:handle_info(Info, ModState),
+         {next_state, active,
+            State#state{modstate = NewModState},
+            State#state.inactivity_timeout};
+      false ->
+        {next_state, active, State,
+            State#state.inactivity_timeout}
+    end;
+
+%% TODO end ======
+%% only TEST
+active({call, From}, current_state, State) ->
+    {next_state, active, State, [{reply, From, {active, State}}]};
+
+%% # all? %TODO
+active({_C, From}, _MSG, State) ->
+    {next_state, active, State,
+        [State#state.inactivity_timeout,
+          {reply, From, ok}]}.
+
+
+%% ========================
+%% ========
+%% Internal Helper Functions
+%% ========
+%% ========================
 
 do_init(State = #state{index = Index, mod = Mod,
                forward = Forward}) ->
@@ -325,39 +851,19 @@ do_init(State = #state{index = Index, mod = Mod,
       {ok, State3}
     end.
 
-wait_for_init(Vnode) ->
-    gen_statem:call(Vnode, wait_for_init).
 
-handoff_error(Vnode, Err, Reason) ->
-    gen_statem:cast(Vnode, {handoff_error, Err, Reason}).
-
-get_mod_index(VNode) ->
-    gen_statem:call(VNode, get_mod_index).
-
-set_forwarding(VNode, ForwardTo) ->
-    gen_statem:cast(VNode,
-                    {set_forwarding, ForwardTo}).
-
-trigger_handoff(VNode, TargetIdx, TargetNode) ->
-    gen_statem:cast(VNode,
-                    {trigger_handoff, TargetIdx,
-                    TargetNode}).
-
-trigger_handoff(VNode, TargetNode) ->
-    gen_statem:cast(VNode, {trigger_handoff, TargetNode}).
-
-trigger_delete(VNode) ->
-    gen_statem:cast(VNode, trigger_delete).
-
-core_status(VNode) ->
-    gen_statem:call(VNode, core_status).
 
 continue(State) ->
     {next_state, active, State,
-     State#state.inactivity_timeout}.
+        State#state.inactivity_timeout}.
 
 continue(State, NewModState) ->
     continue(State#state{modstate = NewModState}).
+
+
+
+
+
 
 %% Active vnodes operate in three states: normal, handoff, and forwarding.
 %%
@@ -545,292 +1051,6 @@ vnode_resize_command(Sender, Request, FutureIndex,
                 {FutureIndex, FutureOwner}, State)
     end.
 
-active(timeout, _MSG,
-       State = #state{mod = Mod, index = Idx}) ->
-    riak_core_vnode_manager:vnode_event(Mod, Idx, self(),
-                    inactive),
-    continue(State);
-active(_C, #riak_coverage_req_v1{keyspaces = KeySpaces,
-                 request = Request, sender = Sender},
-       State) ->
-    %% Coverage request handled in handoff and non-handoff.  Will be forwarded if set.
-    vnode_coverage(Sender, Request, KeySpaces, State);
-active(_C, #riak_vnode_req_v1{sender = Sender,
-              request = {resize_forward, Request}},
-       State) ->
-        vnode_command(Sender, Request, State);
-active(_C, #riak_vnode_req_v1{sender = Sender,
-              request = Request},
-       State = #state{handoff_target = HT})
-    when HT =:= none ->
-    forward_or_vnode_command(Sender, Request, State);
-active(_C, #riak_vnode_req_v1{sender = Sender,
-              request = Request},
-       State = #state{handoff_type = resize,
-              handoff_target = {HOIdx, HONode}, index = Index,
-              forward = Forward, mod = Mod}) ->
-    RequestHash = Mod:request_hash(Request),
-    case RequestHash of
-      %% will never have enough information to forward request so only handle locally
-      undefined -> vnode_command(Sender, Request, State);
-      _ ->
-      {ok, R} = riak_core_ring_manager:get_my_ring(),
-      FutureIndex = riak_core_ring:future_index(RequestHash,
-                            Index, R),
-      case FutureIndex of
-        %% request for portion of keyspace currently being transferred
-        HOIdx ->
-        vnode_handoff_command(Sender, Request, {HOIdx, HONode},
-                      State);
-        %% some portions of keyspace already transferred
-        _Other when is_list(Forward) ->
-        vnode_resize_command(Sender, Request, FutureIndex,
-                     State);
-        %% some portions of keyspace not already transferred
-        _Other -> vnode_command(Sender, Request, State)
-      end
-    end;
-active(_C, #riak_vnode_req_v1{sender = Sender,
-              request = Request},
-       State) ->
-    vnode_handoff_command(Sender, Request,
-              State#state.handoff_target, State);
-active(_C, handoff_complete, State) ->
-    State2 = start_manager_event_timer(handoff_complete,
-                       State),
-    continue(State2);
-active(_C, {resize_transfer_complete, SeenIdxs},
-       State = #state{mod = Mod, modstate = ModState,
-              handoff_target = Target}) ->
-    case Target of
-      none -> continue(State);
-      _ ->
-      %% TODO: refactor similarties w/ finish_handoff handle_event
-      {ok, NewModState} = Mod:handoff_finished(Target,
-                           ModState),
-      finish_handoff(SeenIdxs,
-             State#state{modstate = NewModState})
-    end;
-active(_C, {handoff_error, _Err, _Reason}, State) ->
-    State2 = start_manager_event_timer(handoff_error,
-                       State),
-    continue(State2);
-active(_C, {send_manager_event, Event}, State) ->
-    State2 = start_manager_event_timer(Event, State),
-    continue(State2);
-active(C, {trigger_handoff, TargetNode}, State) ->
-    active(C, {trigger_handoff, State#state.index, TargetNode},
-       State);
-active(_C, {trigger_handoff, TargetIdx, TargetNode},
-       State) ->
-    maybe_handoff(TargetIdx, TargetNode, State);
-active(_C, trigger_delete,
-       State = #state{mod = Mod, modstate = ModState,
-              index = Idx}) ->
-    case mark_delete_complete(Idx, Mod) of
-      {ok, _NewRing} ->
-        {ok, NewModState} = Mod:delete(ModState),
-        logger:debug("~p ~p vnode deleted", [Idx, Mod]);
-      _ -> NewModState = ModState
-    end,
-    maybe_shutdown_pool(State),
-    riak_core_vnode_manager:unregister_vnode(Idx, Mod),
-    continue(State#state{modstate =
-                 {deleted, NewModState}});
-active(_C, unregistered,
-       State = #state{mod = Mod, index = Index}) ->
-    %% Add exclusion so the ring handler will not try to spin this vnode
-    %% up until it receives traffic.
-    riak_core_handoff_manager:add_exclusion(Mod, Index),
-    logger:debug("~p ~p vnode excluded and unregistered.",
-         [Index, Mod]),
-    {stop, normal,
-         State#state{handoff_target = none,
-         handoff_type = undefined, pool_pid = undefined}};
-
-%%%%  handle_event
-active(cast, {set_forwarding, undefined},
-    State = #state{modstate = {deleted, _ModState}}) ->
-%% The vnode must forward requests when in the deleted state, therefore
-%% ignore requests to stop forwarding.
-    continue(State);
-active(cast, {set_forwarding, ForwardTo},
-    State) ->
-        logger:debug("vnode fwd :: ~p/~p :: ~p -> ~p~n",
-        [State#state.mod, State#state.index,
-        State#state.forward, ForwardTo]),
-        State2 = mod_set_forwarding(ForwardTo, State),
-        continue(State2#state{forward = ForwardTo});
-active(cast, finish_handoff,
-    State = #state{modstate = {deleted, _ModState}}) ->
-        stop_manager_event_timer(State),
-        continue(State#state{handoff_target = none});
-active(cast, finish_handoff,
-        State = #state{mod = Mod, modstate = ModState,
-        handoff_target = Target}) ->
-            stop_manager_event_timer(State),
-            case Target of
-                none -> continue(State);
-                _ ->
-                    {ok, NewModState} = Mod:handoff_finished(Target,
-                      ModState),
-                    finish_handoff(State#state{modstate = NewModState})
-            end;
-active(cast, cancel_handoff,
-    State = #state{mod = Mod, modstate = ModState}) ->
-    %% it would be nice to pass {Err, Reason} to the vnode but the
-    %% API doesn't currently allow for that.
-        stop_manager_event_timer(State),
-        case State#state.handoff_target of
-            none -> continue(State);
-            _ ->
-                {ok, NewModState} = Mod:handoff_cancelled(ModState),
-            continue(State#state{handoff_target = none,
-              handoff_type = undefined,
-              modstate = NewModState})
-        end;
-% sync
-active({call, From}, get_mod_index,
-          State = #state{index = Idx, mod = Mod}) ->
-    {next_state, active, State,
-        [State#state.inactivity_timeout, {reply, From, {Mod, Idx}}]};
-    %old: {reply, {Mod, Idx}, StateName, State,
-    % State#state.inactivity_timeout};
-active({call, From}, {handoff_data, _BinObj},
-          State = #state{modstate = {deleted, _ModState}}) ->
-    {next_state, active, State,
-        [State#state.inactivity_timeout,
-         {reply, From, {error, vnode_exiting}}]};
-    %{reply, {error, vnode_exiting}, StateName, State,
-    % State#state.inactivity_timeout};
-active({call, From}, {handoff_data, BinObj},
-          State = #state{mod = Mod, modstate = ModState}) ->
-    case Mod:handle_handoff_data(BinObj, ModState) of
-      {reply, ok, NewModState} ->
-        {next_state, active, State#state{modstate = NewModState},
-            [State#state.inactivity_timeout, {reply, From, ok}]};
-        % {reply, ok, StateName,
-        %     State#state{modstate = NewModState},
-        %     State#state.inactivity_timeout};
-      {reply, {error, Err}, NewModState} ->
-        logger:error("~p failed to store handoff obj: ~p",
-               [Mod, Err]),
-        {next_state, active, State#state{modstate = NewModState},
-            [State#state.inactivity_timeout, {reply, From, {error, Err}}]}
-        % {reply, {error, Err}, StateName,
-        %     State#state{modstate = NewModState},
-        %     State#state.inactivity_timeout}
-    end;
-active({call, From}, core_status,
-          State = #state{index = Index, mod = Mod,
-                 modstate = ModState, handoff_target = HT,
-                 forward = FN}) ->
-    Mode = case {FN, HT} of
-         {undefined, none} -> active;
-         {undefined, HT} -> handoff;
-         {FN, none} -> forward;
-         _ -> undefined
-       end,
-    Status = [{index, Index}, {mod, Mod}] ++
-           case FN of
-         undefined -> [];
-         _ -> [{forward, FN}]
-           end
-         ++
-         case HT of
-           none -> [];
-           _ -> [{handoff_target, HT}]
-         end
-           ++
-           case ModState of
-             {deleted, _} -> [deleted];
-             _ -> []
-           end,
-    {next_state, active, State,
-        [State#state.inactivity_timeout, {reply, From, {Mode, Status}}]};
-    % {reply, {Mode, Status}, StateName, State,
-    %  State#state.inactivity_timeout}.
-
-%%%%% TEST
-active({call, From}, current_state, State) ->
-    {next_state, active, State, [{reply, From, {active, State}}]};
-%% INFO
-active(info, {'$vnode_proxy_ping', From, Ref, Msgs},
-        State) ->
-    riak_core_vnode_proxy:cast(From,
-                   {vnode_proxy_pong, Ref, Msgs}),
-    {next_state, active, State,
-     State#state.inactivity_timeout};
-active(info, {'EXIT', Pid, Reason},
-        State = #state{mod = Mod, index = Index, pool_pid = Pid,
-               pool_config = PoolConfig}) ->
-    case Reason of
-      Reason when Reason == normal; Reason == shutdown ->
-      continue(State#state{pool_pid = undefined});
-      _ ->
-      logger:error("~p ~p worker pool crashed ~p\n",
-               [Index, Mod, Reason]),
-      {pool, WorkerModule, PoolSize, WorkerArgs} = PoolConfig,
-      logger:debug("starting worker pool ~p with size of "
-               "~p for vnode ~p.",
-               [WorkerModule, PoolSize, Index]),
-      {ok, NewPoolPid} =
-          riak_core_vnode_worker_pool:start_link(WorkerModule,
-                             PoolSize, Index,
-                             WorkerArgs, worker_props),
-      continue(State#state{pool_pid = NewPoolPid})
-    end;
-active(info, {'DOWN', _Ref, process, _Pid, normal},
-         State = #state{modstate = {deleted, _}}) ->
-    %% these messages are produced by riak_kv_vnode's aae tree
-    %% monitors; they are harmless, so don't yell about them. also
-    %% only dustbin them in the deleted modstate, because pipe vnodes
-    %% need them in other states
-    continue(State);
-active({_C, _F}, Info,
-        State = #state{mod = Mod, modstate = {deleted, _},
-               index = Index}) ->
-    logger:info("~p ~p ignored handle_info ~p - vnode "
-        "unregistering\n",
-        [Index, Mod, Info]),
-    continue(State);
-active({_C, _F}, {'EXIT', Pid, Reason},
-        State = #state{mod = Mod, modstate = ModState}) ->
-    %% A linked processes has died so use the
-    %% handle_exit callback to allow the vnode
-    %% process to take appropriate action.
-    %% If the function is not implemented default
-    %% to crashing the process.
-    try case Mod:handle_exit(Pid, Reason, ModState) of
-      {noreply, NewModState} ->
-          {next_state, active,
-           State#state{modstate = NewModState},
-           State#state.inactivity_timeout};
-      {stop, Reason1, NewModState} ->
-          {stop, Reason1, State#state{modstate = NewModState}}
-    end
-    catch
-      _ErrorType:undef -> {stop, linked_process_crash, State}
-    end;
-active({_C, _F}, Info,
-        State = #state{mod = Mod, modstate = ModState}) ->
-    case erlang:function_exported(Mod, handle_info, 2) of
-      true ->
-        {ok, NewModState} = Mod:handle_info(Info, ModState),
-         {next_state, active,
-            State#state{modstate = NewModState},
-            State#state.inactivity_timeout};
-      false ->
-        {next_state, active, State,
-            State#state.inactivity_timeout}
-    end;
-%%
-active({_C, From}, _MSG, State) ->
-    {next_state, active, State,
-        [State#state.inactivity_timeout,
-        {reply, From, ok}]}.
-    % {reply, ok, active, State,
-    %  State#state.inactivity_timeout}.
 
 %% This code lives in riak_core_vnode rather than riak_core_vnode_manager
 %% because the ring_trans call is a synchronous call to the ring manager,
@@ -943,13 +1163,13 @@ finish_handoff(SeenIdxs,
                    HOType)
     of
       continue ->
-      continue(State#state{handoff_target = none,
+        continue(State#state{handoff_target = none,
                    handoff_type = undefined});
       resize ->
-      CurrentForwarding = resize_forwarding(State),
-      NewForwarding = [Target | CurrentForwarding],
-      State2 = mod_set_forwarding(NewForwarding, State),
-      continue(State2#state{handoff_target = none,
+        CurrentForwarding = resize_forwarding(State),
+        NewForwarding = [Target | CurrentForwarding],
+        State2 = mod_set_forwarding(NewForwarding, State),
+        continue(State2#state{handoff_target = none,
                 handoff_type = undefined,
                 forward = NewForwarding});
       Res when Res == forward; Res == shutdown ->
@@ -1022,236 +1242,6 @@ mark_delete_complete(Idx, Mod) ->
                            []),
     Result.
 
-
-
-% active
-% handle_event({set_forwarding, undefined}, _StateName,
-%          State = #state{modstate = {deleted, _ModState}}) ->
-%     %% The vnode must forward requests when in the deleted state, therefore
-%     %% ignore requests to stop forwarding.
-%     continue(State);
-
-% handle_event({set_forwarding, ForwardTo}, _StateName,
-%          State) ->
-%     logger:debug("vnode fwd :: ~p/~p :: ~p -> ~p~n",
-%          [State#state.mod, State#state.index,
-%           State#state.forward, ForwardTo]),
-%     State2 = mod_set_forwarding(ForwardTo, State),
-%     continue(State2#state{forward = ForwardTo});
-
-% handle_event(finish_handoff, _StateName,
-%          State = #state{modstate = {deleted, _ModState}}) ->
-%     stop_manager_event_timer(State),
-%     continue(State#state{handoff_target = none});
-
-% handle_event(finish_handoff, _StateName,
-%          State = #state{mod = Mod, modstate = ModState,
-%                 handoff_target = Target}) ->
-%     stop_manager_event_timer(State),
-%     case Target of
-%       none -> continue(State);
-%       _ ->
-%       {ok, NewModState} = Mod:handoff_finished(Target,
-%                            ModState),
-%       finish_handoff(State#state{modstate = NewModState})
-%     end;
-
-% handle_event(cancel_handoff, _StateName,
-%          State = #state{mod = Mod, modstate = ModState}) ->
-%     %% it would be nice to pass {Err, Reason} to the vnode but the
-%     %% API doesn't currently allow for that.
-%     stop_manager_event_timer(State),
-%     case State#state.handoff_target of
-%       none -> continue(State);
-%       _ ->
-%       {ok, NewModState} = Mod:handoff_cancelled(ModState),
-%       continue(State#state{handoff_target = none,
-%                    handoff_type = undefined,
-%                    modstate = NewModState})
-%     end.%;
-%TODO active
-% handle_event({trigger_handoff, TargetNode}, StateName,
-%          State) ->
-%     handle_event({trigger_handoff, State#state.index,
-%           TargetNode},
-%          StateName, State);
-% handle_event({trigger_handoff, _TargetIdx, _TargetNode},
-%          _StateName,
-%          State = #state{modstate = {deleted, _ModState}}) ->
-%     continue(State).%;
-% handle_event(R = {trigger_handoff, _TargetIdx,
-%           _TargetNode},
-%          _StateName, State) ->
-%     active(R, State);
-% handle_event(trigger_delete, _StateName,
-%          State = #state{modstate = {deleted, _}}) ->
-%     continue(State);
-% handle_event(trigger_delete, _StateName, State) ->
-%     active(trigger_delete, State);
-% handle_event(R = #riak_vnode_req_v1{}, _StateName,
-%          State) ->
-%     active(R, State);
-% handle_event(R = #riak_coverage_req_v1{}, _StateName,
-%          State) ->
-%     active(R, State).
-%TODO active
-%TODO started, active
-%handle_sync_event(current_state, _From, StateName,
-%          State) ->
-%    {reply, {StateName, State}, StateName, State};
-
-%active
-% handle_sync_event(get_mod_index, _From, StateName,
-%           State = #state{index = Idx, mod = Mod}) ->
-%     {reply, {Mod, Idx}, StateName, State,
-%      State#state.inactivity_timeout};
-% handle_sync_event({handoff_data, _BinObj}, _From,
-%           StateName,
-%           State = #state{modstate = {deleted, _ModState}}) ->
-%     {reply, {error, vnode_exiting}, StateName, State,
-%      State#state.inactivity_timeout};
-% handle_sync_event({handoff_data, BinObj}, _From,
-%           StateName,
-%           State = #state{mod = Mod, modstate = ModState}) ->
-%     case Mod:handle_handoff_data(BinObj, ModState) of
-%       {reply, ok, NewModState} ->
-%       {reply, ok, StateName,
-%        State#state{modstate = NewModState},
-%        State#state.inactivity_timeout};
-%       {reply, {error, Err}, NewModState} ->
-%       logger:error("~p failed to store handoff obj: ~p",
-%                [Mod, Err]),
-%       {reply, {error, Err}, StateName,
-%        State#state{modstate = NewModState},
-%        State#state.inactivity_timeout}
-%     end;
-% handle_sync_event(core_status, _From, StateName,
-%           State = #state{index = Index, mod = Mod,
-%                  modstate = ModState, handoff_target = HT,
-%                  forward = FN}) ->
-%     Mode = case {FN, HT} of
-%          {undefined, none} -> active;
-%          {undefined, HT} -> handoff;
-%          {FN, none} -> forward;
-%          _ -> undefined
-%        end,
-%     Status = [{index, Index}, {mod, Mod}] ++
-%            case FN of
-%          undefined -> [];
-%          _ -> [{forward, FN}]
-%            end
-%          ++
-%          case HT of
-%            none -> [];
-%            _ -> [{handoff_target, HT}]
-%          end
-%            ++
-%            case ModState of
-%              {deleted, _} -> [deleted];
-%              _ -> []
-%            end,
-%     {reply, {Mode, Status}, StateName, State,
-%      State#state.inactivity_timeout}.
-
-% handle_info({'$vnode_proxy_ping', From, Ref, Msgs},
-%         StateName, State) ->
-%     riak_core_vnode_proxy:cast(From,
-%                    {vnode_proxy_pong, Ref, Msgs}),
-%     {next_state, StateName, State,
-%      State#state.inactivity_timeout};
-% handle_info({'EXIT', Pid, Reason}, _StateName,
-%         State = #state{mod = Mod, index = Index, pool_pid = Pid,
-%                pool_config = PoolConfig}) ->
-%     case Reason of
-%       Reason when Reason == normal; Reason == shutdown ->
-%       continue(State#state{pool_pid = undefined});
-%       _ ->
-%       logger:error("~p ~p worker pool crashed ~p\n",
-%                [Index, Mod, Reason]),
-%       {pool, WorkerModule, PoolSize, WorkerArgs} = PoolConfig,
-%       logger:debug("starting worker pool ~p with size of "
-%                "~p for vnode ~p.",
-%                [WorkerModule, PoolSize, Index]),
-%       {ok, NewPoolPid} =
-%           riak_core_vnode_worker_pool:start_link(WorkerModule,
-%                              PoolSize, Index,
-%                              WorkerArgs, worker_props),
-%       continue(State#state{pool_pid = NewPoolPid})
-%     end;
-% handle_info({'DOWN', _Ref, process, _Pid, normal},
-%         _StateName, State = #state{modstate = {deleted, _}}) ->
-%     %% these messages are produced by riak_kv_vnode's aae tree
-%     %% monitors; they are harmless, so don't yell about them. also
-%     %% only dustbin them in the deleted modstate, because pipe vnodes
-%     %% need them in other states
-%     continue(State);
-% handle_info(Info, _StateName,
-%         State = #state{mod = Mod, modstate = {deleted, _},
-%                index = Index}) ->
-%     logger:info("~p ~p ignored handle_info ~p - vnode "
-%         "unregistering\n",
-%         [Index, Mod, Info]),
-%     continue(State);
-% handle_info({'EXIT', Pid, Reason}, StateName,
-%         State = #state{mod = Mod, modstate = ModState}) ->
-%     %% A linked processes has died so use the
-%     %% handle_exit callback to allow the vnode
-%     %% process to take appropriate action.
-%     %% If the function is not implemented default
-%     %% to crashing the process.
-%     try case Mod:handle_exit(Pid, Reason, ModState) of
-%       {noreply, NewModState} ->
-%           {next_state, StateName,
-%            State#state{modstate = NewModState},
-%            State#state.inactivity_timeout};
-%       {stop, Reason1, NewModState} ->
-%           {stop, Reason1, State#state{modstate = NewModState}}
-%     end
-%     catch
-%       _ErrorType:undef -> {stop, linked_process_crash, State}
-%     end;
-% handle_info(Info, StateName,
-%         State = #state{mod = Mod, modstate = ModState}) ->
-%     case erlang:function_exported(Mod, handle_info, 2) of
-%       true ->
-%       {ok, NewModState} = Mod:handle_info(Info, ModState),
-%       {next_state, StateName,
-%        State#state{modstate = NewModState},
-%        State#state.inactivity_timeout};
-%       false ->
-%       {next_state, StateName, State,
-%        State#state.inactivity_timeout}
-%     end.
-
-terminate(Reason, _StateName,
-      #state{mod = Mod, modstate = ModState,
-         pool_pid = Pool}) ->
-    %% Shutdown if the pool is still alive and a normal `Reason' is
-    %% given - there could be a race on delivery of the unregistered
-    %% event and successfully shutting down the pool.
-    try case is_pid(Pool) andalso
-           is_process_alive(Pool) andalso (?NORMAL_REASON(Reason))
-        of
-      true ->
-          riak_core_vnode_worker_pool:shutdown_pool(Pool, 60000);
-      _ -> ok
-    end
-    catch
-      Type:Reason:Stacktrace ->
-      logger:error("Error while shutting down vnode worker "
-               "pool ~p:~p trace : ~p",
-               [Type, Reason, Stacktrace])
-    after
-      case ModState of
-    %% Handoff completed, Mod:delete has been called, now terminate.
-    {deleted, ModState1} ->
-        Mod:terminate(Reason, ModState1);
-    _ -> Mod:terminate(Reason, ModState)
-      end
-    end.
-
-code_change(_OldVsn, StateName, State, _Extra) ->
-    {ok, StateName, State}.
 
 maybe_handoff(_TargetIdx, _TargetNode,
           State = #state{modstate = {deleted, _}}) ->
@@ -1327,42 +1317,8 @@ start_outbound(HOType, TargetIdx, TargetNode, Opts,
       State#state{modstate = NewModState}
     end.
 
-%% @doc Send a reply to a vnode request.  If
-%%      the Ref is undefined just send the reply
-%%      for compatibility with pre-0.12 requestors.
-%%      If Ref is defined, send it along with the
-%%      reply.
-%%      NOTE: We *always* send the reply using unreliable delivery.
-%%
--spec reply(sender(), term()) -> any().
 
-reply({fsm, undefined, From}, Reply) ->
-    riak_core_send_msg:send_event_unreliable(From, Reply);
-reply({fsm, Ref, From}, Reply) ->
-    riak_core_send_msg:send_event_unreliable(From,
-                         {Ref, Reply});
-reply({server, undefined, From}, Reply) ->
-    riak_core_send_msg:reply_unreliable(From, Reply);
-reply({server, Ref, From}, Reply) ->
-    riak_core_send_msg:reply_unreliable(From, {Ref, Reply});
-reply({raw, Ref, From}, Reply) ->
-    riak_core_send_msg:bang_unreliable(From, {Ref, Reply});
-reply(ignore, _Reply) -> ok.
 
-%% @doc Set up a monitor for the pid named by a {@type sender()} vnode
-%% argument.  If `Sender' was the atom `ignore', this function sets up
-%% a monitor on `self()' in order to return a valid (if useless)
-%% monitor reference.
--spec monitor(Sender :: sender()) -> Monitor ::
-                     reference().
-
-monitor({fsm, _, From}) ->
-    erlang:monitor(process, From);
-monitor({server, _, {Pid, _Ref}}) ->
-    erlang:monitor(process, Pid);
-monitor({raw, _, From}) ->
-    erlang:monitor(process, From);
-monitor(ignore) -> erlang:monitor(process, self()).
 
 %% Individual vnode processes and the vnode manager are tightly coupled. When
 %% vnode events occur, the vnode must ensure that the events are forwarded to
@@ -1378,7 +1334,7 @@ start_manager_event_timer(Event,
                     Event),
     stop_manager_event_timer(State),
 %TODO correct way to start an event after x?
-T2= erlang:start_timer(30000, self(), {'$gen_event', {send_manager_event, Event}}),
+T2= erlang:start_timer(30000, self(), {'$gen_cast', {send_manager_event, Event}}),
     %T2 = gen_statem:send_event_after(30000,
     %                 {send_manager_event, Event}),
     State#state{manager_event_timer = T2}.
@@ -1412,10 +1368,12 @@ mod_set_forwarding(Forward,
       false -> State
     end.
 
+
+
 %% ===================================================================
 %% Test API
 %% ===================================================================
-
+-ifdef(TEST).
 -type state() :: #state{}.
 
 %% @doc Reveal the underlying module state for testing
@@ -1426,7 +1384,7 @@ get_modstate(Pid) ->
     gen_statem:call(Pid, current_state),
     {State#state.mod, State#state.modstate}.
 
--ifdef(TEST).
+
 
 %% Start the garbage collection server
 test_link(Mod, Index) ->
