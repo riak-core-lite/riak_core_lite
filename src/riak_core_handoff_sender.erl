@@ -240,11 +240,13 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
       case Type of
         repair -> ok;
         resize ->
-            gen_statem:cast(ParentPid,
-                      {resize_transfer_complete,
-                       NotSentAcc});
+            % gen_statem:cast(ParentPid,
+            %           {resize_transfer_complete,
+            %            NotSentAcc});
+            riak_core_vnode:resize_transfer_complete(ParentPid, NotSentAcc);
         _ ->
-            gen_statem:cast(ParentPid, handoff_complete)
+            %gen_statem:cast(ParentPid, handoff_complete)
+            riak_core_vnode:handoff_complete(ParentPid)
       end;
       {error, ErrReason} ->
       if ErrReason == timeout -> exit({shutdown, timeout});

@@ -22,11 +22,14 @@
 
 -include("riak_core_vnode.hrl").
 -export([callback_mode/0]).
--export([start_link/3, start_link/4,
-      send_command_after/2]).
+-export([start_link/3, start_link/4]).
 
--export([init/1, started/3, active/3,
-     terminate/3, code_change/4]).
+-export([init/1,
+         started/3,
+         active/3,
+         terminate/3,
+         code_change/4
+        ]).
 
 -export([reply/2, monitor/1]).
 
@@ -39,7 +42,16 @@
         trigger_handoff/3, %% #6
         trigger_handoff/2, %% #7
         trigger_delete/1, %% #8
-        core_status/1 %% #9
+        core_status/1, %% #9
+        send_command_after/2, %% #10
+
+        %% TODO new APIs
+        cast_finish_handoff/1, %% #11
+        cancel_handoff/1, %% #12
+        handoff_complete/1, %% #13
+        resize_transfer_complete/2, %% #14
+        handoff_data/3, %% #15
+        unregistered/1 %% #16
     ]).
 
 -ifdef(TEST).
@@ -294,6 +306,33 @@ send_command_after(Time, Request) ->
     %gen_fsm_compat:send_event_after(Time, #riak_vnode_req_v1{request = Request}).
     erlang:start_timer(Time, self(), {'$gen_cast', #riak_vnode_req_v1{request = Request}}).
 
+%%%%%%% %TODO new APIs
+%% #11 %TODO riak_core_vnode_manager - handle_vnode_event
+cast_finish_handoff(VNode) ->
+    gen_statem:cast(VNode, finish_handoff).
+
+%% #12 %TODO riak_core_vnode_manager - handle_vnode_event
+cancel_handoff(VNode) ->
+    gen_statem:cast(VNode, cancel_handoff).
+
+%% #13 %TODO riak:core_handoff_sender - start_fold_
+handoff_complete(VNode) ->
+    gen_statem:cast(VNode, handoff_complete).
+
+%% #14 %TODO riak:core_handoff_sender - start_fold_
+resize_transfer_complete(VNode, SeenIdxs) ->
+    gen_statem:cast(VNode, {resize_transfer_complete, SeenIdxs}).
+
+%% #15 %TODO riak_core_handoff_receiver - process_message
+handoff_data(VNode, BinObj, VNodeTimeout) ->
+    gen_statem:call(VNode, {handoff_data, BinObj}, VNodeTimeout).
+
+%% #16 %TODO riak_core_vnode_proxy - handle_cast
+unregistered(VNode) ->
+    gen_statem:cast(VNode, unregistered).
+
+
+
 
 %% @doc Send a reply to a vnode request.  If
 %%      the Ref is undefined just send the reply
@@ -533,19 +572,14 @@ active({call, From}, core_status,
         [State#state.inactivity_timeout, {reply, From, {Mode, Status}}]};
 
 
-
-
-%% external
-%%%%%%%%%%%
-
-%% # riak_core_vnode_manager - handle_vnode_event
+%% #11
 active(cast, finish_handoff,
     State = #state{modstate = {deleted, _ModState}}) ->
         stop_manager_event_timer(State),
         continue(State#state{handoff_target = none});
 
 
-%% # riak_core_vnode_manager - handle_vnode_event
+%% #11
 active(cast, finish_handoff,
         State = #state{mod = Mod, modstate = ModState,
         handoff_target = Target}) ->
@@ -559,7 +593,7 @@ active(cast, finish_handoff,
             end;
 
 
-%% # riak_core_vnode_manager - handle_vnode_event
+%% #12
 active(cast, cancel_handoff,
     State = #state{mod = Mod, modstate = ModState}) ->
     %% it would be nice to pass {Err, Reason} to the vnode but the
@@ -575,14 +609,14 @@ active(cast, cancel_handoff,
         end;
 
 
-%% # riak:core_handoff_sender - start_fold_
+%% #13
 active(cast, handoff_complete, State) ->
     State2 = start_manager_event_timer(handoff_complete,
                        State),
     continue(State2);
 
 
-%% # riak:core_handoff_sender - start_fold_
+%% #14
 active(cast, {resize_transfer_complete, SeenIdxs},
        State = #state{mod = Mod, modstate = ModState,
               handoff_target = Target}) ->
@@ -596,7 +630,7 @@ active(cast, {resize_transfer_complete, SeenIdxs},
              State#state{modstate = NewModState})
     end;
 
-%% # riak_core_handoff_receiver - process_message
+%% #15
 active({call, From}, {handoff_data, _BinObj},
           State = #state{modstate = {deleted, _ModState}}) ->
     {next_state, active, State,
@@ -606,7 +640,7 @@ active({call, From}, {handoff_data, _BinObj},
     % State#state.inactivity_timeout};
 
 
-%% # riak_core_handoff_receiver - process_message
+%% #15
 active({call, From}, {handoff_data, BinObj},
           State = #state{mod = Mod, modstate = ModState}) ->
     case Mod:handle_handoff_data(BinObj, ModState) of
@@ -626,7 +660,7 @@ active({call, From}, {handoff_data, BinObj},
         %     State#state.inactivity_timeout}
     end;
 
-%% # riak_core_vnode_proxy - handle_cast
+%% #16
 active(cast, unregistered,
        State = #state{mod = Mod, index = Index}) ->
     %% Add exclusion so the ring handler will not try to spin this vnode
@@ -643,7 +677,7 @@ active(cast, unregistered,
 %% internal
 %%%%%%%%%%%%
 
-%% # riak_core_vnode - start_manager_event_timer
+%% # start_manager_event_timer
 active(cast, {send_manager_event, Event}, State) ->
     State2 = start_manager_event_timer(Event, State),
     continue(State2);

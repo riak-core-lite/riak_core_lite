@@ -177,7 +177,8 @@ handle_call(_Msg, _From, State) -> {reply, ok, State}.
 handle_cast({unregister_vnode, Pid}, State) ->
     %% The pid may not match the vnode_pid in the state, but we must send the
     %% unregister event anyway -- the vnode manager requires it.
-    gen_statem:cast(Pid, unregistered),
+    riak_core_vnode:unregistered(Pid),
+    %old: gen_statem:cast(Pid, unregistered),
     catch demonitor(State#state.vnode_mref, [flush]),
     NewState = forget_vnode(State),
     {noreply, NewState};

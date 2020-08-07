@@ -494,14 +494,15 @@ handle_vnode_event(inactive, Mod, Idx, Pid, State) ->
 handle_vnode_event(handoff_complete, Mod, Idx, Pid,
            State) ->
     NewHO = dict:erase({Mod, Idx}, State#state.handoff),
-    gen_statem:cast(Pid,
-                    finish_handoff),
+    %gen_statem:cast(Pid, finish_handoff),
+    riak_core_vnode:cast_finish_handoff(Pid),
     {noreply, State#state{handoff = NewHO}};
 handle_vnode_event(handoff_error, Mod, Idx, Pid,
            State) ->
     NewHO = dict:erase({Mod, Idx}, State#state.handoff),
-    gen_statem:cast(Pid,
-                    cancel_handoff),
+    riak_core_vnode:cancel_handoff(Pid),
+    %gen_statem:cast(Pid,
+    %                cancel_handoff),
     {noreply, State#state{handoff = NewHO}}.
 
 %% @private
