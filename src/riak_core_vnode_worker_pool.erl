@@ -317,8 +317,14 @@ worker_started(#state{pool = Pool,
                  State#state{queue = Rem, monitors = NewMonitors}}
           end;
       {empty, _} ->
-          %% StateName might be either 'ready' or 'shutdown'
-          {next_state, StateName, State}
+          {next_state,
+           %% If we are in state queueing with nothing in the queue,
+           %% move to the ready state so that the next incoming job
+           %% checks out the new worker from poolboy.
+           if StateName == queue -> ready;
+              true -> StateName
+           end,
+           State}
     end.
 
 checkin(#state{pool = Pool, monitors = Monitors} =
