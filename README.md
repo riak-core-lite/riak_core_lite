@@ -53,3 +53,11 @@ something Core related
 * If you've found a bug in riak_core_lite,
   [file](https://github.com/riak-core-lite/riak_core_lite/issues) a clear, concise,
   explanatory issue against this repo.
+  
+## Reference Implementation
+
+For some reference on how `riak_core_lite` can be used, you can read about projects which are using `riak_core_lite` as a library:
+
+- [rcl_memkv](https://github.com/albsch/rcl_memkv): A minimalistic in-memory key-value store to understand how to implement the handoff behavior properly
+- [rclref](https://github.com/wattlebirdaz/rclref): A reference implementation of a distributed key-value store using riak_core_lite featuring quorum reads and writes.
+- [AntidoteDB](https://github.com/AntidoteDB/antidote): A a highly available geo-replicated key-value database which uses riak_core_lite for sharding of data centers.

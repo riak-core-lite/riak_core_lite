@@ -170,9 +170,9 @@ start_vnode(Index, VNodeMod) ->
     gen_server:cast(?MODULE,
                     {Index, VNodeMod, start_vnode}).
 
-vnode_event(Mod, Idx, Pid, Event) ->
+vnode_event(Module, Idx, Pid, Event) ->
     gen_server:cast(?MODULE,
-                    {vnode_event, Mod, Idx, Pid, Event}).
+                    {vnode_event, Module, Idx, Pid, Event}).
 
 get_tab() ->
     gen_server:call(?MODULE, get_tab, infinity).
@@ -195,11 +195,12 @@ all_vnodes() ->
       Result -> Result
     end.
 
-all_vnodes(Mod) ->
-    case get_all_vnodes(Mod) of
+all_vnodes(Module) ->
+    case get_all_vnodes(Module) of
       [] ->
           %% ETS error could produce empty list, call manager to be sure.
-          gen_server:call(?MODULE, {all_vnodes, Mod}, infinity);
+          gen_server:call(?MODULE, {all_vnodes, Module},
+                          infinity);
       Result -> Result
     end.
 
@@ -215,22 +216,24 @@ all_index_pid(VNodeMod) ->
 %% Protected ETS Accessors
 %% ===================================================================
 
-get_all_index_pid(Mod, Default) ->
+get_all_index_pid(Module, Default) ->
     try [list_to_tuple(L)
          || L
-                <- ets:match(?ETS, {idxrec, '_', '$1', Mod, '$2', '_'})]
+                <- ets:match(?ETS,
+                             {idxrec, '_', '$1', Module, '$2', '_'})]
     catch
       _:_ -> Default
     end.
 
 get_all_vnodes() ->
-    Mods = [Mod
-            || {_App, Mod} <- riak_core:vnode_modules()],
-    get_all_vnodes(Mods).
+    Modules = [Module
+               || {_App, Module} <- riak_core:vnode_modules()],
+    get_all_vnodes(Modules).
 
-get_all_vnodes(Mods) when is_list(Mods) ->
-    lists:flatmap(fun (Mod) -> get_all_vnodes(Mod) end,
-                  Mods);
+get_all_vnodes(Modules) when is_list(Modules) ->
+    lists:flatmap(fun (Module) -> get_all_vnodes(Module)
+                  end,
+                  Modules);
 get_all_vnodes(Mod) ->
     IdxPids = get_all_index_pid(Mod, []),
     [{Mod, Idx, Pid} || {Idx, Pid} <- IdxPids].
@@ -280,9 +283,9 @@ find_vnodes(State) ->
                              || Pid <- VnodePids]),
     %% Populate the ETS table with processes running this VNodeMod (filtered
     %% in the list comprehension)
-    F = fun (Pid, Idx, Mod) ->
+    F = fun (Pid, Idx, Module) ->
                 Mref = erlang:monitor(process, Pid),
-                #idxrec{key = {Idx, Mod}, idx = Idx, mod = Mod,
+                #idxrec{key = {Idx, Module}, idx = Idx, mod = Module,
                         pid = Pid, monref = Mref}
         end,
     IdxRecs = [F(Pid, Idx, Mod)
@@ -502,14 +505,12 @@ handle_vnode_event(inactive, Mod, Idx, Pid, State) ->
 handle_vnode_event(handoff_complete, Mod, Idx, Pid,
                    State) ->
     NewHO = dict:erase({Mod, Idx}, State#state.handoff),
-    gen_fsm_compat:send_all_state_event(Pid,
-                                        finish_handoff),
+    riak_core_vnode:cast_finish_handoff(Pid),
     {noreply, State#state{handoff = NewHO}};
 handle_vnode_event(handoff_error, Mod, Idx, Pid,
                    State) ->
     NewHO = dict:erase({Mod, Idx}, State#state.handoff),
-    gen_fsm_compat:send_all_state_event(Pid,
-                                        cancel_handoff),
+    riak_core_vnode:cancel_handoff(Pid),
     {noreply, State#state{handoff = NewHO}}.
 
 %% @private
@@ -624,10 +625,10 @@ add_vnode_rec(I, _State = #state{idxtab = T}) ->
     ets:insert(T, I).
 
 %% @private
-get_vnode(Idx, Mod, State) when not is_list(Idx) ->
-    [Result] = get_vnode([Idx], Mod, State), Result;
-get_vnode(IdxList, Mod, State) ->
-    Initial = [case idx2vnode(Idx, Mod, State) of
+get_vnode(Idx, Module, State) when not is_list(Idx) ->
+    [Result] = get_vnode([Idx], Module, State), Result;
+get_vnode(IdxList, Module, State) ->
+    Initial = [case idx2vnode(Idx, Module, State) of
                  no_match -> Idx;
                  Pid -> {Idx, Pid}
                end
@@ -635,12 +636,12 @@ get_vnode(IdxList, Mod, State) ->
     {NotStarted, Started} =
         lists:partition(fun erlang:is_integer/1, Initial),
     StartFun = fun (Idx) ->
-                       ForwardTo = get_forward(Mod, Idx, State),
+                       ForwardTo = get_forward(Module, Idx, State),
                        logger:debug("Will start VNode for partition ~p",
                                     [Idx]),
-                       {ok, Pid} = riak_core_vnode_sup:start_vnode(Mod, Idx,
+                       {ok, Pid} = riak_core_vnode_sup:start_vnode(Module, Idx,
                                                                    ForwardTo),
-                       register_vnode_stats(Mod, Idx, Pid),
+                       register_vnode_stats(Module, Idx, Pid),
                        logger:debug("Started VNode, waiting for initialization "
                                     "to\n                              complete "
                                     "~p, ~p ",
@@ -658,9 +659,9 @@ get_vnode(IdxList, Mod, State) ->
     _ = [begin
            Pid = dict:fetch(Idx, PairsDict),
            MonRef = erlang:monitor(process, Pid),
-           IdxRec = #idxrec{key = {Idx, Mod}, idx = Idx, mod = Mod,
-                            pid = Pid, monref = MonRef},
-           MonRec = #monrec{monref = MonRef, key = {Idx, Mod}},
+           IdxRec = #idxrec{key = {Idx, Module}, idx = Idx,
+                            mod = Module, pid = Pid, monref = MonRef},
+           MonRec = #monrec{monref = MonRef, key = {Idx, Module}},
            add_vnode_rec([IdxRec, MonRec], State)
          end
          || Idx <- NotStarted],

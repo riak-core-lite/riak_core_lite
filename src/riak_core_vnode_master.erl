@@ -28,18 +28,17 @@
 
 -behaviour(gen_server).
 
--export([start_link/1, start_link/2, start_link/3,
-         get_vnode_pid/2, start_vnode/2, command/3, command/4,
-         command_unreliable/3, command_unreliable/4,
-         sync_command/3, sync_command/4, coverage/5,
-         command_return_vnode/4, sync_spawn_command/3,
-         make_request/3, make_coverage_request/4, all_nodes/1,
-         reg_name/1]).
+-export([start_link/1, get_vnode_pid/2, start_vnode/2,
+         command/3, command/4, command_unreliable/3,
+         command_unreliable/4, sync_command/3, sync_command/4,
+         coverage/5, command_return_vnode/4,
+         sync_spawn_command/3, make_request/3,
+         make_coverage_request/4, all_nodes/1, reg_name/1]).
 
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
--record(state, {idxtab, sup_name, vnode_mod, legacy}).
+-record(state, {idxtab, sup_name, vnode_mod}).
 
 -define(LONG_TIMEOUT, 120 * 1000).
 
@@ -57,15 +56,10 @@ vmaster_to_vmod(VMaster) ->
     L = atom_to_list(VMaster),
     list_to_atom(lists:sublist(L, length(L) - 7)).
 
-start_link(VNodeMod) -> start_link(VNodeMod, undefined).
-
-start_link(VNodeMod, LegacyMod) ->
-    start_link(VNodeMod, LegacyMod, undefined).
-
-start_link(VNodeMod, LegacyMod, Service) ->
+start_link(VNodeMod) ->
     RegName = reg_name(VNodeMod),
     gen_server:start_link({local, RegName}, ?MODULE,
-                          [Service, VNodeMod, LegacyMod, RegName], []).
+                          [VNodeMod, RegName], []).
 
 start_vnode(Index, VNodeMod) ->
     riak_core_vnode_manager:start_vnode(Index, VNodeMod).
@@ -92,8 +86,8 @@ command2([], _Msg, _Sender, _VMaster, _How) -> ok;
 command2([{Index, Pid} | Rest], Msg, Sender, VMaster,
          How = normal)
     when is_pid(Pid) ->
-    gen_fsm_compat:send_event(Pid,
-                              make_request(Msg, Sender, Index)),
+    Request = make_request(Msg, Sender, Index),
+    riak_core_vnode:send_req(Pid, Request),
     command2(Rest, Msg, Sender, VMaster, How);
 command2([{Index, Pid} | Rest], Msg, Sender, VMaster,
          How = unreliable)
@@ -196,11 +190,8 @@ all_nodes(VNodeMod) ->
     [Pid || {_Mod, _Idx, Pid} <- VNodes].
 
 %% @private
-init([Service, VNodeMod, LegacyMod, _RegName]) ->
-    gen_server:cast(self(), {wait_for_service, Service}),
-    {ok,
-     #state{idxtab = undefined, vnode_mod = VNodeMod,
-            legacy = LegacyMod}}.
+init([VNodeMod, _RegName]) ->
+    {ok, #state{idxtab = undefined, vnode_mod = VNodeMod}}.
 
 proxy_cast(Who, Req) -> proxy_cast(Who, Req, normal).
 
@@ -221,7 +212,7 @@ do_proxy_cast({VMaster, Node},
     ok.
 
 send_an_event(Dest, Event, normal) ->
-    gen_fsm:send_event(Dest, Event);
+    riak_core_vnode:send_req(Dest, Event);
 send_an_event(Dest, Event, unreliable) ->
     riak_core_send_msg:send_event_unreliable(Dest, Event).
 
@@ -236,20 +227,13 @@ handle_cast({wait_for_service, Service}, State) ->
 handle_cast(Req = #riak_vnode_req_v1{index = Idx},
             State = #state{vnode_mod = Mod}) ->
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
-    gen_fsm:send_event(Proxy, Req),
+    riak_core_vnode:send_req(Proxy, Req),
     {noreply, State};
 handle_cast(Req = #riak_coverage_req_v1{index = Idx},
             State = #state{vnode_mod = Mod}) ->
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
-    gen_fsm:send_event(Proxy, Req),
-    {noreply, State};
-handle_cast(Other, State = #state{legacy = Legacy})
-    when Legacy =/= undefined ->
-    case catch Legacy:rewrite_cast(Other) of
-      {ok, #riak_vnode_req_v1{} = Req} ->
-          handle_cast(Req, State);
-      _ -> {noreply, State}
-    end.
+    riak_core_vnode:send_req(Proxy, Req),
+    {noreply, State}.
 
 handle_call({return_vnode,
              Req = #riak_vnode_req_v1{index = Idx}},
@@ -263,10 +247,10 @@ handle_call(Req = #riak_vnode_req_v1{index = Idx,
                                      sender = {server, undefined, undefined}},
             From, State = #state{vnode_mod = Mod}) ->
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
-    gen_fsm_compat:send_event(Proxy,
-                              Req#riak_vnode_req_v1{sender =
-                                                        {server, undefined,
-                                                         From}}),
+    riak_core_vnode:send_req(Proxy,
+                             Req#riak_vnode_req_v1{sender =
+                                                       {server, undefined,
+                                                        From}}),
     {noreply, State};
 handle_call({spawn,
              Req = #riak_vnode_req_v1{index = Idx,
@@ -275,20 +259,12 @@ handle_call({spawn,
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
     Sender = {server, undefined, From},
     spawn_link(fun () ->
-                       gen_fsm_compat:send_all_state_event(Proxy,
-                                                           Req#riak_vnode_req_v1{sender
-                                                                                     =
-                                                                                     Sender})
+                       riak_core_vnode:send_all_proxy_req(Proxy,
+                                                          Req#riak_vnode_req_v1{sender
+                                                                                    =
+                                                                                    Sender})
                end),
-    {noreply, State};
-handle_call(Other, From,
-            State = #state{legacy = Legacy})
-    when Legacy =/= undefined ->
-    case catch Legacy:rewrite_call(Other, From) of
-      {ok, #riak_vnode_req_v1{} = Req} ->
-          handle_call(Req, From, State);
-      _ -> {noreply, State}
-    end.
+    {noreply, State}.
 
 handle_info(_Info, State) -> {noreply, State}.
 

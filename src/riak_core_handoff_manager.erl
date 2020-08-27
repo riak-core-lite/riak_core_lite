@@ -292,9 +292,9 @@ handle_cast({status_update, ModSrcTgt, StatsUpdate},
           {noreply, State#state{handoffs = HS2}}
     end;
 handle_cast({send_handoff, Type, Mod, {Src, Target},
-             ReqOrigin, {FilterMod, FilterFun} = FMF},
+             ReqOrigin, {Module, FilterFun} = FMF},
             State = #state{handoffs = HS}) ->
-    Filter = FilterMod:FilterFun(Target),
+    Filter = Module:FilterFun(Target),
     %% TODO: make a record?
     {ok, VNode} = riak_core_vnode_manager:get_vnode_pid(Src,
                                                         Mod),
@@ -440,30 +440,31 @@ filter({Key, Value} = _Filter) ->
             end
     end.
 
-resize_transfer_filter(Ring, Mod, Src, Target) ->
+resize_transfer_filter(Ring, Module, Src, Target) ->
     fun (K) ->
-            {_, Hashed} = Mod:object_info(K),
+            {_, Hashed} = Module:object_info(K),
             riak_core_ring:is_future_index(Hashed, Src, Target,
                                            Ring)
     end.
 
-resize_transfer_notsent_fun(Ring, Mod, Src) ->
+resize_transfer_notsent_fun(Ring, Module, Src) ->
     Shrinking = riak_core_ring:num_partitions(Ring) >
                   riak_core_ring:future_num_partitions(Ring),
-    case Shrinking of
-      false -> NValMap = DefaultN = undefined;
-      true ->
-          NValMap = Mod:nval_map(Ring),
-          DefaultN = riak_core_bucket:default_object_nval()
-    end,
+    {NValMap, DefaultN} = case Shrinking of
+                            false -> {undefined, undefined};
+                            true ->
+                                {ok, DefN} = application:get_env(riak_core,
+                                                                 target_n_val),
+                                {Module:nval_map(Ring), DefN}
+                          end,
     fun (Key, Acc) ->
             record_seen_index(Ring, Shrinking, NValMap, DefaultN,
-                              Mod, Src, Key, Acc)
+                              Module, Src, Key, Acc)
     end.
 
 record_seen_index(Ring, Shrinking, NValMap, DefaultN,
-                  Mod, Src, Key, Seen) ->
-    {Bucket, Hashed} = Mod:object_info(Key),
+                  Module, Src, Key, Seen) ->
+    {Bucket, Hashed} = Module:object_info(Key),
     CheckNVal = case Shrinking of
                   false -> undefined;
                   true -> proplists:get_value(Bucket, NValMap, DefaultN)

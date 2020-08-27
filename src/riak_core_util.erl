@@ -39,9 +39,8 @@
          disable_job_class/1, disable_job_class/2,
          job_class_enabled/1, job_class_enabled/2,
          job_class_disabled_message/2,
-         report_job_request_disposition/6,
-         responsible_preflists/1, responsible_preflists/2,
-         get_index_n/1, preflist_siblings/1, posix_error/1]).
+         report_job_request_disposition/6, get_index_n/1,
+         posix_error/1]).
 
 -include("riak_core_vnode.hrl").
 
@@ -60,9 +59,6 @@
          decr_counter/1]).
 
 -endif.
-
--type
-     riak_core_ring() :: riak_core_ring:riak_core_ring().
 
 -type index() :: non_neg_integer().
 
@@ -120,7 +116,7 @@ rfc1123_to_now(String) when is_list(String) ->
 %%      to the new directory.
 make_tmp_dir() ->
     TmpId = io_lib:format("riptemp.~p",
-                          [erlang:phash2({riak_core_rand:uniform(), self()})]),
+                          [erlang:phash2({rand:uniform(), self()})]),
     TempDir = filename:join("/tmp", TmpId),
     case filelib:is_dir(TempDir) of
       true -> make_tmp_dir();
@@ -231,17 +227,16 @@ mkclientid(RemoteNode) ->
 
 %% @spec chash_key(BKey :: riak_object:bkey()) -> chash:index()
 %% @doc Create a binary used for determining replica placement.
-chash_key({Bucket, _Key} = BKey) ->
-    BucketProps = riak_core_bucket:get_bucket(Bucket),
-    chash_key(BKey, BucketProps).
+chash_key(BKey) ->
+    %% TODO remove
+    %%    BucketProps = riak_core_bucket:get_bucket(Bucket),
+    chash_key(BKey, undefined).
 
 %% @spec chash_key(BKey :: riak_object:bkey(), [{atom(), any()}]) ->
 %%          chash:index()
 %% @doc Create a binary used for determining replica placement.
 chash_key({Bucket, Key}, _BucketProps) ->
-    %{_, {M, F}} = lists:keyfind(chash_keyfun, 1, BucketProps),
-    %M:F({Bucket,Key}).
-    % FIX static keyfun
+    % static keyfun
     chash_std_keyfun({Bucket, Key}).
 
 %% @spec chash_std_keyfun(BKey :: riak_object:bkey()) -> chash:index()
@@ -596,7 +591,7 @@ orddict_delta(A, B) ->
                                    {AVal, BVal}
                            end,
                            A2, B2),
-    Diff = orddict:filter(fun (_, {Same, Same}) -> false;
+    Diff = orddict:filter(fun (_, {_Same, _Same}) -> false;
                               (_, _) -> true
                           end,
                           Merged),
@@ -604,7 +599,7 @@ orddict_delta(A, B) ->
 
 shuffle(L) ->
     N = 134217727, %% Largest small integer on 32-bit Erlang
-    L2 = [{riak_core_rand:uniform(N), E} || E <- L],
+    L2 = [{rand:uniform(N), E} || E <- L],
     L3 = [E || {_, E} <- lists:sort(L2)],
     L3.
 
@@ -631,16 +626,16 @@ format_ip_and_port(Ip, Port) when is_tuple(Ip) ->
     lists:flatten(io_lib:format("~s:~p",
                                 [inet_parse:ntoa(Ip), Port])).
 
-peername(Socket, Transport) ->
-    case Transport:peername(Socket) of
+peername(Socket, Module) ->
+    case Module:peername(Socket) of
       {ok, {Ip, Port}} -> format_ip_and_port(Ip, Port);
       {error, Reason} ->
           %% just return a string so JSON doesn't blow up
           lists:flatten(io_lib:format("error:~p", [Reason]))
     end.
 
-sockname(Socket, Transport) ->
-    case Transport:sockname(Socket) of
+sockname(Socket, Module) ->
+    case Module:sockname(Socket) of
       {ok, {Ip, Port}} -> format_ip_and_port(Ip, Port);
       {error, Reason} ->
           %% just return a string so JSON doesn't blow up
@@ -874,97 +869,12 @@ report_job_request_disposition(false, Class, Mod, Func,
 -spec get_index_n({binary(), binary()}) -> index_n().
 
 get_index_n({Bucket, Key}) ->
-    BucketProps = riak_core_bucket:get_bucket(Bucket),
-    N = proplists:get_value(n_val, BucketProps),
+    %%    BucketProps = riak_core_bucket:get_bucket(Bucket),
+    {ok, N} = application:get_env(riak_core, target_n_val),
     ChashKey = riak_core_util:chash_key({Bucket, Key}),
     {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
     Index = chashbin:responsible_index(ChashKey, CHBin),
     {Index, N}.
-
-%% @doc Given an index, determine all sibling indices that participate in one
-%%      or more preflists with the specified index.
--spec preflist_siblings(index()) -> [index()].
-
-preflist_siblings(Index) ->
-    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
-    preflist_siblings(Index, Ring).
-
-%% @doc See {@link preflist_siblings/1}.
--spec preflist_siblings(index(),
-                        riak_core_ring()) -> [index()].
-
-preflist_siblings(Index, Ring) ->
-    MaxN = determine_max_n(Ring),
-    preflist_siblings(Index, MaxN, Ring).
-
--spec preflist_siblings(index(), pos_integer(),
-                        riak_core_ring()) -> [index()].
-
-preflist_siblings(Index, N, Ring) ->
-    IndexBin = <<Index:160/integer>>,
-    PL = riak_core_ring:preflist(IndexBin, Ring),
-    Indices = [Idx || {Idx, _} <- PL],
-    RevIndices = lists:reverse(Indices),
-    {Succ, _} = lists:split(N - 1, Indices),
-    {Pred, _} = lists:split(N - 1, tl(RevIndices)),
-    lists:reverse(Pred) ++ Succ.
-
--spec responsible_preflists(index()) -> [index_n()].
-
-responsible_preflists(Index) ->
-    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
-    responsible_preflists(Index, Ring).
-
--spec responsible_preflists(index(),
-                            riak_core_ring()) -> [index_n()].
-
-responsible_preflists(Index, Ring) ->
-    AllN = determine_all_n(Ring),
-    responsible_preflists(Index, AllN, Ring).
-
--spec responsible_preflists(index(),
-                            [pos_integer(), ...],
-                            riak_core_ring()) -> [index_n()].
-
-responsible_preflists(Index, AllN, Ring) ->
-    IndexBin = <<Index:160/integer>>,
-    PL = riak_core_ring:preflist(IndexBin, Ring),
-    Indices = [Idx || {Idx, _} <- PL],
-    RevIndices = lists:reverse(Indices),
-    lists:flatmap(fun (N) ->
-                          responsible_preflists_n(RevIndices, N)
-                  end,
-                  AllN).
-
--spec responsible_preflists_n([index()],
-                              pos_integer()) -> [index_n()].
-
-responsible_preflists_n(RevIndices, N) ->
-    {Pred, _} = lists:split(N, RevIndices),
-    [{Idx, N} || Idx <- lists:reverse(Pred)].
-
--spec
-     determine_max_n(riak_core_ring()) -> pos_integer().
-
-determine_max_n(Ring) ->
-    lists:max(determine_all_n(Ring)).
-
--spec
-     determine_all_n(riak_core_ring()) -> [pos_integer(), ...].
-
-determine_all_n(Ring) ->
-    Buckets = riak_core_ring:get_buckets(Ring),
-    BucketProps = [riak_core_bucket:get_bucket(Bucket, Ring)
-                   || Bucket <- Buckets],
-    Default = application:get_env(riak_core,
-                                  default_bucket_props, undefined),
-    DefaultN = proplists:get_value(n_val, Default),
-    AllN = lists:foldl(fun (Props, AllN) ->
-                               N = proplists:get_value(n_val, Props),
-                               ordsets:add_element(N, AllN)
-                       end,
-                       [DefaultN], BucketProps),
-    AllN.
 
 %% ===================================================================
 %% EUnit tests

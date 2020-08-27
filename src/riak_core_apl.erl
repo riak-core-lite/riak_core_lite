@@ -39,6 +39,8 @@
 
 -endif.
 
+-type bucket() :: binary() | {binary(), binary()}.
+
 -type index() :: chash:index_as_int().
 
 -type n_val() :: non_neg_integer().
@@ -131,12 +133,11 @@ get_apl_ann(DocIdx, N, Ring, UpNodes) ->
 
 %% @doc Get the active preflist for a given {bucket, key} and list of nodes
 %%      and annotate each node with type of primary/fallback.
--spec get_apl_ann(riak_core_bucket:bucket(),
-                  [node()]) -> preflist_ann().
+-spec get_apl_ann(bucket(), [node()]) -> preflist_ann().
 
 get_apl_ann({Bucket, Key}, UpNodes) ->
-    BucketProps = riak_core_bucket:get_bucket(Bucket),
-    NVal = proplists:get_value(n_val, BucketProps),
+    {ok, NVal} = application:get_env(riak_core,
+                                     target_n_val),
     DocIdx = riak_core_util:chash_key({Bucket, Key}),
     get_apl_ann(DocIdx, NVal, UpNodes).
 
@@ -144,7 +145,7 @@ get_apl_ann({Bucket, Key}, UpNodes) ->
 %%      for a given {bucket, key} and annotate each node with type of
 %%      primary/fallback
 -spec
-     get_apl_ann_with_pnum(riak_core_bucket:bucket()) -> preflist_with_pnum_ann().
+     get_apl_ann_with_pnum(bucket()) -> preflist_with_pnum_ann().
 
 get_apl_ann_with_pnum(BKey) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
@@ -474,9 +475,7 @@ six_node_bucket_key_ann_test() ->
              'dev6@127.0.0.1'],
     Bucket = <<"favorite">>,
     Key = <<"jethrotull">>,
-    application:set_env(riak_core, default_bucket_props,
-                        [{n_val, 3},
-                         {chash_keyfun, {riak_core_util, chash_std_keyfun}}]),
+    application:set_env(riak_core, target_n_val, 3),
     riak_core_ring_manager:setup_ets(test),
     riak_core_ring_manager:set_ring_global(Ring),
     Size = riak_core_ring:num_partitions(Ring),

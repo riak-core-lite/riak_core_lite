@@ -176,7 +176,7 @@ ring_changed(Node, Ring) ->
 %%%===================================================================
 
 reassign_indices(CState) ->
-    reassign_indices(CState, [], riak_core_rand:rand_seed(),
+    reassign_indices(CState, [], erlang:timestamp(),
                      fun no_log/2).
 
 %%%===================================================================
@@ -197,9 +197,7 @@ claimant() ->
 
 init([]) ->
     schedule_tick(),
-    {ok,
-     #state{changes = [],
-            seed = riak_core_rand:rand_seed()}}.
+    {ok, #state{changes = [], seed = erlang:timestamp()}}.
 
 handle_call(clear, _From, State) ->
     State2 = clear_staged(State), {reply, ok, State2};
@@ -290,7 +288,7 @@ commit_staged(State) ->
     case maybe_commit_staged(State) of
       {ok, _} ->
           State2 = State#state{next_ring = undefined,
-                               changes = [], seed = riak_core_rand:rand_seed()},
+                               changes = [], seed = erlang:timestamp()},
           {ok, State2};
       not_changed -> {error, State};
       {not_changed, Reason} -> {{error, Reason}, State}
@@ -337,8 +335,7 @@ maybe_commit_staged(Ring, NextRing,
 %%      call {@link clear/0}.
 clear_staged(State) ->
     remove_joining_nodes(),
-    State#state{changes = [],
-                seed = riak_core_rand:rand_seed()}.
+    State#state{changes = [], seed = erlang:timestamp()}.
 
 %% @private
 remove_joining_nodes() ->
@@ -559,9 +556,7 @@ maybe_force_ring_update(Ring) ->
     end.
 
 do_maybe_force_ring_update(Ring) ->
-    case compute_next_ring([], riak_core_rand:rand_seed(),
-                           Ring)
-        of
+    case compute_next_ring([], erlang:timestamp(), Ring) of
       {ok, NextRing} ->
           case same_plan(Ring, NextRing) of
             false ->
@@ -795,7 +790,7 @@ internal_ring_changed(Node, CState) ->
     case {IsClaimant, riak_core_ring:cluster_name(CState5)}
         of
       {true, undefined} ->
-          ClusterName = {Node, riak_core_rand:rand_seed()},
+          ClusterName = {Node, erlang:timestamp()},
           {_, _} =
               riak_core_util:rpc_every_member(riak_core_ring_manager,
                                               set_cluster_name, [ClusterName],
@@ -831,8 +826,7 @@ do_claimant_quiet(Node, CState, Replacing, Seed) ->
                 fun no_log/2).
 
 do_claimant(Node, CState, Log) ->
-    do_claimant(Node, CState, [],
-                riak_core_rand:rand_seed(), Log).
+    do_claimant(Node, CState, [], erlang:timestamp(), Log).
 
 do_claimant(Node, CState, Replacing, Seed, Log) ->
     AreJoining = are_joining_nodes(CState),
@@ -1122,9 +1116,7 @@ handle_down_nodes(CState, Next) ->
                case OwnerLeaving and NextDown of
                  true ->
                      Active = riak_core_ring:active_members(CState) -- [O],
-                     RNode =
-                         lists:nth(riak_core_rand:uniform(length(Active)),
-                                   Active),
+                     RNode = lists:nth(rand:uniform(length(Active)), Active),
                      {Idx, O, RNode, Mods, Status};
                  _ -> T
                end

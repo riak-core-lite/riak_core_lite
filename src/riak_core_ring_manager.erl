@@ -39,8 +39,8 @@
 %%
 %% To alleviate the slow down while in the ETS phase, `riak_core'
 %% exploits the fact that most time sensitive operations access the ring
-%% in order to read only a subset of its data: bucket properties and
-%% partition ownership. Therefore, these pieces of information are
+%% in order to read only a subset of its data: partition ownership.
+%% Therefore, these pieces of information are
 %% extracted from the ring and stored in the ETS table as well to
 %% minimize copying overhead. Furthermore, the partition ownership
 %% information (represented by the {@link chash} structure) is converted
@@ -51,9 +51,9 @@
 %% structure for normal operations.
 %%
 %% As of Riak 1.4, it is therefore recommended that operations that
-%% can be performed by directly using the bucket properties API or
-%% `chashbin' structure do so using those methods rather than
-%% retrieving the ring via `get_my_ring/0' or `get_raw_ring/0'.
+%% can be performed by directly using the `chashbin' structure.
+%% Do so using that method rather than retrieving the ring via
+%% `get_my_ring/0' or `get_raw_ring/0'.
 
 -module(riak_core_ring_manager).
 
@@ -63,12 +63,12 @@
 
 -export([start_link/0, start_link/1, get_my_ring/0,
          get_raw_ring/0, get_raw_ring_chashbin/0,
-         get_chash_bin/0, get_ring_id/0, get_bucket_meta/1,
-         refresh_my_ring/0, refresh_ring/2, set_my_ring/1,
-         write_ringfile/0, prune_ringfiles/0, read_ringfile/1,
+         get_chash_bin/0, get_ring_id/0, refresh_my_ring/0,
+         refresh_ring/2, set_my_ring/1, write_ringfile/0,
+         prune_ringfiles/0, read_ringfile/1,
          find_latest_ringfile/0, force_update/0,
-         do_write_ringfile/1, ring_trans/2, run_fixups/3,
-         set_cluster_name/1, is_stable_ring/0]).
+         do_write_ringfile/1, ring_trans/2, set_cluster_name/1,
+         is_stable_ring/0]).
 
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
@@ -163,22 +163,6 @@ get_ring_id() ->
       _ -> {0, 0}
     end.
 
-%% @doc Return metadata for the given bucket. If a bucket
-%% for the non-default type is provided {error, no_type}
-%% is returned when the type does not exist
-get_bucket_meta({<<"default">>, Name}) ->
-    get_bucket_meta(Name);
-get_bucket_meta({_Type, _Name} = Bucket) ->
-    %% reads from cluster metadata ets table
-    %% these aren't stored in ring manager ever
-    riak_core_bucket:get_bucket(Bucket);
-get_bucket_meta(Bucket) ->
-    case ets:lookup(?ETS, {bucket, Bucket}) of
-      [] -> undefined;
-      [{_, undefined}] -> undefined;
-      [{_, Meta}] -> {ok, Meta}
-    end.
-
 %% @doc Return the {@link chashbin} generated from the current ring
 get_chash_bin() ->
     case ets:lookup(?ETS, chashbin) of
@@ -223,8 +207,8 @@ do_write_ringfile(Ring) ->
           TS =
               io_lib:format(".~B~2.10.0B~2.10.0B~2.10.0B~2.10.0B~2.10.0B",
                             [Year, Month, Day, Hour, Minute, Second]),
-          Cluster = application:get_env(riak_core, cluster_name,
-                                        undefined),
+          {ok, Cluster} = application:get_env(riak_core,
+                                              cluster_name),
           FN = Dir ++ "/riak_core_ring." ++ Cluster ++ TS,
           do_write_ringfile(Ring, FN)
     end.
@@ -245,8 +229,8 @@ find_latest_ringfile() ->
     Dir = ring_dir(),
     case file:list_dir(Dir) of
       {ok, Filenames} ->
-          Cluster = application:get_env(riak_core, cluster_name,
-                                        undefined),
+          {ok, Cluster} = application:get_env(riak_core,
+                                              cluster_name),
           Timestamps = [list_to_integer(TS)
                         || {"riak_core_ring", C1, TS}
                                <- [list_to_tuple(string:tokens(FN, "."))
@@ -480,28 +464,6 @@ back(N, X, [H | T]) ->
       false -> [H]
     end.
 
-%% @private
-run_fixups([], _Bucket, BucketProps) -> BucketProps;
-run_fixups([{App, Fixup} | T], BucketName,
-           BucketProps) ->
-    BP = try Fixup:fixup(BucketName, BucketProps) of
-           {ok, NewBucketProps} -> NewBucketProps;
-           {error, Reason} ->
-               logger:error("Error while running bucket fixup module "
-                            "~p from application ~p on bucket ~p: "
-                            "~p",
-                            [Fixup, App, BucketName, Reason]),
-               BucketProps
-         catch
-           What:Why ->
-               logger:error("Crash while running bucket fixup module "
-                            "~p from application ~p on bucket ~p "
-                            ": ~p:~p",
-                            [Fixup, App, BucketName, What, Why]),
-               BucketProps
-         end,
-    run_fixups(T, BucketName, BP).
-
 set_ring(Ring, State) ->
     set_ring_global(Ring),
     Now = os:timestamp(),
@@ -549,73 +511,19 @@ reset_ring_id() ->
     persistent_term:put(riak_ring_id_epoch, Epoch + 1),
     {Epoch + 1, 0}.
 
-%% Set the ring in persistent_term/ETS.  Exported during unit testing
+%% Set the ring in persistent_term/ETS. Exported during unit testing
 %% to make test setup simpler - no need to spin up a riak_core_ring_manager
 %% process.
 set_ring_global(Ring) ->
-    DefaultProps = case application:get_env(riak_core,
-                                            default_bucket_props)
-                       of
-                     {ok, Val} -> Val;
-                     _ -> []
-                   end,
-    %% run fixups on the ring before storing it in persistent_term
-    FixedRing = case riak_core:bucket_fixups() of
-                  [] -> Ring;
-                  Fixups ->
-                      Buckets = riak_core_ring:get_buckets(Ring),
-                      lists:foldl(fun (Bucket, AccRing) ->
-                                          BucketProps =
-                                              riak_core_bucket:get_bucket(Bucket,
-                                                                          Ring),
-                                          %% Merge anything in the default properties but not in
-                                          %% the bucket's properties. This is to ensure default
-                                          %% properties added after the bucket is created are
-                                          %% inherited to the bucket.
-                                          MergedProps =
-                                              riak_core_bucket:merge_props(BucketProps,
-                                                                           DefaultProps),
-                                          %% fixup the ring
-                                          NewBucketProps = run_fixups(Fixups,
-                                                                      Bucket,
-                                                                      MergedProps),
-                                          %% update the bucket in the ring
-                                          riak_core_ring:update_meta({bucket,
-                                                                      Bucket},
-                                                                     NewBucketProps,
-                                                                     AccRing)
-                                  end,
-                                  Ring, Buckets)
-                end,
     %% Mark ring as tainted to check if it is ever leaked over gossip or
     %% relied upon for any non-local ring operations.
-    TaintedRing = riak_core_ring:set_tainted(FixedRing),
-    %% Extract bucket properties and place into ETS table. We want all bucket
-    %% additions, modifications, and deletions to appear in a single atomic
-    %% operation. Since ETS does not provide a means to change + delete
-    %% multiple values in a single operation, we emulate the deletion by
-    %% overwriting all deleted buckets with the "undefined" atom that has
-    %% special meaning in `riak_core_bucket:get_bucket_props/2`. We then
-    %% cleanup these values in a subsequent `ets:match_delete`.
-    OldBuckets = ets:select(?ETS,
-                            [{{{bucket, '$1'}, '_'}, [], ['$1']}]),
-    BucketDefaults = [{{bucket, Bucket}, undefined}
-                      || Bucket <- OldBuckets],
-    BucketMeta = [{{bucket, Bucket}, Meta}
-                  || Bucket <- riak_core_ring:get_buckets(TaintedRing),
-                     {ok, Meta}
-                         <- [riak_core_ring:get_meta({bucket, Bucket},
-                                                     TaintedRing)]],
-    BucketMeta2 = lists:ukeysort(1,
-                                 BucketMeta ++ BucketDefaults),
+    TaintedRing = riak_core_ring:set_tainted(Ring),
     CHBin =
         chashbin:create(riak_core_ring:chash(TaintedRing)),
     {Epoch, Id} = ets:lookup_element(?ETS, id, 2),
     Actions = [{ring, TaintedRing}, {raw_ring, Ring},
-               {id, {Epoch, Id + 1}}, {chashbin, CHBin}
-               | BucketMeta2],
+               {id, {Epoch, Id + 1}}, {chashbin, CHBin}],
     ets:insert(?ETS, Actions),
-    ets:match_delete(?ETS, {{bucket, '_'}, undefined}),
     case persistent_term:get(?RING_KEY, undefined) of
       ets -> ok;
       _ -> persistent_term:put(?RING_KEY, ets)
@@ -742,13 +650,14 @@ stop_core_processes() ->
 -define(TMP_RINGFILE, (?TEST_RINGFILE) ++ ".tmp").
 
 do_write_ringfile_test() ->
+    application:set_env(riak_core, cluster_name, "test"),
     %% Make sure no data exists from previous runs
     file:change_mode(?TMP_RINGFILE, 8#00644),
     file:delete(?TMP_RINGFILE),
     %% Check happy path
     GenR = fun (Name) -> riak_core_ring:fresh(64, Name) end,
     ?assertEqual(ok,
-                 (do_write_ringfile(GenR(happy), ?TEST_RINGFILE))),
+                 (do_write_ringfile(GenR(happy), ?TMP_RINGFILE))),
     %% errors expected
     error_logger:tty(false),
     %% Check write fails (create .tmp file with no write perms)
@@ -766,8 +675,7 @@ do_write_ringfile_test() ->
     ok = file:change_mode(?TEST_RINGDIR, 8#00755),
     error_logger:tty(true),
     %% Cleanup the ring file created for this test
-    {ok, RingFile} = find_latest_ringfile(),
-    file:delete(RingFile).
+    file:delete(?TMP_RINGFILE).
 
 is_stable_ring_test() ->
     {A, B, C} = Now = os:timestamp(),

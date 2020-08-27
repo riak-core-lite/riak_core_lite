@@ -72,9 +72,9 @@ handle_call(Event, _From, State) ->
     {reply, ok, State}.
 
 handle_cast({work, Work, WorkFrom, Caller},
-            #state{module = Mod, modstate = ModState} = State) ->
-    NewModState = case Mod:handle_work(Work, WorkFrom,
-                                       ModState)
+            #state{module = Module, modstate = ModState} = State) ->
+    NewModState = case Module:handle_work(Work, WorkFrom,
+                                          ModState)
                       of
                     {reply, Reply, NS} ->
                         riak_core_vnode:reply(WorkFrom, Reply), NS;

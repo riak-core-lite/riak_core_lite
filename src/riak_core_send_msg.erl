@@ -53,7 +53,7 @@ cast_unreliable(Dest, Request) ->
 send_event_unreliable({global, _Name} = GlobalTo,
                       Event) ->
     erlang:error({unimplemented_send, GlobalTo, Event});
-send_event_unreliable({via, _Mod, _Name} = ViaTo,
+send_event_unreliable({via, _Module, _Name} = ViaTo,
                       Event) ->
     erlang:error({unimplemented_send, ViaTo, Event});
 send_event_unreliable(Name, Event) ->

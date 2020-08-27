@@ -401,8 +401,8 @@ broadcast(Nodes, State) ->
       up -> Msg = {up, node(), State#state.services};
       down -> Msg = {down, node()}
     end,
-    {Mod, Fn} = State#state.bcast_mod,
-    Mod:Fn(Nodes, ?MODULE, Msg),
+    {Module, Fn} = State#state.bcast_mod,
+    Module:Fn(Nodes, ?MODULE, Msg),
     schedule_broadcast(State).
 
 schedule_broadcast(State) ->

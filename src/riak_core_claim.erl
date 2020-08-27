@@ -47,10 +47,6 @@
 %% In that case, Riak will minimize the cases where the constraint is violated
 %% and they will all exist near the origin point of the ring.
 
-%% A good way to decide on the setting of target_n_val for your application is
-%% to set it to the largest value you expect to use for any bucket's n_val.  The
-%% default is 4.
-
 -module(riak_core_claim).
 
 -export([claim/1, claim/3, claim_until_balanced/2,

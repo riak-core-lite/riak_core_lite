@@ -26,8 +26,7 @@
 
 -export([vnode_modules/0, health_check/1]).
 
--export([register/1, register/2, bucket_fixups/0,
-         bucket_validators/0]).
+-export([register/1, register/2]).
 
 -export([stat_mods/0, stat_prefix/0]).
 
@@ -225,19 +224,6 @@ vnode_modules() ->
       {ok, Mods} -> Mods
     end.
 
-bucket_fixups() ->
-    case application:get_env(riak_core, bucket_fixups) of
-      undefined -> [];
-      {ok, Mods} -> Mods
-    end.
-
-bucket_validators() ->
-    case application:get_env(riak_core, bucket_validators)
-        of
-      undefined -> [];
-      {ok, Mods} -> Mods
-    end.
-
 stat_mods() ->
     case application:get_env(riak_core, stat_mods) of
       undefined -> [];
@@ -279,14 +265,6 @@ register(_App, []) ->
                                                  undefined),
     riak_core_ring_events:force_sync_update(),
     ok;
-register(App, [{bucket_fixup, FixupMod} | T]) ->
-    register_mod(get_app(App, FixupMod), FixupMod,
-                 bucket_fixups),
-    register(App, T);
-register(App, [{repl_helper, FixupMod} | T]) ->
-    register_mod(get_app(App, FixupMod), FixupMod,
-                 repl_helper),
-    register(App, T);
 register(App, [{vnode_module, VNodeMod} | T]) ->
     register_mod(get_app(App, VNodeMod), VNodeMod,
                  vnode_modules),
@@ -294,31 +272,12 @@ register(App, [{vnode_module, VNodeMod} | T]) ->
 register(App, [{health_check, HealthMFA} | T]) ->
     register_metadata(get_app(App, HealthMFA), HealthMFA,
                       health_checks),
-    register(App, T);
-register(App,
-         [{bucket_validator, ValidationMod} | T]) ->
-    register_mod(get_app(App, ValidationMod), ValidationMod,
-                 bucket_validators),
-    register(App, T);
-register(App, [{stat_mod, StatMod} | T]) ->
-    register_mod(App, StatMod, stat_mods), register(App, T);
-register(App, [{permissions, Permissions} | T]) ->
-    register_mod(App, Permissions, permissions),
-    register(App, T);
-register(App, [{auth_mod, {AuthType, AuthMod}} | T]) ->
-    register_proplist({AuthType, AuthMod}, auth_mods),
     register(App, T).
 
 register_mod(App, Module, Type) when is_atom(Type) ->
     case Type of
       vnode_modules ->
-          riak_core_vnode_proxy_sup:start_proxies(Module);
-      stat_mods ->
-          %% STATS
-          %%            riak_core_stats_sup:start_server(Module);
-          logger:warning("Metric collection disabled"),
-          ok;
-      _ -> ok
+          riak_core_vnode_proxy_sup:start_proxies(Module)
     end,
     case application:get_env(riak_core, Type) of
       undefined ->
@@ -335,15 +294,6 @@ register_metadata(App, Value, Type) ->
       {ok, Values} ->
           application:set_env(riak_core, Type,
                               lists:usort([{App, Value} | Values]))
-    end.
-
-register_proplist({Key, Value}, Type) ->
-    case application:get_env(riak_core, Type) of
-      undefined ->
-          application:set_env(riak_core, Type, [{Key, Value}]);
-      {ok, Values} ->
-          application:set_env(riak_core, Type,
-                              lists:keystore(Key, 1, Values, {Key, Value}))
     end.
 
 %% @spec add_guarded_event_handler(HandlerMod, Handler, Args) -> AddResult

@@ -206,7 +206,7 @@
 %%% start_link(Name, Mod, Args, Options) where:
 %%%    Name ::= {local, atom()} | {global, term()} | {via, atom(), term()}
 %%%    Mod  ::= atom(), callback module implementing the 'real' fsm
-%%%    Args ::= term(), init arguments (to Mod:init/1)
+%%%    Args ::= term(), init arguments (to Module:init/1)
 %%%    Options ::= [{debug, [Flag]}]
 %%%      Flag ::= trace | log | {logfile, File} | statistics | debug
 %%%          (debug == log && statistics)
@@ -233,8 +233,8 @@ stop(Name, Reason, Timeout) ->
 
 send_event({global, Name}, Event) ->
     catch global:send(Name, {'$gen_event', Event}), ok;
-send_event({via, Mod, Name}, Event) ->
-    catch Mod:send(Name, {'$gen_event', Event}), ok;
+send_event({via, Module, Name}, Event) ->
+    catch Module:send(Name, {'$gen_event', Event}), ok;
 send_event(Name, Event) ->
     Name ! {'$gen_event', Event}, ok.
 
@@ -260,8 +260,9 @@ send_all_state_event({global, Name}, Event) ->
     catch global:send(Name,
                       {'$gen_all_state_event', Event}),
     ok;
-send_all_state_event({via, Mod, Name}, Event) ->
-    catch Mod:send(Name, {'$gen_all_state_event', Event}),
+send_all_state_event({via, Module, Name}, Event) ->
+    catch Module:send(Name,
+                      {'$gen_all_state_event', Event}),
     ok;
 send_all_state_event(Name, Event) ->
     Name ! {'$gen_all_state_event', Event}, ok.
@@ -349,25 +350,26 @@ enter_loop(Mod, Options, StateName, StateData,
 %%% ---------------------------------------------------
 %%% Initiate the new process.
 %%% Register the name using the Rfunc function
-%%% Calls the Mod:init/Args function.
+%%% Calls the Moduleinit/Args function.
 %%% Finally an acknowledge is sent to Parent and the main
 %%% loop is entered.
 %%% ---------------------------------------------------
 init_it(Starter, self, Name, Mod, Args, Options) ->
     init_it(Starter, self(), Name, Mod, Args, Options);
-init_it(Starter, Parent, Name0, Mod, Args, Options) ->
+init_it(Starter, Parent, Name0, Module, Args,
+        Options) ->
     Name = gen:name(Name0),
     Debug = gen:debug_options(Name, Options),
     HibernateAfterTimeout = gen:hibernate_after(Options),
-    case catch Mod:init(Args) of
+    case catch Module:init(Args) of
       {ok, StateName, StateData} ->
           proc_lib:init_ack(Starter, {ok, self()}),
-          loop(Parent, Name, StateName, StateData, Mod, infinity,
-               HibernateAfterTimeout, Debug);
+          loop(Parent, Name, StateName, StateData, Module,
+               infinity, HibernateAfterTimeout, Debug);
       {ok, StateName, StateData, Timeout} ->
           proc_lib:init_ack(Starter, {ok, self()}),
-          loop(Parent, Name, StateName, StateData, Mod, Timeout,
-               HibernateAfterTimeout, Debug);
+          loop(Parent, Name, StateName, StateData, Module,
+               Timeout, HibernateAfterTimeout, Debug);
       {stop, Reason} ->
           gen:unregister_name(Name0),
           proc_lib:init_ack(Starter, {error, Reason}),
@@ -457,15 +459,15 @@ system_terminate(Reason, _Parent, Debug,
     terminate(Reason, Name, [], Mod, StateName, StateData,
               Debug).
 
-system_code_change([Name, StateName, StateData, Mod,
+system_code_change([Name, StateName, StateData, Module,
                     Time, HibernateAfterTimeout],
                    _Module, OldVsn, Extra) ->
-    case catch Mod:code_change(OldVsn, StateName, StateData,
-                               Extra)
+    case catch Module:code_change(OldVsn, StateName,
+                                  StateData, Extra)
         of
       {ok, NewStateName, NewStateData} ->
           {ok,
-           [Name, NewStateName, NewStateData, Mod, Time,
+           [Name, NewStateName, NewStateData, Module, Time,
             HibernateAfterTimeout]};
       Else -> Else
     end.
@@ -602,27 +604,27 @@ handle_msg(Msg, Parent, Name, StateName, StateData, Mod,
                     StateName, StateData, Debug)
     end.
 
-dispatch({'$gen_event', Event}, Mod, StateName,
+dispatch({'$gen_event', Event}, Module, StateName,
          StateData) ->
-    Mod:StateName(Event, StateData);
-dispatch({'$gen_all_state_event', Event}, Mod,
+    Module:StateName(Event, StateData);
+dispatch({'$gen_all_state_event', Event}, Module,
          StateName, StateData) ->
-    Mod:handle_event(Event, StateName, StateData);
-dispatch({'$gen_sync_event', From, Event}, Mod,
+    Module:handle_event(Event, StateName, StateData);
+dispatch({'$gen_sync_event', From, Event}, Module,
          StateName, StateData) ->
-    Mod:StateName(Event, From, StateData);
+    Module:StateName(Event, From, StateData);
 dispatch({'$gen_sync_all_state_event', From, Event},
-         Mod, StateName, StateData) ->
-    Mod:handle_sync_event(Event, From, StateName,
-                          StateData);
-dispatch({timeout, Ref, {'$gen_timer', Msg}}, Mod,
+         Module, StateName, StateData) ->
+    Module:handle_sync_event(Event, From, StateName,
+                             StateData);
+dispatch({timeout, Ref, {'$gen_timer', Msg}}, Module,
          StateName, StateData) ->
-    Mod:StateName({timeout, Ref, Msg}, StateData);
-dispatch({timeout, _Ref, {'$gen_event', Event}}, Mod,
+    Module:StateName({timeout, Ref, Msg}, StateData);
+dispatch({timeout, _Ref, {'$gen_event', Event}}, Module,
          StateName, StateData) ->
-    Mod:StateName(Event, StateData);
-dispatch(Info, Mod, StateName, StateData) ->
-    Mod:handle_info(Info, StateName, StateData).
+    Module:StateName(Event, StateData);
+dispatch(Info, Module, StateName, StateData) ->
+    Module:handle_info(Info, StateName, StateData).
 
 from({'$gen_sync_event', From, _Event}) -> From;
 from({'$gen_sync_all_state_event', From, _Event}) ->
@@ -644,14 +646,15 @@ reply(Name, {To, Tag}, Reply, Debug, StateName) ->
 -spec terminate(term(), _, _, atom(), _, _,
                 _) -> no_return().
 
-terminate(Reason, Name, Msg, Mod, StateName, StateData,
-          Debug) ->
-    case erlang:function_exported(Mod, terminate, 3) of
+terminate(Reason, Name, Msg, Module, StateName,
+          StateData, Debug) ->
+    case erlang:function_exported(Module, terminate, 3) of
       true ->
-          case catch Mod:terminate(Reason, StateName, StateData)
+          case catch Module:terminate(Reason, StateName,
+                                      StateData)
               of
             {'EXIT', R} ->
-                FmtStateData = format_status(terminate, Mod, get(),
+                FmtStateData = format_status(terminate, Module, get(),
                                              StateData),
                 error_info(R, Name, Msg, StateName, FmtStateData,
                            Debug),
@@ -665,7 +668,7 @@ terminate(Reason, Name, Msg, Mod, StateName, StateData,
       shutdown -> exit(shutdown);
       {shutdown, _} = Shutdown -> exit(Shutdown);
       _ ->
-          FmtStateData1 = format_status(terminate, Mod, get(),
+          FmtStateData1 = format_status(terminate, Module, get(),
                                         StateData),
           error_info(Reason, Name, Msg, StateName, FmtStateData1,
                      Debug),
@@ -776,14 +779,15 @@ format_status(Opt, StatusData) ->
 
 -endif.
 
-format_status(Opt, Mod, PDict, State) ->
+format_status(Opt, Module, PDict, State) ->
     DefStatus = case Opt of
                   terminate -> State;
                   _ -> [{data, [{"StateData", State}]}]
                 end,
-    case erlang:function_exported(Mod, format_status, 2) of
+    case erlang:function_exported(Module, format_status, 2)
+        of
       true ->
-          case catch Mod:format_status(Opt, [PDict, State]) of
+          case catch Module:format_status(Opt, [PDict, State]) of
             {'EXIT', _} -> DefStatus;
             Else -> Else
           end;

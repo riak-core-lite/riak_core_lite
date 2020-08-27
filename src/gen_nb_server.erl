@@ -90,37 +90,36 @@
                                              {stop, Reason :: term(),
                                               NewState :: term()}.
 
-%% @spec start_link(CallbackModule, IpAddr, Port, InitParams) -> Result
-%% CallbackModule = atom()
+%% @spec start_link(Module, IpAddr, Port, InitParams) -> Result
+%% Module = atom()
 %% IpAddr = string()
 %% Port = integer()
 %% InitParams = [any()]
 %% Result = {ok, pid()} | {error, any()}
 %% @doc Start server listening on IpAddr:Port
-start_link(CallbackModule, IpAddr, Port, InitParams) ->
+start_link(Module, IpAddr, Port, InitParams) ->
     gen_server:start_link(?MODULE,
-                          [CallbackModule, IpAddr, Port, InitParams], []).
+                          [Module, IpAddr, Port, InitParams], []).
 
 %% @hidden
-init([CallbackModule, IpAddr, Port, InitParams]) ->
-    case CallbackModule:init(InitParams) of
+init([Module, IpAddr, Port, InitParams]) ->
+    case Module:init(InitParams) of
       {ok, ServerState} ->
-          case listen_on(CallbackModule, IpAddr, Port) of
+          case listen_on(Module, IpAddr, Port) of
             {ok, Sock} ->
                 {ok,
-                 #state{cb = CallbackModule, sock = Sock,
+                 #state{cb = Module, sock = Sock,
                         server_state = ServerState}};
-            Error ->
-                CallbackModule:terminate(Error, ServerState), Error
+            Error -> Module:terminate(Error, ServerState), Error
           end;
       Err -> Err
     end.
 
 %% @hidden
 handle_call(Request, From,
-            #state{cb = Callback, server_state = ServerState} =
+            #state{cb = Module, server_state = ServerState} =
                 State) ->
-    case Callback:handle_call(Request, From, ServerState) of
+    case Module:handle_call(Request, From, ServerState) of
       {reply, Reply, NewServerState} ->
           {reply, Reply,
            State#state{server_state = NewServerState}};
@@ -144,9 +143,9 @@ handle_call(Request, From,
 
 %% @hidden
 handle_cast(Msg,
-            #state{cb = Callback, server_state = ServerState} =
+            #state{cb = Module, server_state = ServerState} =
                 State) ->
-    case Callback:handle_cast(Msg, ServerState) of
+    case Module:handle_cast(Msg, ServerState) of
       {noreply, NewServerState} ->
           {noreply, State#state{server_state = NewServerState}};
       {noreply, NewServerState, Arg}
@@ -161,10 +160,10 @@ handle_cast(Msg,
 %% @hidden
 handle_info({inet_async, ListSock, _Ref,
              {ok, CliSocket}},
-            #state{cb = Callback, server_state = ServerState} =
+            #state{cb = Module, server_state = ServerState} =
                 State) ->
     inet_db:register_socket(CliSocket, inet_tcp),
-    case Callback:new_connection(CliSocket, ServerState) of
+    case Module:new_connection(CliSocket, ServerState) of
       {ok, NewServerState} ->
           {ok, _} = prim_inet:async_accept(ListSock, -1),
           {noreply, State#state{server_state = NewServerState}};
@@ -173,9 +172,9 @@ handle_info({inet_async, ListSock, _Ref,
            State#state{server_state = NewServerState}}
     end;
 handle_info(Info,
-            #state{cb = Callback, server_state = ServerState} =
+            #state{cb = Module, server_state = ServerState} =
                 State) ->
-    case Callback:handle_info(Info, ServerState) of
+    case Module:handle_info(Info, ServerState) of
       {noreply, NewServerState} ->
           {noreply, State#state{server_state = NewServerState}};
       {noreply, NewServerState, Arg}
@@ -189,10 +188,10 @@ handle_info(Info,
 
 %% @hidden
 terminate(Reason,
-          #state{cb = Callback, sock = Sock,
+          #state{cb = Module, sock = Sock,
                  server_state = ServerState}) ->
     gen_tcp:close(Sock),
-    Callback:terminate(Reason, ServerState),
+    Module:terminate(Reason, ServerState),
     ok.
 
 %% @hidden
@@ -201,28 +200,28 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% Internal functions
 
 %% @hidden
-%% @spec listen_on(CallbackModule, IpAddr, Port) -> Result
-%% CallbackModule = atom()
+%% @spec listen_on(Module, IpAddr, Port) -> Result
+%% Module = atom()
 %% IpAddr = string() | tuple()
 %% Port = integer()
 %% Result = {ok, port()} | {error, any()}
-listen_on(CallbackModule, IpAddr, Port)
+listen_on(Module, IpAddr, Port)
     when is_tuple(IpAddr) andalso
            (8 =:= size(IpAddr) orelse 4 =:= size(IpAddr)) ->
-    SockOpts = [{ip, IpAddr} | CallbackModule:sock_opts()],
+    SockOpts = [{ip, IpAddr} | Module:sock_opts()],
     case gen_tcp:listen(Port, SockOpts) of
       {ok, LSock} ->
           {ok, _Ref} = prim_inet:async_accept(LSock, -1),
           {ok, LSock};
       Err -> Err
     end;
-listen_on(CallbackModule, IpAddrStr, Port) ->
+listen_on(Module, IpAddrStr, Port) ->
     case inet_parse:address(IpAddrStr) of
-      {ok, IpAddr} -> listen_on(CallbackModule, IpAddr, Port);
+      {ok, IpAddr} -> listen_on(Module, IpAddr, Port);
       Err ->
           logger:critical("Cannot start listener for ~p\n      "
                           "                      on invalid address "
                           "~p:~p",
-                          [CallbackModule, IpAddrStr, Port]),
+                          [Module, IpAddrStr, Port]),
           Err
     end.

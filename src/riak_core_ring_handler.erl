@@ -98,9 +98,9 @@ exit_ring_trans() ->
                                       []).
 
 ready_to_exit([]) -> true;
-ready_to_exit([{_App, Mod} | AppMods]) ->
-    case erlang:function_exported(Mod, ready_to_exit, 0)
-           andalso not Mod:ready_to_exit()
+ready_to_exit([{_App, Module} | AppMods]) ->
+    case erlang:function_exported(Module, ready_to_exit, 0)
+           andalso not Module:ready_to_exit()
         of
       true -> false;
       false -> ready_to_exit(AppMods)
@@ -112,8 +112,8 @@ ensure_vnodes_started([{App, Mod} | T], Ring, Acc) ->
     ensure_vnodes_started(T, Ring,
                           [ensure_vnodes_started({App, Mod}, Ring) | Acc]).
 
-ensure_vnodes_started({App, Mod}, Ring) ->
-    Startable = startable_vnodes(Mod, Ring),
+ensure_vnodes_started({App, Module}, Ring) ->
+    Startable = startable_vnodes(Module, Ring),
     %% NOTE: This following is a hack.  There's a basic
     %%       dependency/race between riak_core (want to start vnodes
     %%       right away to trigger possible handoffs) and riak_kv
@@ -122,7 +122,7 @@ ensure_vnodes_started({App, Mod}, Ring) ->
     spawn_link(fun () ->
                        %%  Use a registered name as a lock to prevent the same
                        %%  vnode module from being started twice.
-                       ModList = atom_to_list(Mod),
+                       ModList = atom_to_list(Module),
                        RegName = "riak_core_ring_handler_ensure_" ++ ModList,
                        try erlang:register(list_to_atom(RegName), self()) catch
                          error:badarg -> exit(normal)
@@ -131,10 +131,10 @@ ensure_vnodes_started({App, Mod}, Ring) ->
                        ok = riak_core:wait_for_application(App),
                        %% Start the vnodes.
                        HasStartVnodes = lists:member({start_vnodes, 1},
-                                                     Mod:module_info(exports)),
+                                                     Module:module_info(exports)),
                        case HasStartVnodes of
-                         true -> Mod:start_vnodes(Startable);
-                         false -> [Mod:start_vnode(I) || I <- Startable]
+                         true -> Module:start_vnodes(Startable);
+                         false -> [Module:start_vnode(I) || I <- Startable]
                        end,
                        %% Mark the service as up.
                        SupName = list_to_atom(atom_to_list(App) ++ "_sup"),
