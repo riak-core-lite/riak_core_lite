@@ -33,15 +33,15 @@ init([]) ->
     Indices = get_indices(),
     VMods = riak_core:vnode_modules(),
     Proxies = [proxy_ref(Mod, Index)
-	       || {_, Mod} <- VMods, Index <- Indices],
+               || {_, Mod} <- VMods, Index <- Indices],
     {ok, {{one_for_one, 5, 10}, Proxies}}.
 
 start_proxy(Mod, Index) ->
     Ref = proxy_ref(Mod, Index),
     Pid = case supervisor:start_child(?MODULE, Ref) of
-	    {ok, Child} -> Child;
-	    {error, {already_started, Child}} -> Child
-	  end,
+            {ok, Child} -> Child;
+            {error, {already_started, Child}} -> Child
+          end,
     Pid.
 
 stop_proxy(Mod, Index) ->

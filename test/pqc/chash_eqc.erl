@@ -24,20 +24,19 @@
 
 -module(chash_eqc).
 
--ifdef(EQC).
--include_lib("eqc/include/eqc.hrl").
+-ifdef(PROPER).
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(NOTEST, true).
 -define(NOASSERT, true).
 
--define(TEST_ITERATIONS, 50).
+-define(TEST_ITERATIONS, 5000).
 -define(QC_OUT(P),
-        eqc:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
+        proper:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
 -define(RINGTOP, trunc(math:pow(2,160)-1)).  % SHA-1 space
 
--export([check/0,
-         test/0,
+-export([test/0,
          test/1]).
 
 %%====================================================================
@@ -55,8 +54,7 @@ eqc_test_() ->
           {timeout, 60000, % timeout is in msec
            %% Indicate the number of test iterations for each property here
            ?_assertEqual(true,
-                         quickcheck(numtests(?TEST_ITERATIONS,
-                                             ?QC_OUT(prop_chash_next_index()))))
+                         proper:quickcheck(?QC_OUT(prop_chash_next_index()),[{numtests,?TEST_ITERATIONS}]))
           }
          ]
         }
@@ -139,9 +137,9 @@ test() ->
     test(100).
 
 test(N) ->
-    quickcheck(numtests(N, prop_chash_next_index())).
+    proper:quickcheck(numtests(N, prop_chash_next_index())).
 
-check() ->
-    check(prop_chash_next_index(), current_counterexample()).
+% check() ->
+%     check(prop_chash_next_index(), current_counterexample()).
 
 -endif. % EQC

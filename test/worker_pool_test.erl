@@ -48,6 +48,57 @@ receive_result(N) ->
             timeout
     end.
 
+
+deadlock_test() ->
+    {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 1, 10, true, []),
+
+    CoordinatorLoop = spawn_link(fun () ->
+        Worker1 = receive {worker_init, W} -> W end,
+        Root = receive {wait_for_worker, W2} -> W2 end,
+        Root ! continue,
+
+        Root = receive {die_in_the_pool, W3} -> W3 end,
+        Worker1 ! continue,
+        receive {ready_to_crash} -> ok end,
+
+        % let the worker actually crash
+        timer:sleep(50),
+        Root ! continue,
+
+        receive finish_test -> ok end,
+        Root ! finish_test
+                                 end),
+
+    riak_core_vnode_worker_pool:handle_work(Pool,
+        fun() ->
+            CoordinatorLoop ! {worker_init, self()},
+            receive continue -> ok end
+        end,
+        {raw, 1, self()}),
+
+    CoordinatorLoop ! {wait_for_worker, self()},
+    receive continue -> ok end,
+
+    riak_core_vnode_worker_pool:handle_work(Pool,
+        fun() -> CoordinatorLoop ! {ready_to_crash}, erlang:error(-1) end,
+        {raw, 1, self()}),
+
+    % now we have to wait a bit
+    % because handle_work is a cast and there is no way to check when it's in the queue
+    timer:sleep(50),
+
+    CoordinatorLoop ! {die_in_the_pool, self()},
+    receive continue -> ok end,
+
+    % this should not cause a deadlock
+    riak_core_vnode_worker_pool:handle_work(Pool, fun() -> CoordinatorLoop ! finish_test end, {raw, 1, self()}),
+    receive finish_test -> ok end,
+
+    unlink(Pool),
+    ok = riak_core_vnode_worker_pool:stop(Pool, normal),
+    ok = wait_for_process_death(Pool).
+
+
 simple_reply_worker_pool() ->
     {ok, Pool} = riak_core_vnode_worker_pool:start_link(?MODULE, 3, 10, true, []),
     [ riak_core_vnode_worker_pool:handle_work(Pool, fun() ->
@@ -133,7 +184,8 @@ pool_test_() ->
             fun shutdown_pool_empty_success/0,
             fun shutdown_pool_worker_finish_success/0,
             fun shutdown_pool_force_timeout/0,
-            fun shutdown_pool_duplicate_calls/0
+            fun shutdown_pool_duplicate_calls/0,
+            fun deadlock_test/0
     ]
     }.
 

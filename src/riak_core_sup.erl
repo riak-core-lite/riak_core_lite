@@ -32,11 +32,11 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILD(I, Type, Timeout, Args),
-	{I, {I, start_link, Args}, permanent, Timeout, Type,
-	 [I]}).
+        {I, {I, start_link, Args}, permanent, Timeout, Type,
+         [I]}).
 
 -define(CHILD(I, Type, Timeout),
-	?CHILD(I, Type, Timeout, [])).
+        ?CHILD(I, Type, Timeout, [])).
 
 -define(CHILD(I, Type), ?CHILD(I, Type, 5000)).
 
@@ -53,15 +53,15 @@ start_link() ->
 
 init([]) ->
     Children = lists:flatten([?CHILD(riak_core_vnode_sup,
-				     supervisor, 305000),
-			      ?CHILD(riak_core_eventhandler_sup, supervisor),
-			      ?CHILD(riak_core_handoff_sup, supervisor),
-			      ?CHILD(riak_core_ring_events, worker),
-			      ?CHILD(riak_core_ring_manager, worker),
-			      ?CHILD(riak_core_vnode_proxy_sup, supervisor),
-			      ?CHILD(riak_core_node_watcher_events, worker),
-			      ?CHILD(riak_core_node_watcher, worker),
-			      ?CHILD(riak_core_vnode_manager, worker),
-			      ?CHILD(riak_core_gossip, worker),
-			      ?CHILD(riak_core_claimant, worker)]),
+                                     supervisor, 305000),
+                              ?CHILD(riak_core_eventhandler_sup, supervisor),
+                              ?CHILD(riak_core_handoff_sup, supervisor),
+                              ?CHILD(riak_core_ring_events, worker),
+                              ?CHILD(riak_core_ring_manager, worker),
+                              ?CHILD(riak_core_vnode_proxy_sup, supervisor),
+                              ?CHILD(riak_core_node_watcher_events, worker),
+                              ?CHILD(riak_core_node_watcher, worker),
+                              ?CHILD(riak_core_vnode_manager, worker),
+                              ?CHILD(riak_core_gossip, worker),
+                              ?CHILD(riak_core_claimant, worker)]),
     {ok, {{one_for_one, 10, 10}, Children}}.

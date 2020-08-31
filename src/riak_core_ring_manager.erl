@@ -62,16 +62,16 @@
 -behaviour(gen_server).
 
 -export([start_link/0, start_link/1, get_my_ring/0,
-	 get_raw_ring/0, get_raw_ring_chashbin/0,
-	 get_chash_bin/0, get_ring_id/0, get_bucket_meta/1,
-	 refresh_my_ring/0, refresh_ring/2, set_my_ring/1,
-	 write_ringfile/0, prune_ringfiles/0, read_ringfile/1,
-	 find_latest_ringfile/0, force_update/0,
-	 do_write_ringfile/1, ring_trans/2, run_fixups/3,
-	 set_cluster_name/1, is_stable_ring/0]).
+         get_raw_ring/0, get_raw_ring_chashbin/0,
+         get_chash_bin/0, get_ring_id/0, get_bucket_meta/1,
+         refresh_my_ring/0, refresh_ring/2, set_my_ring/1,
+         write_ringfile/0, prune_ringfiles/0, read_ringfile/1,
+         find_latest_ringfile/0, force_update/0,
+         do_write_ringfile/1, ring_trans/2, run_fixups/3,
+         set_cluster_name/1, is_stable_ring/0]).
 
 -export([init/1, handle_call/3, handle_cast/2,
-	 handle_info/2, terminate/2, code_change/3]).
+         handle_info/2, terminate/2, code_change/3]).
 
 -ifdef(TEST).
 
@@ -80,10 +80,10 @@
 -endif.
 
 -record(state,
-	{mode, raw_ring, ring_changed_time, inactivity_timer}).
+        {mode, raw_ring, ring_changed_time, inactivity_timer}).
 
 -export([setup_ets/1, cleanup_ets/1, set_ring_global/1,
-	 promote_ring/0]).
+         promote_ring/0]).
 
                            %% For EUnit testing
 
@@ -103,26 +103,26 @@
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [live],
-			  []).
+                          []).
 
 %% Testing entry point
 start_link(test) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [test],
-			  []).
+                          []).
 
 -spec get_my_ring() -> {ok,
-			riak_core_ring:riak_core_ring()} |
-		       {error, any()}.
+                        riak_core_ring:riak_core_ring()} |
+                       {error, any()}.
 
 get_my_ring() ->
     Ring = case persistent_term:get(?RING_KEY, undefined) of
-	     ets ->
-		 case ets:lookup(?ETS, ring) of
-		   [{_, RingETS}] -> RingETS;
-		   _ -> undefined
-		 end;
-	     RingMochi -> RingMochi
-	   end,
+             ets ->
+                 case ets:lookup(?ETS, ring) of
+                   [{_, RingETS}] -> RingETS;
+                   _ -> undefined
+                 end;
+             RingMochi -> RingMochi
+           end,
     case Ring of
       Ring when is_tuple(Ring) -> {ok, Ring};
       undefined -> {error, no_ring}
@@ -130,19 +130,19 @@ get_my_ring() ->
 
 get_raw_ring() ->
     try Ring = ets:lookup_element(?ETS, raw_ring, 2),
-	{ok, Ring}
+        {ok, Ring}
     catch
       _:_ -> gen_server:call(?MODULE, get_raw_ring, infinity)
     end.
 
 get_raw_ring_chashbin() ->
     try Ring = ets:lookup_element(?ETS, raw_ring, 2),
-	{ok, CHBin} = get_chash_bin(),
-	{ok, Ring, CHBin}
+        {ok, CHBin} = get_chash_bin(),
+        {ok, Ring, CHBin}
     catch
       _:_ ->
-	  gen_server:call(?MODULE, get_raw_ring_chashbin,
-			  infinity)
+          gen_server:call(?MODULE, get_raw_ring_chashbin,
+                          infinity)
     end.
 
 %% @spec refresh_my_ring() -> ok
@@ -151,7 +151,7 @@ refresh_my_ring() ->
 
 refresh_ring(Node, ClusterName) ->
     gen_server:cast({?MODULE, Node},
-		    {refresh_my_ring, ClusterName}).
+                    {refresh_my_ring, ClusterName}).
 
 %% @spec set_my_ring(riak_core_ring:riak_core_ring()) -> ok
 set_my_ring(Ring) ->
@@ -192,11 +192,11 @@ write_ringfile() ->
 
 ring_trans(Fun, Args) ->
     gen_server:call(?MODULE, {ring_trans, Fun, Args},
-		    infinity).
+                    infinity).
 
 set_cluster_name(Name) ->
     gen_server:call(?MODULE, {set_cluster_name, Name},
-		    infinity).
+                    infinity).
 
 is_stable_ring() ->
     gen_server:call(?MODULE, is_stable_ring, infinity).
@@ -205,39 +205,39 @@ is_stable_ring() ->
 %%      ring in a manner that will trigger reconciliation on gossip.
 force_update() ->
     ring_trans(fun (Ring, _) ->
-		       NewRing = riak_core_ring:update_member_meta(node(),
-								   Ring, node(),
-								   unused,
-								   erlang:timestamp()),
-		       {new_ring, NewRing}
-	       end,
-	       []),
+                       NewRing = riak_core_ring:update_member_meta(node(),
+                                                                   Ring, node(),
+                                                                   unused,
+                                                                   erlang:timestamp()),
+                       {new_ring, NewRing}
+               end,
+               []),
     ok.
 
 do_write_ringfile(Ring) ->
     case ring_dir() of
       "<nostore>" -> nop;
       Dir ->
-	  {{Year, Month, Day}, {Hour, Minute, Second}} =
-	      calendar:universal_time(),
-	  TS =
-	      io_lib:format(".~B~2.10.0B~2.10.0B~2.10.0B~2.10.0B~2.10.0B",
-			    [Year, Month, Day, Hour, Minute, Second]),
-	  Cluster = application:get_env(riak_core, cluster_name,
-					undefined),
-	  FN = Dir ++ "/riak_core_ring." ++ Cluster ++ TS,
-	  do_write_ringfile(Ring, FN)
+          {{Year, Month, Day}, {Hour, Minute, Second}} =
+              calendar:universal_time(),
+          TS =
+              io_lib:format(".~B~2.10.0B~2.10.0B~2.10.0B~2.10.0B~2.10.0B",
+                            [Year, Month, Day, Hour, Minute, Second]),
+          Cluster = application:get_env(riak_core, cluster_name,
+                                        undefined),
+          FN = Dir ++ "/riak_core_ring." ++ Cluster ++ TS,
+          do_write_ringfile(Ring, FN)
     end.
 
 do_write_ringfile(Ring, FN) ->
     ok = filelib:ensure_dir(FN),
     try ok = riak_core_util:replace_file(FN,
-					 term_to_binary(Ring))
+                                         term_to_binary(Ring))
     catch
       _:Err ->
-	  logger:error("Unable to write ring to \"~s\" - ~p\n",
-		       [FN, Err]),
-	  {error, Err}
+          logger:error("Unable to write ring to \"~s\" - ~p\n",
+                       [FN, Err]),
+          {error, Err}
     end.
 
 %% @spec find_latest_ringfile() -> string()
@@ -245,23 +245,23 @@ find_latest_ringfile() ->
     Dir = ring_dir(),
     case file:list_dir(Dir) of
       {ok, Filenames} ->
-	  Cluster = application:get_env(riak_core, cluster_name,
-					undefined),
-	  Timestamps = [list_to_integer(TS)
-			|| {"riak_core_ring", C1, TS}
-			       <- [list_to_tuple(string:tokens(FN, "."))
-				   || FN <- Filenames],
-			   C1 =:= Cluster],
-	  SortedTimestamps =
-	      lists:reverse(lists:sort(Timestamps)),
-	  case SortedTimestamps of
-	    [Latest | _] ->
-		{ok,
-		 Dir ++
-		   "/riak_core_ring." ++
-		     Cluster ++ "." ++ integer_to_list(Latest)};
-	    _ -> {error, not_found}
-	  end;
+          Cluster = application:get_env(riak_core, cluster_name,
+                                        undefined),
+          Timestamps = [list_to_integer(TS)
+                        || {"riak_core_ring", C1, TS}
+                               <- [list_to_tuple(string:tokens(FN, "."))
+                                   || FN <- Filenames],
+                           C1 =:= Cluster],
+          SortedTimestamps =
+              lists:reverse(lists:sort(Timestamps)),
+          case SortedTimestamps of
+            [Latest | _] ->
+                {ok,
+                 Dir ++
+                   "/riak_core_ring." ++
+                     Cluster ++ "." ++ integer_to_list(Latest)};
+            _ -> {error, not_found}
+          end;
       {error, Reason} -> {error, Reason}
     end.
 
@@ -277,44 +277,44 @@ prune_ringfiles() ->
     case ring_dir() of
       "<nostore>" -> ok;
       Dir ->
-	  Cluster = application:get_env(riak_core, cluster_name,
-					undefined),
-	  case file:list_dir(Dir) of
-	    {error, enoent} -> ok;
-	    {error, Reason} -> {error, Reason};
-	    {ok, []} -> ok;
-	    {ok, Filenames} ->
-		Timestamps = [TS
-			      || {"riak_core_ring", C1, TS}
-				     <- [list_to_tuple(string:tokens(FN, "."))
-					 || FN <- Filenames],
-				 C1 =:= Cluster],
-		if Timestamps /= [] ->
-		       %% there are existing ring files
-		       TSPat = [io_lib:fread("~4d~2d~2d~2d~2d~2d", TS)
-				|| TS <- Timestamps],
-		       TSL = lists:reverse(lists:sort([TS
-						       || {ok, TS, []}
-							      <- TSPat])),
-		       Keep = prune_list(TSL),
-		       KeepTSs =
-			   [lists:flatten(io_lib:format("~B~2.10.0B~2.10.0B~2.10.0B~2.10.0B~2.10.0B",
-							K))
-			    || K <- Keep],
-		       DelFNs = [Dir ++ "/" ++ FN
-				 || FN <- Filenames,
-				    lists:all(fun (TS) ->
-						      string:str(FN, TS) =:= 0
-					      end,
-					      KeepTSs)],
-		       _ = [file:delete(DelFN) || DelFN <- DelFNs],
-		       ok;
-		   true ->
-		       %% directory wasn't empty, but there are no ring
-		       %% files in it
-		       ok
-		end
-	  end
+          Cluster = application:get_env(riak_core, cluster_name,
+                                        undefined),
+          case file:list_dir(Dir) of
+            {error, enoent} -> ok;
+            {error, Reason} -> {error, Reason};
+            {ok, []} -> ok;
+            {ok, Filenames} ->
+                Timestamps = [TS
+                              || {"riak_core_ring", C1, TS}
+                                     <- [list_to_tuple(string:tokens(FN, "."))
+                                         || FN <- Filenames],
+                                 C1 =:= Cluster],
+                if Timestamps /= [] ->
+                       %% there are existing ring files
+                       TSPat = [io_lib:fread("~4d~2d~2d~2d~2d~2d", TS)
+                                || TS <- Timestamps],
+                       TSL = lists:reverse(lists:sort([TS
+                                                       || {ok, TS, []}
+                                                              <- TSPat])),
+                       Keep = prune_list(TSL),
+                       KeepTSs =
+                           [lists:flatten(io_lib:format("~B~2.10.0B~2.10.0B~2.10.0B~2.10.0B~2.10.0B",
+                                                        K))
+                            || K <- Keep],
+                       DelFNs = [Dir ++ "/" ++ FN
+                                 || FN <- Filenames,
+                                    lists:all(fun (TS) ->
+                                                      string:str(FN, TS) =:= 0
+                                              end,
+                                              KeepTSs)],
+                       _ = [file:delete(DelFN) || DelFN <- DelFNs],
+                       ok;
+                   true ->
+                       %% directory wasn't empty, but there are no ring
+                       %% files in it
+                       ok
+                end
+          end
     end.
 
 -ifdef(TEST).
@@ -342,27 +342,27 @@ reload_ring(test) -> riak_core_ring:fresh(16, node());
 reload_ring(live) ->
     case riak_core_ring_manager:find_latest_ringfile() of
       {ok, RingFile} ->
-	  case riak_core_ring_manager:read_ringfile(RingFile) of
-	    {error, Reason} ->
-		logger:critical("Failed to read ring file: ~p",
-				[riak_core_util:posix_error(Reason)]),
-		throw({error, Reason});
-	    Ring -> Ring
-	  end;
+          case riak_core_ring_manager:read_ringfile(RingFile) of
+            {error, Reason} ->
+                logger:critical("Failed to read ring file: ~p",
+                                [riak_core_util:posix_error(Reason)]),
+                throw({error, Reason});
+            Ring -> Ring
+          end;
       {error, not_found} ->
-	  logger:warning("No ring file available."),
-	  riak_core_ring:fresh();
+          logger:warning("No ring file available."),
+          riak_core_ring:fresh();
       {error, Reason} ->
-	  logger:critical("Failed to load ring file: ~p",
-			  [riak_core_util:posix_error(Reason)]),
-	  throw({error, Reason})
+          logger:critical("Failed to load ring file: ~p",
+                          [riak_core_util:posix_error(Reason)]),
+          throw({error, Reason})
     end.
 
 handle_call(get_raw_ring, _From,
-	    #state{raw_ring = Ring} = State) ->
+            #state{raw_ring = Ring} = State) ->
     {reply, {ok, Ring}, State};
 handle_call(get_raw_ring_chashbin, _From,
-	    #state{raw_ring = Ring} = State) ->
+            #state{raw_ring = Ring} = State) ->
     {ok, CHBin} = get_chash_bin(),
     {reply, {ok, Ring, CHBin}, State};
 handle_call({set_my_ring, Ring}, _From, State) ->
@@ -379,29 +379,29 @@ handle_call(refresh_my_ring, _From, State) ->
     riak_core:stop("node removal completed, exiting."),
     {reply, ok, State2};
 handle_call({ring_trans, Fun, Args}, _From,
-	    State = #state{raw_ring = Ring}) ->
+            State = #state{raw_ring = Ring}) ->
     case catch Fun(Ring, Args) of
       {new_ring, NewRing} ->
-	  State2 = prune_write_notify_ring(NewRing, State),
-	  riak_core_gossip:random_recursive_gossip(NewRing),
-	  {reply, {ok, NewRing}, State2};
+          State2 = prune_write_notify_ring(NewRing, State),
+          riak_core_gossip:random_recursive_gossip(NewRing),
+          {reply, {ok, NewRing}, State2};
       {set_only, NewRing} ->
-	  State2 = prune_write_ring(NewRing, State),
-	  {reply, {ok, NewRing}, State2};
+          State2 = prune_write_ring(NewRing, State),
+          {reply, {ok, NewRing}, State2};
       {reconciled_ring, NewRing} ->
-	  State2 = prune_write_notify_ring(NewRing, State),
-	  riak_core_gossip:recursive_gossip(NewRing),
-	  {reply, {ok, NewRing}, State2};
+          State2 = prune_write_notify_ring(NewRing, State),
+          riak_core_gossip:recursive_gossip(NewRing),
+          {reply, {ok, NewRing}, State2};
       ignore -> {reply, not_changed, State};
       {ignore, Reason} ->
-	  {reply, {not_changed, Reason}, State};
+          {reply, {not_changed, Reason}, State};
       Other ->
-	  logger:error("ring_trans: invalid return value: ~p",
-		       [Other]),
-	  {reply, not_changed, State}
+          logger:error("ring_trans: invalid return value: ~p",
+                       [Other]),
+          {reply, not_changed, State}
     end;
 handle_call({set_cluster_name, Name}, _From,
-	    State = #state{raw_ring = Ring}) ->
+            State = #state{raw_ring = Ring}) ->
     NewRing = riak_core_ring:set_cluster_name(Ring, Name),
     State2 = prune_write_notify_ring(NewRing, State),
     {reply, ok, State2};
@@ -419,24 +419,24 @@ handle_cast({refresh_my_ring, ClusterName}, State) ->
     end;
 handle_cast(refresh_my_ring, State) ->
     {_, _, State2} = handle_call(refresh_my_ring, undefined,
-				 State),
+                                 State),
     {noreply, State2};
 handle_cast(write_ringfile, test) -> {noreply, test};
 handle_cast(write_ringfile,
-	    State = #state{raw_ring = Ring}) ->
+            State = #state{raw_ring = Ring}) ->
     ok = do_write_ringfile(Ring), {noreply, State}.
 
 handle_info(inactivity_timeout, State) ->
     case is_stable_ring(State) of
       {true, DeltaMS} ->
-	  logger:debug("Promoting ring after ~p", [DeltaMS]),
-	  promote_ring(),
-	  State2 = State#state{inactivity_timer = undefined},
-	  {noreply, State2};
+          logger:debug("Promoting ring after ~p", [DeltaMS]),
+          promote_ring(),
+          State2 = State#state{inactivity_timer = undefined},
+          {noreply, State2};
       {false, DeltaMS} ->
-	  Remaining = (?PROMOTE_TIMEOUT) - DeltaMS,
-	  State2 = set_timer(Remaining, State),
-	  {noreply, State2}
+          Remaining = (?PROMOTE_TIMEOUT) - DeltaMS,
+          State2 = set_timer(Remaining, State),
+          {noreply, State2}
     end;
 handle_info(_Info, State) -> {noreply, State}.
 
@@ -452,19 +452,19 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 ring_dir() ->
     case application:get_env(riak_core, ring_state_dir,
-			     undefined)
-	of
+                             undefined)
+        of
       undefined ->
-	  filename:join(application:get_env(riak_core,
-					    platform_data_dir, "data"),
-			"ring");
+          filename:join(application:get_env(riak_core,
+                                            platform_data_dir, "data"),
+                        "ring");
       D -> D
     end.
 
 prune_list([X | Rest]) ->
     lists:usort(lists:append([[X], back(1, X, Rest),
-			      back(2, X, Rest), back(3, X, Rest),
-			      back(4, X, Rest), back(5, X, Rest)])).
+                              back(2, X, Rest), back(3, X, Rest),
+                              back(4, X, Rest), back(5, X, Rest)])).
 
 back(_N, _X, []) -> [];
 back(N, X, [H | T]) ->
@@ -476,41 +476,41 @@ back(N, X, [H | T]) ->
 %% @private
 run_fixups([], _Bucket, BucketProps) -> BucketProps;
 run_fixups([{App, Fixup} | T], BucketName,
-	   BucketProps) ->
+           BucketProps) ->
     BP = try Fixup:fixup(BucketName, BucketProps) of
-	   {ok, NewBucketProps} -> NewBucketProps;
-	   {error, Reason} ->
-	       logger:error("Error while running bucket fixup module "
-			    "~p from application ~p on bucket ~p: "
-			    "~p",
-			    [Fixup, App, BucketName, Reason]),
-	       BucketProps
-	 catch
-	   What:Why ->
-	       logger:error("Crash while running bucket fixup module "
-			    "~p from application ~p on bucket ~p "
-			    ": ~p:~p",
-			    [Fixup, App, BucketName, What, Why]),
-	       BucketProps
-	 end,
+           {ok, NewBucketProps} -> NewBucketProps;
+           {error, Reason} ->
+               logger:error("Error while running bucket fixup module "
+                            "~p from application ~p on bucket ~p: "
+                            "~p",
+                            [Fixup, App, BucketName, Reason]),
+               BucketProps
+         catch
+           What:Why ->
+               logger:error("Crash while running bucket fixup module "
+                            "~p from application ~p on bucket ~p "
+                            ": ~p:~p",
+                            [Fixup, App, BucketName, What, Why]),
+               BucketProps
+         end,
     run_fixups(T, BucketName, BP).
 
 set_ring(Ring, State) ->
     set_ring_global(Ring),
     Now = os:timestamp(),
     State2 = State#state{raw_ring = Ring,
-			 ring_changed_time = Now},
+                         ring_changed_time = Now},
     State3 = maybe_set_timer(?PROMOTE_TIMEOUT, State2),
     State3.
 
 maybe_set_timer(Duration,
-		State = #state{inactivity_timer = undefined}) ->
+                State = #state{inactivity_timer = undefined}) ->
     set_timer(Duration, State);
 maybe_set_timer(_Duration, State) -> State.
 
 set_timer(Duration, State) ->
     Timer = erlang:send_after(Duration, self(),
-			      inactivity_timeout),
+                              inactivity_timeout),
     State#state{inactivity_timer = Timer}.
 
 setup_ets(Mode) ->
@@ -518,14 +518,14 @@ setup_ets(Mode) ->
     %% eunit tests, but is unneeded for normal Riak operation.
     catch ets:delete(?ETS),
     Access = case Mode of
-	       live -> protected;
-	       test -> public
-	     end,
+               live -> protected;
+               test -> public
+             end,
     (?ETS) = ets:new(?ETS,
-		     [named_table, Access, {read_concurrency, true}]),
+                     [named_table, Access, {read_concurrency, true}]),
     Id = reset_ring_id(),
     ets:insert(?ETS,
-	       [{changes, 0}, {promoted, 0}, {id, Id}]),
+               [{changes, 0}, {promoted, 0}, {id, Id}]),
     ok.
 
 cleanup_ets(test) -> ets:delete(?ETS).
@@ -534,11 +534,11 @@ reset_ring_id() ->
     %% Maintain ring id epoch using persistent_term to ensure ring id remains
     %% monotonic even if the riak_core_ring_manager crashes and restarts
     Epoch = case persistent_term:get(riak_ring_id_epoch,
-				     undefined)
-		of
-	      undefined -> 0;
-	      Value -> Value
-	    end,
+                                     undefined)
+                of
+              undefined -> 0;
+              Value -> Value
+            end,
     persistent_term:put(riak_ring_id_epoch, Epoch + 1),
     {Epoch + 1, 0}.
 
@@ -547,39 +547,39 @@ reset_ring_id() ->
 %% process.
 set_ring_global(Ring) ->
     DefaultProps = case application:get_env(riak_core,
-					    default_bucket_props)
-		       of
-		     {ok, Val} -> Val;
-		     _ -> []
-		   end,
+                                            default_bucket_props)
+                       of
+                     {ok, Val} -> Val;
+                     _ -> []
+                   end,
     %% run fixups on the ring before storing it in persistent_term
     FixedRing = case riak_core:bucket_fixups() of
-		  [] -> Ring;
-		  Fixups ->
-		      Buckets = riak_core_ring:get_buckets(Ring),
-		      lists:foldl(fun (Bucket, AccRing) ->
-					  BucketProps =
-					      riak_core_bucket:get_bucket(Bucket,
-									  Ring),
-					  %% Merge anything in the default properties but not in
-					  %% the bucket's properties. This is to ensure default
-					  %% properties added after the bucket is created are
-					  %% inherited to the bucket.
-					  MergedProps =
-					      riak_core_bucket:merge_props(BucketProps,
-									   DefaultProps),
-					  %% fixup the ring
-					  NewBucketProps = run_fixups(Fixups,
-								      Bucket,
-								      MergedProps),
-					  %% update the bucket in the ring
-					  riak_core_ring:update_meta({bucket,
-								      Bucket},
-								     NewBucketProps,
-								     AccRing)
-				  end,
-				  Ring, Buckets)
-		end,
+                  [] -> Ring;
+                  Fixups ->
+                      Buckets = riak_core_ring:get_buckets(Ring),
+                      lists:foldl(fun (Bucket, AccRing) ->
+                                          BucketProps =
+                                              riak_core_bucket:get_bucket(Bucket,
+                                                                          Ring),
+                                          %% Merge anything in the default properties but not in
+                                          %% the bucket's properties. This is to ensure default
+                                          %% properties added after the bucket is created are
+                                          %% inherited to the bucket.
+                                          MergedProps =
+                                              riak_core_bucket:merge_props(BucketProps,
+                                                                           DefaultProps),
+                                          %% fixup the ring
+                                          NewBucketProps = run_fixups(Fixups,
+                                                                      Bucket,
+                                                                      MergedProps),
+                                          %% update the bucket in the ring
+                                          riak_core_ring:update_meta({bucket,
+                                                                      Bucket},
+                                                                     NewBucketProps,
+                                                                     AccRing)
+                                  end,
+                                  Ring, Buckets)
+                end,
     %% Mark ring as tainted to check if it is ever leaked over gossip or
     %% relied upon for any non-local ring operations.
     TaintedRing = riak_core_ring:set_tainted(FixedRing),
@@ -591,22 +591,22 @@ set_ring_global(Ring) ->
     %% special meaning in `riak_core_bucket:get_bucket_props/2`. We then
     %% cleanup these values in a subsequent `ets:match_delete`.
     OldBuckets = ets:select(?ETS,
-			    [{{{bucket, '$1'}, '_'}, [], ['$1']}]),
+                            [{{{bucket, '$1'}, '_'}, [], ['$1']}]),
     BucketDefaults = [{{bucket, Bucket}, undefined}
-		      || Bucket <- OldBuckets],
+                      || Bucket <- OldBuckets],
     BucketMeta = [{{bucket, Bucket}, Meta}
-		  || Bucket <- riak_core_ring:get_buckets(TaintedRing),
-		     {ok, Meta}
-			 <- [riak_core_ring:get_meta({bucket, Bucket},
-						     TaintedRing)]],
+                  || Bucket <- riak_core_ring:get_buckets(TaintedRing),
+                     {ok, Meta}
+                         <- [riak_core_ring:get_meta({bucket, Bucket},
+                                                     TaintedRing)]],
     BucketMeta2 = lists:ukeysort(1,
-				 BucketMeta ++ BucketDefaults),
+                                 BucketMeta ++ BucketDefaults),
     CHBin =
-	chashbin:create(riak_core_ring:chash(TaintedRing)),
+        chashbin:create(riak_core_ring:chash(TaintedRing)),
     {Epoch, Id} = ets:lookup_element(?ETS, id, 2),
     Actions = [{ring, TaintedRing}, {raw_ring, Ring},
-	       {id, {Epoch, Id + 1}}, {chashbin, CHBin}
-	       | BucketMeta2],
+               {id, {Epoch, Id + 1}}, {chashbin, CHBin}
+               | BucketMeta2],
     ets:insert(?ETS, Actions),
     ets:match_delete(?ETS, {{bucket, '_'}, undefined}),
     case persistent_term:get(?RING_KEY, undefined) of
@@ -627,7 +627,7 @@ prune_write_notify_ring(Ring, State) ->
 
 prune_write_ring(Ring, State) ->
     riak_core_ring:check_tainted(Ring,
-				 "Error: Persisting tainted ring"),
+                                 "Error: Persisting tainted ring"),
     ok = riak_core_ring_manager:prune_ringfiles(),
     _ = do_write_ringfile(Ring),
     State2 = set_ring(Ring, State),
@@ -635,7 +635,7 @@ prune_write_ring(Ring, State) ->
 
 is_stable_ring(#state{ring_changed_time = Then}) ->
     DeltaUS = erlang:max(0,
-			 timer:now_diff(os:timestamp(), Then)),
+                         timer:now_diff(os:timestamp(), Then)),
     DeltaMS = DeltaUS div 1000,
     IsStable = DeltaMS >= (?PROMOTE_TIMEOUT),
     {IsStable, DeltaMS}.
@@ -648,7 +648,7 @@ is_stable_ring(#state{ring_changed_time = Then}) ->
 back_test() ->
     X = [1, 2, 3],
     List1 = [[1, 2, 3], [4, 2, 3], [7, 8, 3], [11, 12, 13],
-	     [1, 2, 3]],
+             [1, 2, 3]],
     List2 = [[7, 8, 9], [1, 2, 3]],
     List3 = [[1, 2, 3]],
     ?assertEqual([[4, 2, 3]], (back(1, X, List1))),
@@ -659,15 +659,15 @@ back_test() ->
 
 prune_list_test() ->
     TSList1 = [[2011, 2, 28, 16, 32, 16],
-	       [2011, 2, 28, 16, 32, 36], [2011, 2, 28, 16, 30, 27],
-	       [2011, 2, 28, 16, 32, 16], [2011, 2, 28, 16, 32, 36]],
+               [2011, 2, 28, 16, 32, 36], [2011, 2, 28, 16, 30, 27],
+               [2011, 2, 28, 16, 32, 16], [2011, 2, 28, 16, 32, 36]],
     TSList2 = [[2011, 2, 28, 16, 32, 36],
-	       [2011, 2, 28, 16, 31, 16], [2011, 2, 28, 16, 30, 27],
-	       [2011, 2, 28, 16, 32, 16], [2011, 2, 28, 16, 32, 36]],
+               [2011, 2, 28, 16, 31, 16], [2011, 2, 28, 16, 30, 27],
+               [2011, 2, 28, 16, 32, 16], [2011, 2, 28, 16, 32, 36]],
     PrunedList1 = [[2011, 2, 28, 16, 30, 27],
-		   [2011, 2, 28, 16, 32, 16]],
+                   [2011, 2, 28, 16, 32, 16]],
     PrunedList2 = [[2011, 2, 28, 16, 31, 16],
-		   [2011, 2, 28, 16, 32, 36]],
+                   [2011, 2, 28, 16, 32, 36]],
     ?assertEqual(PrunedList1, (prune_list(TSList1))),
     ?assertEqual(PrunedList2, (prune_list(TSList2))).
 
@@ -678,8 +678,8 @@ set_ring_global_test() ->
     set_ring_global(Ring),
     promote_ring(),
     ?assert((riak_core_ring:nearly_equal(Ring,
-					 persistent_term:get(?RING_KEY,
-							     undefined)))),
+                                         persistent_term:get(?RING_KEY,
+                                                             undefined)))),
     cleanup_ets(test).
 
 set_my_ring_test() ->
@@ -694,32 +694,32 @@ set_my_ring_test() ->
 refresh_my_ring_test() ->
     {spawn,
      fun () ->
-	     setup_ets(test),
-	     Core_Settings = [{ring_creation_size, 4},
-			      {ring_state_dir, "_build/test/tmp"},
-			      {cluster_name, "test"}],
-	     [begin
-		put({?MODULE, AppKey},
-		    application:get_env(riak_core, AppKey, undefined)),
-		ok = application:set_env(riak_core, AppKey, Val)
-	      end
-	      || {AppKey, Val} <- Core_Settings],
-	     stop_core_processes(),
-	     riak_core_ring_events:start_link(),
-	     riak_core_ring_manager:start_link(test),
-	     riak_core_vnode_sup:start_link(),
-	     riak_core_vnode_master:start_link(riak_core_vnode),
-	     riak_core_test_util:setup_mockring1(),
-	     ?assertEqual(ok,
-			  (riak_core_ring_manager:refresh_my_ring())),
-	     stop_core_processes(),
-	     %% Cleanup the ring file created for this test
-	     {ok, RingFile} = find_latest_ringfile(),
-	     file:delete(RingFile),
-	     [ok = application:set_env(riak_core, AppKey,
-				       get({?MODULE, AppKey}))
-	      || {AppKey, _Val} <- Core_Settings],
-	     ok
+             setup_ets(test),
+             Core_Settings = [{ring_creation_size, 4},
+                              {ring_state_dir, "_build/test/tmp"},
+                              {cluster_name, "test"}],
+             [begin
+                put({?MODULE, AppKey},
+                    application:get_env(riak_core, AppKey, undefined)),
+                ok = application:set_env(riak_core, AppKey, Val)
+              end
+              || {AppKey, Val} <- Core_Settings],
+             stop_core_processes(),
+             riak_core_ring_events:start_link(),
+             riak_core_ring_manager:start_link(test),
+             riak_core_vnode_sup:start_link(),
+             riak_core_vnode_master:start_link(riak_core_vnode),
+             riak_core_test_util:setup_mockring1(),
+             ?assertEqual(ok,
+                          (riak_core_ring_manager:refresh_my_ring())),
+             stop_core_processes(),
+             %% Cleanup the ring file created for this test
+             {ok, RingFile} = find_latest_ringfile(),
+             file:delete(RingFile),
+             [ok = application:set_env(riak_core, AppKey,
+                                       get({?MODULE, AppKey}))
+              || {AppKey, _Val} <- Core_Settings],
+             ok
      end}.
 
 stop_core_processes() ->
@@ -741,21 +741,21 @@ do_write_ringfile_test() ->
     %% Check happy path
     GenR = fun (Name) -> riak_core_ring:fresh(64, Name) end,
     ?assertEqual(ok,
-		 (do_write_ringfile(GenR(happy), ?TEST_RINGFILE))),
+                 (do_write_ringfile(GenR(happy), ?TEST_RINGFILE))),
     %% errors expected
     error_logger:tty(false),
     %% Check write fails (create .tmp file with no write perms)
     ok = file:write_file(?TMP_RINGFILE,
-			 <<"no write for you">>),
+                         <<"no write for you">>),
     ok = file:change_mode(?TMP_RINGFILE, 8#00444),
     ?assertMatch({error, _},
-		 (do_write_ringfile(GenR(tmp_perms), ?TEST_RINGFILE))),
+                 (do_write_ringfile(GenR(tmp_perms), ?TEST_RINGFILE))),
     ok = file:change_mode(?TMP_RINGFILE, 8#00644),
     ok = file:delete(?TMP_RINGFILE),
     %% Check rename fails
     ok = file:change_mode(?TEST_RINGDIR, 8#00444),
     ?assertMatch({error, _},
-		 (do_write_ringfile(GenR(ring_perms), ?TEST_RINGFILE))),
+                 (do_write_ringfile(GenR(ring_perms), ?TEST_RINGFILE))),
     ok = file:change_mode(?TEST_RINGDIR, 8#00755),
     error_logger:tty(true),
     %% Cleanup the ring file created for this test
@@ -768,13 +768,13 @@ is_stable_ring_test() ->
     Within = {A, B - TimeoutSecs div 2, C},
     Outside = {A, B - (TimeoutSecs + 1), C},
     ?assertMatch({true, _},
-		 (is_stable_ring(#state{ring_changed_time =
-					    {0, 0, 0}}))),
+                 (is_stable_ring(#state{ring_changed_time =
+                                            {0, 0, 0}}))),
     ?assertMatch({true, _},
-		 (is_stable_ring(#state{ring_changed_time = Outside}))),
+                 (is_stable_ring(#state{ring_changed_time = Outside}))),
     ?assertMatch({false, _},
-		 (is_stable_ring(#state{ring_changed_time = Within}))),
+                 (is_stable_ring(#state{ring_changed_time = Within}))),
     ?assertMatch({false, _},
-		 (is_stable_ring(#state{ring_changed_time = Now}))).
+                 (is_stable_ring(#state{ring_changed_time = Now}))).
 
 -endif.

@@ -78,6 +78,7 @@ start_link(TargetNode, Module, {Type, Opts}, Vnode) ->
     Pid = spawn_link(fun () ->
                  start_fold(TargetNode, Module, {Type, Opts}, Vnode)
              end),
+
     {ok, Pid}.
 
 %%%===================================================================
@@ -85,23 +86,24 @@ start_link(TargetNode, Module, {Type, Opts}, Vnode) ->
 %%%===================================================================
 
 start_fold_(TargetNode, Module, Type, Opts, ParentPid,
-        SrcNode, SrcPartition, TargetPartition) ->
+            SrcNode, SrcPartition, TargetPartition) ->
     %% Give workers one more chance to abort or get a lock or whatever.
     FoldOpts = maybe_call_handoff_started(Module,
-                      SrcPartition),
+                                          SrcPartition),
     Filter = get_filter(Opts),
     [_Name, Host] = string:tokens(atom_to_list(TargetNode),
-                  "@"),
+                                  "@"),
     {ok, Port} = get_handoff_port(TargetNode),
     TNHandoffIP = case get_handoff_ip(TargetNode) of
-            error -> Host;
-            {ok, "0.0.0.0"} -> Host;
-            {ok, Other} -> Other
-          end,
+                    error -> Host;
+                    {ok, "0.0.0.0"} -> Host;
+                    {ok, Other} -> Other
+                  end,
     SockOpts = [binary, {packet, 4}, {header, 1},
-        {active, false}],
+                {active, false}],
     {ok, Socket} = gen_tcp:connect(TNHandoffIP, Port,
-                   SockOpts, 15000),
+                                   SockOpts, 15000),
+
     RecvTimeout = get_handoff_receive_timeout(),
     %% We want to ensure that the node we think we are talking to
     %% really is the node we expect.
@@ -111,7 +113,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
     %% print an error and keep going with our fingers crossed.
     TargetBin = term_to_binary(TargetNode),
     VerifyNodeMsg = <<(?PT_MSG_VERIFY_NODE):8,
-              TargetBin/binary>>,
+                      TargetBin/binary>>
     ok = gen_tcp:send(Socket, VerifyNodeMsg),
     case gen_tcp:recv(Socket, 0, RecvTimeout) of
       {ok, [?PT_MSG_VERIFY_NODE | _]} -> ok;
@@ -119,6 +121,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
       logger:warning("Could not verify identity of peer ~s.",
              [TargetNode]),
       ok;
+
       {error, timeout} -> exit({shutdown, timeout});
       {error, closed} -> exit({shutdown, wrong_node})
     end,
@@ -134,6 +137,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
     ok = gen_tcp:send(Socket, Msg),
     AckSyncThreshold = application:get_env(riak_core,
                        handoff_acksync_threshold, 25),
+
     %% Now that handoff_concurrency applies to both outbound and
     %% inbound conns there is a chance that the receiver may
     %% decide to reject the senders attempt to start a handoff.
@@ -152,6 +156,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
         "to ~p ~p",
         [Type, Module, SrcNode, SrcPartition, TargetNode,
          TargetPartition]),
+
     M = <<(?PT_MSG_INIT):8, TargetPartition:160/integer>>,
     ok = gen_tcp:send(Socket, M),
     StartFoldTime = os:timestamp(),
@@ -297,6 +302,7 @@ start_visit_item_timer() ->
 
 visit_item(K, V,
        Acc0 = #ho_acc{acksync_threshold = AccSyncThreshold}) ->
+
     %% Eventually, a vnode worker proc will be doing this fold, but we don't
     %% know the pid of that proc ahead of time.  So we have to start the
     %% timer some time after the fold has started execution on that proc
@@ -311,6 +317,7 @@ visit_item(K, V,
     receive
       tick_send_sync ->
       visit_item2(K, V, Acc#ho_acc{ack = AccSyncThreshold})
+
       after 0 -> visit_item2(K, V, Acc)
     end.
 
@@ -327,6 +334,7 @@ visit_item2(K, V,
         src_target = {SrcPartition, TargetPartition},
         stats = Stats} =
     Acc,
+
     RecvTimeout = get_handoff_receive_timeout(),
     M = <<(?PT_MSG_OLDSYNC):8, "sync">>,
     NumBytes = byte_size(M),
@@ -410,6 +418,7 @@ visit_item2(K, V, Acc) ->
                            NotSentAcc, K),
       Acc#ho_acc{error = ok, total_objects = TotalObjects + 1,
              notsent_acc = NewNotSentAcc}
+
     end.
 
 handle_not_sent_item(undefined, _, _) -> undefined;
@@ -421,6 +430,7 @@ send_objects([], Acc) -> Acc;
 send_objects(ItemsReverseList, Acc) ->
     Items = lists:reverse(ItemsReverseList),
     #ho_acc{ack = Ack, module = Module, socket = Sock,
+
         src_target = {SrcPartition, TargetPartition},
         stats = Stats, total_objects = TotalObjects,
         total_bytes = TotalBytes,
@@ -442,6 +452,7 @@ send_objects(ItemsReverseList, Acc) ->
              item_queue_length = 0, item_queue_byte_size = 0};
       {error, Reason} ->
       Acc#ho_acc{error = {error, Reason}, stats = Stats3}
+
     end.
 
 get_handoff_ip(Node) when is_atom(Node) ->
@@ -449,27 +460,19 @@ get_handoff_ip(Node) when is_atom(Node) ->
                  riak_core_handoff_listener, get_handoff_ip, [],
                  infinity)
     of
+
       {badrpc, _} -> error;
       Res -> Res
     end.
 
 get_handoff_port(Node) when is_atom(Node) ->
-    case catch
-       riak_core_gen_server:call({riak_core_handoff_listener,
-                      Node},
-                     handoff_port, infinity)
-    of
-      {'EXIT', _} ->
-      %% Check old location from previous release
-      riak_core_gen_server:call({riak_kv_handoff_listener,
-                     Node},
-                    handoff_port, infinity);
-      Other -> Other
-    end.
+    gen_server:call({riak_core_handoff_listener, Node},
+                    handoff_port, infinity).
 
 get_handoff_receive_timeout() ->
     application:get_env(riak_core, handoff_timeout,
-            ?TCP_TIMEOUT).
+                        ?TCP_TIMEOUT).
+
 
 end_fold_time(StartFoldTime) ->
     EndFoldTime = os:timestamp(),
@@ -510,6 +513,7 @@ incr_objs(Stats) -> incr_objs(Stats, 1).
 -spec incr_objs(ho_stats(),
         non_neg_integer()) -> NewStats :: ho_stats().
 
+
 incr_objs(Stats = #ho_stats{objs = Objs}, NObjs) ->
     Stats#ho_stats{objs = Objs + NObjs}.
 
@@ -519,18 +523,17 @@ incr_objs(Stats = #ho_stats{objs = Objs}, NObjs) ->
 %%      for `ModSrcTgt' to the manager and return a new stats record
 %%      `NetStats'.
 -spec maybe_send_status({module(), non_neg_integer(),
-             non_neg_integer()},
-            ho_stats()) -> NewStats :: ho_stats().
-
+                         non_neg_integer()},
+                        ho_stats()) -> NewStats :: ho_stats().
 maybe_send_status(ModSrcTgt,
-          Stats = #ho_stats{interval_end = IntervalEnd}) ->
+                  Stats = #ho_stats{interval_end = IntervalEnd}) ->
     case is_elapsed(IntervalEnd) of
       true ->
-      Stats2 = Stats#ho_stats{last_update = os:timestamp()},
-      riak_core_handoff_manager:status_update(ModSrcTgt,
-                          Stats2),
-      #ho_stats{interval_end =
-            future_now(get_status_interval())};
+          Stats2 = Stats#ho_stats{last_update = os:timestamp()},
+          riak_core_handoff_manager:status_update(ModSrcTgt,
+                                                  Stats2),
+          #ho_stats{interval_end =
+                        future_now(get_status_interval())};
       false -> Stats
     end.
 
@@ -568,16 +571,17 @@ get_filter(Opts) ->
 
 remote_supports_batching(Node) ->
     case catch rpc:call(Node, riak_core_handoff_receiver,
-            supports_batching, [])
-    of
+                        supports_batching, [])
+        of
       true ->
-      logger:debug("remote node supports batching, enabling"),
-      true;
+          logger:debug("remote node supports batching, enabling"),
+          true;
       _ ->
-      %% whatever the problem here, just revert to the old behavior
-      %% which shouldn't matter too much for any single handoff
-      logger:debug("remote node doesn't support batching"),
-      false
+          %% whatever the problem here, just revert to the old behavior
+          %% which shouldn't matter too much for any single handoff
+          logger:debug("remote node doesn't support batching"),
+          false
+
     end.
 
 %% @private
@@ -591,19 +595,19 @@ remote_supports_batching(Node) ->
 %% the process.
 maybe_call_handoff_started(Module, SrcPartition) ->
     case lists:member({handoff_started, 2},
-              Module:module_info(exports))
-    of
+                      Module:module_info(exports))
+        of
       true ->
-      WorkerPid = self(),
-      case Module:handoff_started(SrcPartition, WorkerPid) of
-        {ok, FoldOpts} -> FoldOpts;
-        {error, max_concurrency} ->
-        %% Handoff of that partition is busy or can't proceed. Stopping with
-        %% max_concurrency will cause this partition to be retried again later.
-        exit({shutdown, max_concurrency});
-        {error, Error} -> exit({shutdown, Error})
-      end;
+          WorkerPid = self(),
+          case Module:handoff_started(SrcPartition, WorkerPid) of
+            {ok, FoldOpts} -> FoldOpts;
+            {error, max_concurrency} ->
+                %% Handoff of that partition is busy or can't proceed. Stopping with
+                %% max_concurrency will cause this partition to be retried again later.
+                exit({shutdown, max_concurrency});
+            {error, Error} -> exit({shutdown, Error})
+          end;
       false ->
-      %% optional callback not implemented, so we carry on, w/ no addition fold options
-      []
+          %% optional callback not implemented, so we carry on, w/ no addition fold options
+          []
     end.

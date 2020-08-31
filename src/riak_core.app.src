@@ -1,6 +1,6 @@
 {application,riak_core,
     [{description,"Riak Core Lite"},
-     {vsn,"0.10.0"},
+     {vsn,"0.10.1"},
      {applications,
          [kernel,stdlib,crypto,os_mon,poolboy]
      },

@@ -1,5 +1,5 @@
 PULSE_TESTS = worker_pool_pulse
-
+COVERPATH = ./_build/test/cover
 REBAR ?= ./rebar3
 
 .PHONY: deps test docs xref dialyzer format
@@ -11,7 +11,6 @@ compile: deps
 
 clean: clean-test
 	${REBAR} clean
-
 
 distclean: clean
 
@@ -33,13 +32,20 @@ pulse:
 	${REBAR} compile -D PULSE
 	${REBAR} eunit -D PULSE skip_deps=true suite=$(PULSE_TESTS)
 
-format: 
+proper:
+	${REBAR} as proper do eunit
+  
+epc:
+	${REBAR} as epc eunit
+	
+format:
 	${REBAR} format
 
 test: compile
 	${REBAR} eunit
 
 coverage: compile
+	cp _build/proper+test/cover/eunit.coverdata ${COVERPATH}/proper.coverdata ;\
 	${REBAR} cover --verbose
 
 docs:
