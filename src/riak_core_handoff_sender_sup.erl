@@ -31,8 +31,12 @@
 -include("riak_core_handoff.hrl").
 
 -define(CHILD(I, Type),
-        {I, {I, start_link, []}, temporary, brutal_kill, Type,
-         [I]}).
+	{I,
+	 {I, start_link, []},
+	 temporary,
+	 brutal_kill,
+	 Type,
+	 [I]}).
 
 %%%===================================================================
 %%% API
@@ -56,11 +60,11 @@ start_link() ->
 %%        * unsent_acc0 - optional. The intial accumulator value passed to unsent_fun
 %%                        for the first unsent key
 -spec start_sender(ho_type(), atom(), term(), pid(),
-                   [{atom(), term()}]) -> {ok, pid()}.
+		   [{atom(), term()}]) -> {ok, pid()}.
 
 start_sender(Type, Module, TargetNode, VNode, Opts) ->
     supervisor:start_child(?MODULE,
-                           [TargetNode, Module, {Type, Opts}, VNode]).
+			   [TargetNode, Module, {Type, Opts}, VNode]).
 
 %%%===================================================================
 %%% Callbacks

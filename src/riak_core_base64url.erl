@@ -27,9 +27,12 @@
 
 -module(riak_core_base64url).
 
--export([decode/1, decode_to_string/1, encode/1,
-         encode_to_string/1, mime_decode/1,
-         mime_decode_to_string/1]).
+-export([decode/1,
+	 decode_to_string/1,
+	 encode/1,
+	 encode_to_string/1,
+	 mime_decode/1,
+	 mime_decode_to_string/1]).
 
 -spec decode(iodata()) -> binary().
 
@@ -65,7 +68,7 @@ urlencode(Base64) when is_list(Base64) ->
     string:strip(Padded, both, $=);
 urlencode(Base64) when is_binary(Base64) ->
     Padded = << <<(urlencode_digit(D))>>
-                 || <<D>> <= Base64 >>,
+		 || <<D>> <= Base64 >>,
     binary:replace(Padded, <<"=">>, <<"">>, [global]).
 
 urldecode(Base64url) when is_list(Base64url) ->
@@ -74,15 +77,15 @@ urldecode(Base64url) when is_list(Base64url) ->
     Prepad ++ Padding;
 urldecode(Base64url) when is_binary(Base64url) ->
     Prepad = << <<(urldecode_digit(D))>>
-                 || <<D>> <= Base64url >>,
+		 || <<D>> <= Base64url >>,
     Padding = padding(Prepad),
     <<Prepad/binary, Padding/binary>>.
 
 padding(Base64) when is_binary(Base64) ->
     case byte_size(Base64) rem 4 of
-      2 -> <<"==">>;
-      3 -> <<"=">>;
-      _ -> <<"">>
+	2 -> <<"==">>;
+	3 -> <<"=">>;
+	_ -> <<"">>
     end;
 padding(Base64) when is_list(Base64) ->
     binary_to_list(padding(list_to_binary(Base64))).

@@ -4,8 +4,13 @@
 -module(riak_core_rand).
 
 %% API
--export([uniform/0, uniform/1, uniform_s/2, seed/0,
-         seed/1, rand_seed/0, rand_bytes/1]).
+-export([uniform/0,
+	 uniform/1,
+	 uniform_s/2,
+	 seed/0,
+	 seed/1,
+	 rand_seed/0,
+	 rand_bytes/1]).
 
 %% As the algorithm is not changed in any place  we can use the default
 %% algorithm for all call here.
@@ -33,14 +38,16 @@ seed() -> rand:seed(?ALGO).
 %% rand:seed will return the **new** seed. We can work around this by first
 %% getting the exported seed then using this instead.
 -spec seed({integer(), integer(), integer()} |
-           rand:export_state()) -> rand:export_state() | undefined.
+	   rand:export_state()) -> rand:export_state() | undefined.
 
 seed({_, _, _} = Seed) ->
     Old = rand:export_seed(),
     _New = rand:seed(?ALGO, Seed),
     Old;
 seed(Seed) ->
-    Old = rand:export_seed(), _New = rand:seed(Seed), Old.
+    Old = rand:export_seed(),
+    _New = rand:seed(Seed),
+    Old.
 
 rand_bytes(Size) -> crypto:strong_rand_bytes(Size).
 
