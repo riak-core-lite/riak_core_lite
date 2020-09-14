@@ -599,13 +599,6 @@ active(cast, cancel_handoff,
 				 handoff_type = undefined,
 				 modstate = NewModState})
     end;
-%% 13
-active(cast,
-       #riak_coverage_req_v1{keyspaces = KeySpaces,
-			     request = Request, sender = Sender},
-       State) ->
-    %% Coverage request handled in handoff and non-handoff.  Will be forwarded if set.
-    vnode_coverage(Sender, Request, KeySpaces, State);
 %% #16
 active(cast, handoff_complete, State) ->
     State2 = start_manager_event_timer(handoff_complete,
@@ -677,6 +670,14 @@ active(cast, {send_manager_event, Event}, State) ->
     State2 = start_manager_event_timer(Event, State),
     continue(State2);
 
+%% 13
+active(_C,
+       #riak_coverage_req_v1{keyspaces = KeySpaces,
+			     request = Request, sender = Sender},
+       State) ->
+    %% Coverage request handled in handoff and non-handoff.  Will be forwarded if set.
+    vnode_coverage(Sender, Request, KeySpaces, State);
+
 %% forward_request
 active(_C,
        #riak_vnode_req_v1{sender = Sender,
@@ -721,8 +722,8 @@ active(_C,
 		_Other -> vnode_command(Sender, Request, State)
 	    end
     end;
-%% 
-active(_C,
+%%
+active(cast,
        #riak_vnode_req_v1{sender = Sender, request = Request},
        State) ->
     vnode_handoff_command(Sender,
