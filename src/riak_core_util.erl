@@ -1,8 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% riak_core: Core Riak Application
-%%
-%% Copyright (c) 2007-2013 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.
+%% Copyright (c) 2020 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -67,7 +66,9 @@
          make_fold_req/4,
          make_newest_fold_req/1,
          proxy_spawn/1,
-         proxy/2
+         proxy/2,
+         rand_uniform/0,
+         rand_uniform/1
         ]).
 
 -include("riak_core_vnode.hrl").
@@ -600,10 +601,33 @@ orddict_delta(A, B) ->
     Diff.
 
 shuffle(L) ->
+    rand_seed_init(),
     N = 134217727, %% Largest small integer on 32-bit Erlang
     L2 = [{random:uniform(N), E} || E <- L],
     L3 = [E || {_, E} <- lists:sort(L2)],
     L3.
+
+%% @private
+%% By default, the random module uses a constant seed for per-pid state.
+%% Initialize a [more] random seed once per calling process.
+rand_seed_init() ->
+    case erlang:get(random_seed) of
+        undefined ->
+            {A, B, C} = os:timestamp(),
+            random:seed(erlang:phash2(erlang:self()), (A + B), C);
+        _ ->
+            ok
+    end.
+
+-spec rand_uniform() -> float().
+rand_uniform() ->
+    rand_seed_init(),
+    random:uniform().
+
+-spec rand_uniform(pos_integer()) -> pos_integer().
+rand_uniform(N) ->
+    rand_seed_init(),
+    random:uniform(N).
 
 %% Returns a forced-lowercase architecture for this node
 -spec get_arch () -> string().

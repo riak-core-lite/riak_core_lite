@@ -1,8 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% riak_core: Core Riak Application
-%%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2014 Basho Technologies, Inc.
+%% Copyright (c) 2020 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -27,7 +26,17 @@
          check_ring/2,
          hash_to_partition_id/2,
          partition_id_to_hash/2,
-         hash_is_partition_boundary/2]).
+         hash_is_partition_boundary/2,
+         uncovered_preflists/1
+]).
+
+-export([
+    uncovered_preflists/3,
+    covering_nodesets/3,
+    covering_nodesets/4,
+    safe_node_partitions/3,
+    safe_node_partitions/4
+]). %% for testing in the field, only
 
 -export_type([partition_id/0]).
 
@@ -58,9 +67,14 @@ check_ring() ->
     check_ring(R).
 
 check_ring(Ring) ->
+    check_ring(Ring, default_nval()).
+
+%% @private
+default_nval() ->
     {ok, Props} = application:get_env(riak_core, default_bucket_props),
     {n_val, Nval} = lists:keyfind(n_val, 1, Props),
-    check_ring(Ring, Nval).
+    Nval.
+
 
 %% @doc Check a ring for any preflists that do not satisfy n_val
 check_ring(Ring, Nval) ->
@@ -102,6 +116,203 @@ hash_is_partition_boundary(CHashKey, RingSize) when is_binary(CHashKey) ->
 hash_is_partition_boundary(CHashInt, RingSize) ->
     CHashInt rem chash:ring_increment(RingSize) =:= 0.
 
+%%
+%% @param UpNodes list of currently running nodes
+%% @returns set of preflists that are uncovered if only UpNodes are running
+%% @doc
+%% Return the set of preflists that are uncovered if only the supplied list of
+%% nodes are running.  If this list is empty, then the cluster is available for
+%% reads and writes if all nodes in UpNodes are available.
+%% @end
+%%
+-spec uncovered_preflists([node()]) -> [riak_core_apl:preflist()].
+uncovered_preflists(UpNodes) ->
+    uncovered_preflists(UpNodes, default_nval(), 1).
+
+%% @hidden
+uncovered_preflists(Nodes, NVal, Min) ->
+    case riak_core_ring_manager:get_my_ring() of
+        {ok, Ring} ->
+            uncovered_preflists(Nodes, Ring, NVal, Min);
+        Error ->
+            Error
+    end.
+
+%% @private
+uncovered_preflists(Nodes, Ring, NVal, Min) ->
+    AllPreflists = riak_core_ring:all_preflists(Ring, NVal),
+    filter_uncovered_preflists(Nodes, AllPreflists, Min).
+
+%% @private
+%% Return true if there are at least Min-many nodes from Nodes in the supplied PrefList
+%% e.g., [{index1, node1}, {index2, node2}, {index3, node3}], [node1, node5, node7, node8], 1 -> true, whereas
+%%       [{index1, node1}, {index2, node2}, {index3, node3}], [node4, node5, node7, node8], 1 -> false
+covers(Nodes, PrefList, CMin) ->
+    InNodes = [IndexNode || {_Index, Node} = IndexNode <- PrefList, lists:member(Node, Nodes)],
+    length(InNodes) >= CMin.
+
+%% @private
+%% Return the set of pref lists from PrefLists that are not "covered by", i.e.,
+%% don't have Min-many indices owned by, any of the supplied set of Nodes.
+%% Note.  If the returned list is empty, then every pref list is covered by
+%% the supplied set of nodes, i.e., every key has a replica on at least Min-many
+%% nodes in the supplied set of nodes.
+filter_uncovered_preflists(Nodes, PrefLists, CMin) ->
+    [PrefList || PrefList <- PrefLists, not covers(Nodes, PrefList, CMin)].
+
+
+%%
+%% FOR INTERNAL/DIAGNOSTIC USE ONLY
+%%
+%% Equivalent to covering_nodesets(Ring, NVal, CMin, undefined).
+%%
+-spec covering_nodesets(Ring::riak_core_apl:ring(), NVal::riak_core_apl:n_val(), CMin::non_neg_integer()) -> [[node()]].
+covering_nodesets(Ring, NVal, CMin) ->
+    covering_nodesets(Ring, NVal, CMin, undefined).
+
+%%
+%% FOR INTERNAL/DIAGNOSTIC USE ONLY
+%%
+%% @param Ring  a ring
+%% @param NVal  n-value
+%% @param CMin  the minimum coverage overlap
+%% @param K     the maximum depth to search; undefined if no limit
+%% @return the set of node sets (subsets of all nodes in the ring) that cover the ring, i.e.,
+%% for which there is at least one replica in the set of nodes, for every possible key stored in Riak.
+%%
+-spec covering_nodesets(Ring::riak_core_apl:ring(), NVal::riak_core_apl:n_val(), CMin::non_neg_integer(), K::(undefined | non_neg_integer())) -> [[node()]].
+covering_nodesets(Ring, NVal, CMin, K) when K =:= undefined orelse 0 =< K ->
+    Nodes = riak_core_ring:all_members(Ring),
+    Preflists = riak_core_ring:all_preflists(Ring, NVal),
+    MaybeKPlus1 = case K of undefined -> undefined; _ -> K + 1 end,
+    traverse(Nodes, Preflists, CMin, MaybeKPlus1).
+
+%% @private
+traverse(Nodes, PrefLists, CMin, K) ->
+    sets:to_list(traverse(Nodes, PrefLists, CMin, K, 0, sets:new())).
+
+%% @private
+traverse([] = _Nodes, _PrefLists, _CMin, _K, _Depth, Accum) ->
+    Accum;
+traverse(_Nodes, _PrefLists, _CMin, K, K, Accum) ->
+    Accum;
+traverse(Nodes, PrefLists, CMin, K, Depth, Accum) ->
+    case sets:is_element(Nodes, Accum) of
+        true ->
+            Accum;
+        _ ->
+            case filter_uncovered_preflists(Nodes, PrefLists, CMin) of
+                [] ->
+                    NewDepth = Depth + 1,
+                    NodeSubLists = [Nodes -- [Node] || Node <- Nodes],
+                    NewAccum = lists:foldl(
+                        fun(NodeSubList, InnerAccum) ->
+                            traverse(NodeSubList, PrefLists, CMin, K, NewDepth, InnerAccum)
+                        end,
+                        Accum,
+                        NodeSubLists
+                    ),
+                    sets:add_element(Nodes, NewAccum);
+                _ ->
+                    Accum
+            end
+    end.
+
+%%
+%% FOR INTERNAL/DIAGNOSTIC USE ONLY
+%%
+%% Equivalent to safe_node_partitions(Ring, NVal, CMin, undefined).
+%%
+-spec safe_node_partitions(Ring::riak_core_apl:ring(), NVal::riak_core_apl:n_val(), CMin::non_neg_integer()) -> [[node()]].
+safe_node_partitions(Ring, NVal, CMin) ->
+    safe_node_partitions(Ring, NVal, CMin, undefined).
+
+%%
+%% FOR INTERNAL/DIAGNOSTIC USE ONLY
+%%
+%% @param Ring  the operative ring
+%% @param NVal  the operative n-value
+%% @param CMin  the minimum coverage overlap
+%% @param K     the maximum depth to search; undefined if no limit
+%% @return      a disjoint set of subsets of nodes in the Ring that are
+%%              safe to take down, while still preserving read-availability.
+%%
+-spec safe_node_partitions(Ring::riak_core_apl:ring(), NVal::riak_core_apl:n_val(), CMin::non_neg_integer(), K::(undefined | non_neg_integer())) -> [[node()]].
+safe_node_partitions(Ring, NVal, CMin, K) ->
+    Nodes = riak_core_ring:all_members(Ring),
+    CoveringNodeSets = covering_nodesets(Ring, NVal, CMin, K),
+    SafeNodeSets = [Nodes -- NodeSet || NodeSet <- CoveringNodeSets],
+    SortedSafeNodeSets = lists:reverse(sort_by_length(SafeNodeSets)),
+    case find_partitioning(SortedSafeNodeSets, Nodes) of
+        {error, no_partitioning} ->
+            {error, {no_partitioning, [{nodes, Nodes}, {covering_nodesets, CoveringNodeSets}, {safe_node_sets, SortedSafeNodeSets}]}};
+        Ok ->
+            Ok
+    end.
+
+
+%% @private
+sort_by_length(SafeNodeSets) ->
+    Tmp = lists:sort([{length(S), S} || S <- SafeNodeSets]),
+    [S || {_, S} <- Tmp].
+
+%% @private
+find_partitioning(SortedSafeNodeSets, Nodes) ->
+    find_partitioning(SortedSafeNodeSets, sets:from_list(Nodes), []).
+
+%% @private
+find_partitioning([], _Nodes, _Accum) ->
+    {error, no_partitioning};
+find_partitioning([SafeNodeSet|Rest], Nodes, Accum) ->
+    %% precondition: SafeNodeSet does not overlap with Accum
+    NewAccum = [SafeNodeSet | Accum],
+    case is_partitioning(Nodes, NewAccum) of
+        true ->
+            {ok, NewAccum};
+        _ ->
+            NewCandidates = [NodeSet || NodeSet <- Rest, no_overlap(NodeSet, NewAccum)],
+            case NewCandidates of
+                [] ->
+                    {error, no_partitioning};
+                _ ->
+                    case find_partitioning(NewCandidates, Nodes, NewAccum) of
+                        {error, no_partitioning} ->
+                            find_partitioning(Rest, Nodes, Accum);
+                        Ok ->
+                            Ok
+                    end
+            end
+    end.
+
+%% @private
+is_partitioning(N, P) ->
+    sets_equal(union(P), N) andalso sets:size(intersection(P)) == 0.
+
+%% @private
+union(P) ->
+    sets:union([sets:from_list(X) || X <- P]).
+
+%% @private
+intersection(P) ->
+    sets:intersection([sets:from_list(X) || X <- P]).
+
+sets_equal(A, B) ->
+    sets:is_subset(A, B) andalso sets:is_subset(B, A).
+
+%% @private
+no_overlap(NodeSet, Partitions) ->
+    lists:all(
+        fun(Partition) ->
+            is_disjoint(NodeSet, Partition)
+        end,
+        Partitions
+    ).
+
+%% @private
+is_disjoint(L1, L2) ->
+    lists:all(fun(E) -> not lists:member(E, L2) end, L1) andalso
+    lists:all(fun(E) -> not lists:member(E, L1) end, L2).
+
 
 %% ===================================================================
 %% EUnit tests
@@ -137,6 +348,137 @@ boundary_test() ->
     ?assertNot(riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex - 1):160>>, 32)),
     ?assertNot(riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex + 2):160>>, 32)),
     ?assertNot(riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex + 10):160>>, 32)).
+
+%% random keys have primaries in all covering node sets
+covering_nodesets_test_() ->
+    {timeout, 60, [
+        fun() ->
+            NVal = 3,
+            [begin
+                 io:format(user, ".", []),
+                 Ring = create_ring(256, 8),
+                 CoveringNodeSets = riak_core_ring_util:covering_nodesets(Ring, NVal, CMin, K),
+                 case CMin of
+                     NVal ->
+                         ?assert(length(CoveringNodeSets) == 1 andalso erlang:hd(CoveringNodeSets) =:= riak_core_ring:all_members(Ring));
+                     _ -> ok
+                 end,
+                 case K of
+                     0 ->
+                         ?assert(length(CoveringNodeSets) == 1 andalso erlang:hd(CoveringNodeSets) =:= riak_core_ring:all_members(Ring));
+                     _ -> ok
+                 end,
+                 Nodes = riak_core_ring:all_members(Ring),
+                 Complements = [Nodes -- NodeSet || NodeSet <- CoveringNodeSets],
+                 verify_max_nodeset_size(Complements, K),
+                 verify_random_keys(Ring, CoveringNodeSets, CMin)
+             end || CMin <- lists:seq(1, NVal), K <- [undefined] ++ lists:seq(0, NVal)]
+        end
+    ]}.
+
+create_ring(RingSize, NumNodes) ->
+    SingletonRing = riak_core_ring:fresh(RingSize, 'test@127.0.0.1'),
+    application:set_env(riak_core, wants_claim_fun, {riak_core_claim, default_wants_claim}),
+    application:set_env(riak_core, choose_claim_fun, {riak_core_claim, default_choose_claim}),
+    Commands = generate_commands(NumNodes - 1),
+    run_simulator(Commands, SingletonRing).
+
+run_simulator([], Ring) ->
+    Ring;
+run_simulator([Command|Rest], Ring) ->
+    NewRing = riak_core_claim_sim:run([{ring, Ring}, {return_ring, true}, {print, false}, {cmds, [Command]}]),
+    run_simulator(Rest, NewRing).
+
+generate_commands(N) ->
+    R = riak_core_util:rand_uniform(N),
+    case R of
+        1 ->
+            [ [{join, N}] ];
+        N ->
+            [ [{join, generate_nodename(I)}] || I <- lists:seq(1, N)];
+        _ ->
+            [ [{join, generate_nodename(I)} || I <- lists:seq(1, R)], [{join, generate_nodename(I)} || I <- lists:seq(N - R, N)] ]
+    end.
+
+generate_nodename(I) ->
+    list_to_atom(lists:flatten(io_lib:format("test~p@127.0.0.1", [I]))).
+
+verify_max_nodeset_size(_NodeSets, undefined) ->
+    ok;
+verify_max_nodeset_size(NodeSets, K) ->
+    lists:foreach(
+        fun(NodeSet) ->
+            ?assert(length(NodeSet) =< K)
+        end,
+        NodeSets
+    ).
+
+verify_random_keys(Ring, CoveringNodeSets, CMin) ->
+    RandomKeys = create_random_keys(2048),
+    lists:foreach(
+        fun(Key) ->
+            verify_random_key(Key, Ring, CoveringNodeSets, CMin)
+        end,
+        RandomKeys
+    ).
+
+create_random_keys(N) ->
+    [create_random_key(100) || _I <- lists:seq(1, N)].
+
+create_random_key(MaxLen) ->
+    list_to_binary([riak_core_util:rand_uniform(255) || _ <- lists:seq(1, riak_core_util:rand_uniform(MaxLen))]).
+
+
+verify_random_key(Key, Ring, CoveringNodeSets, CMin) ->
+    lists:foreach(
+        fun(CoveringNodeSet) ->
+            verify_covered(Key, Ring, CoveringNodeSet, CMin)
+        end,
+        CoveringNodeSets
+    ).
+
+verify_covered(Key, Ring, CoveringNodeSet, CMin) ->
+    BucketProps = [{chash_keyfun, {riak_core_util, chash_std_keyfun}}],
+    DocIdx = riak_core_util:chash_key({<<"test">>, Key}, BucketProps),
+    PL = riak_core_apl:get_primary_apl(DocIdx, 3, Ring, CoveringNodeSet),
+    ?assert(CMin =< length(PL)).
+
+%% safe nodes forms a partition of the members of the ring, and all partitions are "safe"
+%% (i.e., their complements all cover the ring)
+safe_node_partitions_test_() ->
+    {timeout, 60, [
+        fun() ->
+            NVal = 3,
+            [begin
+                 io:format(user, ".", []),
+                 Ring = create_ring(256, 8),
+                 case riak_core_ring_util:safe_node_partitions(Ring, NVal, CMin, K) of
+                     {ok, SafeNodePartitions} ->
+                         verify_max_nodeset_size(SafeNodePartitions, K),
+                         verify_safe_node_partitions(Ring, SafeNodePartitions, CMin);
+                     {error, {no_partitioning, Properties}} ->
+                         SafeNodeSets = proplists:get_value(safe_node_sets, Properties),
+                         case CMin of
+                             NVal ->
+                                 ?assert(SafeNodeSets =:= [[]]);
+                             _ ->
+                                 case K of
+                                     0 ->
+                                         ?assert(SafeNodeSets =:= [[]]);
+                                     _ ->
+                                         io:format(user, "CMin: ~w; K: ~w; Properties: ~w~n", [CMin, K, Properties]),
+                                         ?assert(false)
+                                 end
+                         end
+                 end
+             end || CMin <- lists:seq(1, NVal), K <- [undefined] ++ lists:seq(0, NVal)]
+        end
+    ]}.
+
+verify_safe_node_partitions(Ring, SafeNodePartitions, CMin) ->
+    Nodes = riak_core_ring:all_members(Ring),
+    ?assert(is_partitioning(sets:from_list(Nodes), SafeNodePartitions)),
+    verify_random_keys(Ring, [Nodes -- Partition || Partition <- SafeNodePartitions], CMin).
 
 -ifdef(EQC).
 
