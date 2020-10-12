@@ -59,4 +59,4 @@ dialyzer:
 	${REBAR} dialyzer
 
 lint:
-	${REBAR} as lint lint
+	${REBAR} lint

@@ -33,7 +33,7 @@
 start_vnode(Mod, Index, ForwardTo)
     when is_integer(Index) ->
     supervisor:start_child(?MODULE,
-			   [Mod, Index, ForwardTo]).
+                           [Mod, Index, ForwardTo]).
 
 start_link() ->
     %% This simple_one_for_one supervisor can do a controlled shutdown.
@@ -46,9 +46,5 @@ start_link() ->
 init([]) ->
     {ok,
      {{simple_one_for_one, 10, 10},
-      [{undefined,
-	{riak_core_vnode, start_link, []},
-	temporary,
-	300000,
-	worker,
-	dynamic}]}}.
+      [{undefined, {riak_core_vnode, start_link, []},
+        temporary, 300000, worker, dynamic}]}}.
