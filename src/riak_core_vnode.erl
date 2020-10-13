@@ -286,13 +286,16 @@ trigger_handoff(VNode, TargetIdx, TargetNode) ->
 trigger_handoff(VNode, TargetNode) ->
     gen_statem:cast(VNode, {trigger_handoff, TargetNode}).
 
+
 %% #8 cast
 trigger_delete(VNode) ->
     gen_statem:cast(VNode, trigger_delete).
 
+
 %% #9 cast
 core_status(VNode) ->
     gen_statem:call(VNode, core_status).
+
 
 %% #10 %TODO
 %% Sends a command to the FSM that called it after Time
@@ -306,6 +309,7 @@ send_command_after(Time, Request) ->
 		       self(),
 		       {'$gen_cast', #riak_vnode_req_v1{request = Request}}).
 
+
 %% #11 - riak_core_vnode_manager - handle_vnode_event
 cast_finish_handoff(VNode) ->
     gen_statem:cast(VNode, finish_handoff).
@@ -313,6 +317,7 @@ cast_finish_handoff(VNode) ->
 %% #12 - riak_core_vnode_manager - handle_vnode_event
 cancel_handoff(VNode) ->
     gen_statem:cast(VNode, cancel_handoff).
+
 
 %% #13 - riak_core_vnode_master - send_an_event
 send_an_event(VNode, Event) ->
@@ -341,6 +346,7 @@ handoff_data(VNode, MsgData, VNodeTimeout) ->
     gen_statem:call(VNode,
 					 {handoff_data, MsgData},
 					 VNodeTimeout).
+
 
 %% #19 - riak_core_vnode_proxy - handle_cast
 unregistered(VNode) ->
@@ -698,29 +704,24 @@ active(_C,
 		      forward = Forward, mod = Module}) ->
     RequestHash = Module:request_hash(Request),
     case RequestHash of
-	%% will never have enough information to forward request so only handle locally
-	undefined -> vnode_command(Sender, Request, State);
-	_ ->
-	    {ok, R} = riak_core_ring_manager:get_my_ring(),
-	    FutureIndex = riak_core_ring:future_index(RequestHash,
-						      Index,
-						      R),
-	    case FutureIndex of
-		%% request for portion of keyspace currently being transferred
-		HOIdx ->
-		    vnode_handoff_command(Sender,
-					  Request,
-					  {HOIdx, HONode},
-					  State);
-		%% some portions of keyspace already transferred
-		_Other when is_list(Forward) ->
-		    vnode_resize_command(Sender,
-					 Request,
-					 FutureIndex,
-					 State);
-		%% some portions of keyspace not already transferred
-		_Other -> vnode_command(Sender, Request, State)
-	    end
+      %% will never have enough information to forward request so only handle locally
+      undefined -> vnode_command(Sender, Request, State);
+      _ ->
+          {ok, R} = riak_core_ring_manager:get_my_ring(),
+          FutureIndex = riak_core_ring:future_index(RequestHash,
+                                                    Index, R),
+          case FutureIndex of
+            %% request for portion of keyspace currently being transferred
+            HOIdx ->
+                vnode_handoff_command(Sender, Request, {HOIdx, HONode},
+                                      State);
+            %% some portions of keyspace already transferred
+            _Other when is_list(Forward) ->
+                vnode_resize_command(Sender, Request, FutureIndex,
+                                     State);
+            %% some portions of keyspace not already transferred
+            _Other -> vnode_command(Sender, Request, State)
+          end
     end;
 %%
 active(cast,
@@ -761,6 +762,7 @@ active(info, {'EXIT', Pid, Reason},
                                                      WorkerArgs, worker_props),
           continue(State#state{pool_pid = NewPoolPid})
     end;
+
 %%
 active(info, {'DOWN', _Ref, process, _Pid, normal},
        State = #state{modstate = {deleted, _}}) ->
@@ -769,17 +771,21 @@ active(info, {'DOWN', _Ref, process, _Pid, normal},
     %% only dustbin them in the deleted modstate, because pipe vnodes
     %% need them in other states
     continue(State);
+
 %%
 active({info, _F}, Info,
        State = #state{mod = Module, modstate = {deleted, _},
 		      index = Index}) ->
+
     logger:info("~p ~p ignored handle_info ~p - vnode "
                 "unregistering\n",
                 [Index, Module, Info]),
     continue(State);
+
 %%
 active({info, _F}, {'EXIT', Pid, Reason},
        State = #state{mod = Module, modstate = ModState}) ->
+
     %% A linked processes has died so use the
     %% handle_exit callback to allow the vnode
     %% process to take appropriate action.
@@ -825,6 +831,7 @@ active({_C, From}, _MSG, State) ->
      active,
      State,
      [State#state.inactivity_timeout, {reply, From, ok}]}.
+
 
 %% ========================
 %% ========
@@ -1381,7 +1388,7 @@ mod_set_forwarding(Forward,
 %% ===================================================================
 %% Test API
 %% ===================================================================
--ifdef(TEST).
+
 
 -type state() :: #state{}.
 
@@ -1391,8 +1398,9 @@ mod_set_forwarding(Forward,
 get_modstate(Pid) ->
     {_StateName, State} = gen_statem:call(Pid,
 					  current_state),
-    {State#state.mod, State#state.modstate}.
 
+    {State#state.mod, State#state.modstate}.
+-ifdef(TEST).
 %% Start the garbage collection server
 test_link(Mod, Index) ->
     gen_statem:start_link(?MODULE,
