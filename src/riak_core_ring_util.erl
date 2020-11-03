@@ -32,6 +32,7 @@
 
 -export([
     uncovered_preflists/3,
+    uncovered_preflists/4,
     covering_nodesets/3,
     covering_nodesets/4,
     safe_node_partitions/3,
