@@ -63,17 +63,6 @@
 
 -export([test_link/2, current_state/1, get_modstate/1]).
 
--ifdef(PULSE).
-
--compile(export_all).
-
--compile({parse_transform, pulse_instrument}).
-
--compile({pulse_replace_module,
-          [{gen_fsm_compat, pulse_gen_fsm},
-           {gen_server, pulse_gen_server}]}).
-
--endif.
 -endif.
 
 -define(NORMAL_REASON(R),
@@ -220,8 +209,9 @@
 %% action. It is called by handle_info when it receives an {'EXIT', Pid, Reason}
 %% message and the function signature is: handle_exit(Pid, Reason, State).
 %%
-%% It should return a tuple indicating the next state for the fsm. For a list of
-%% valid return types see the documentation for the gen_fsm_compat handle_info callback.
+%% It should return a tuple indicating the next state for the gen_statem. 
+%% For a list of valid return types see the documentation 
+%% for the gen_statem handle_info callback.
 %%
 %% Here is what the spec for handle_exit/3 would look like:
 %% -spec handle_exit(pid(), atom(), term()) ->
