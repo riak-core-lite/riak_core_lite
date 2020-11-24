@@ -22,6 +22,7 @@
 
 -module(riak_core_app).
 
+
 -behaviour(application).
 
 %% Application callbacks
@@ -31,12 +32,31 @@
 %% Application callbacks
 %% ===================================================================
 
+%% @doc Callback to start the riak_core_lite application. This starts all
+%%      neccessary processes and needs to be executed before operating the
+%%      system.
+%% @param StartType ignored.
+%% @param StartArgs ignored.
+%% Returns `{ok, Pid}' if the start was succesful, otherwise `{error, Reason}'.
+-spec start(StartType :: application:start_type(),
+            StartArgs :: term()) -> {ok, pid()} | {error, term()}.
+
 start(_StartType, _StartArgs) ->
     ok = validate_ring_state_directory_exists(),
     start_riak_core_sup().
 
+%% @doc Callback to stop the riak_core_lite application.
+%% @param State ignored.
+%% @returns `ok'.
+-spec stop(State :: term()) -> ok.
+
 stop(_State) ->
     logger:info("Stopped application riak_core", []), ok.
+
+%% @doc Start all application dependencies and try to read the ring directory.
+%% @returns `ok' if the directory exists and can be written to.
+%% @throws {error, invalid_ring_state_dir}
+-spec validate_ring_state_directory_exists() -> ok.
 
 validate_ring_state_directory_exists() ->
     riak_core_util:start_app_deps(riak_core),
@@ -54,6 +74,13 @@ validate_ring_state_directory_exists() ->
           throw({error, invalid_ring_state_dir})
     end.
 
+%% @doc Start the riak_core supervisor and register the ring event handler.
+%% @returns `{ok, Pid}' when the start was successful, `{error, Reason}'
+%%          otherwise.
+%% @see riak_core_sup:init/1.
+-spec start_riak_core_sup() -> {ok, pid()} |
+                               {error, term()}.
+
 start_riak_core_sup() ->
     %% Spin up the supervisor; prune ring files as necessary
     case riak_core_sup:start_link() of
@@ -64,7 +91,13 @@ start_riak_core_sup() ->
       {error, Reason} -> {error, Reason}
     end.
 
+%% @doc Currently NoOp.
+-spec register_applications() -> ok.
+
 register_applications() -> ok.
+
+%% @doc Add a standard handler to ring events.
+-spec add_ring_event_handler() -> ok.
 
 add_ring_event_handler() ->
     ok =

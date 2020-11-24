@@ -90,13 +90,12 @@
                                              {stop, Reason :: term(),
                                               NewState :: term()}.
 
-%% @spec start_link(Module, IpAddr, Port, InitParams) -> Result
-%% Module = atom()
-%% IpAddr = string()
-%% Port = integer()
-%% InitParams = [any()]
-%% Result = {ok, pid()} | {error, any()}
-%% @doc Start server listening on IpAddr:Port
+%% @doc Start server listening on `IpAddr:Port'.
+-spec start_link(Module :: atom(), IpAddr :: string(),
+                 Port :: integer(), INitParams :: [any()]) -> {ok,
+                                                               pid()} |
+                                                              {error, any()}.
+
 start_link(Module, IpAddr, Port, InitParams) ->
     gen_server:start_link(?MODULE,
                           [Module, IpAddr, Port, InitParams], []).

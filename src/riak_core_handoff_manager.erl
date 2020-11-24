@@ -47,6 +47,8 @@
 -record(state,
         {excl, handoffs = []  :: [handoff_status()]}).
 
+-type state() :: #state{}.
+
 %% this can be overridden with riak_core handoff_concurrency
 -define(HANDOFF_CONCURRENCY, 2).
 
@@ -61,17 +63,59 @@
 %%% API
 %%%===================================================================
 
+%% @doc Start the handoff manager server.
+%% @see gen_server:start_link/4.
+-spec start_link() -> {ok, pid()} | ignore |
+                      {error, term()}.
+
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [],
                           []).
 
+%% @doc Callback for {@link gen_server:start_link/4}. The initial state has no
+%%      exclusions or handoffs set.
+-spec init([]) -> {ok, state()}.
+
 init([]) ->
     {ok, #state{excl = sets:new(), handoffs = []}}.
+
+%% @doc Like {@link add_outbound/7} where source and target index are the same.
+%% @param HOType Handoff type to add.
+%% @param Module VNode module handling the handoff.
+%% @param Idx Index to hand off.
+%% @param Node Node owning the new target index.
+%% @param VnodePid Process id of the node handing off the index.
+%% @param Opts List of handoff options.
+%% @returns `{ok, Sender}' if the handoff was added successfully,
+%%          `{error, max_concurrency}' if no more concurrent handoffs can be
+%%          added.
+-spec add_outbound(HOType :: ho_type(),
+                   Module :: module(), Idx :: index(), Node :: node(),
+                   VnodePid :: pid(), Opts :: [term()]) -> {ok, pid()} |
+                                                           {error,
+                                                            max_concurrency}.
 
 add_outbound(HOType, Module, Idx, Node, VnodePid,
              Opts) ->
     add_outbound(HOType, Module, Idx, Idx, Node, VnodePid,
                  Opts).
+
+%% @doc Add an outbound handoff from the source index to the target index.
+%% @param HOType Handoff type to add.
+%% @param Module VNode module handling the handoff.
+%% @param SrcIdx Index to hand off.
+%% @param TaragetIdx Index to handoff to.
+%% @param Node Node owning the new target index.
+%% @param VnodePid Process id of the node handing off the index.
+%% @param Opts List of handoff options.
+%% @returns `{ok, Sender}' if the handoff was added successfully,
+%%          `{error, max_concurrency}' if no more concurrent handoffs can be
+%%          added.
+-spec add_outbound(HOType :: ho_type(),
+                   Module :: module(), SrcIdx :: index(),
+                   TargetIdx :: index(), Node :: node(), VnodePid :: pid(),
+                   Opts :: [{atom(), term()}]) -> {ok, pid()} |
+                                                  {error, max_concurrency}.
 
 add_outbound(HOType, Module, SrcIdx, TargetIdx, Node,
              VnodePid, Opts) ->
@@ -86,6 +130,12 @@ add_outbound(HOType, Module, SrcIdx, TargetIdx, Node,
                           infinity)
     end.
 
+%% @doc Add an inbound handoff. Starts a receiver process.
+%% @return `{ok, Receiver}' if the receiver could be started,
+%%          `{error, max_concurrency}' if no additional handoffs can be handled.
+-spec add_inbound() -> {ok, pid()} |
+                       {error, max_concurrency}.
+
 add_inbound() ->
     case application:get_env(riak_core,
                              disable_inbound_handoff)
@@ -96,8 +146,13 @@ add_inbound() ->
 
 %% @doc Initiate a transfer from `SrcPartition' to `TargetPartition'
 %%      for the given `Module' using the `FilterModFun' filter.
--spec xfer({index(), node()}, mod_partition(),
-           {module(), atom()}) -> ok.
+%% @param PartitionOwner Tuple of the source partition index and owner.
+%% @param ModPartitions Tuple of target module and partition index.
+%% @param FilterModFun Module and function name of a filter function to use.
+%% @returns `ok'.
+-spec xfer(PartitionOwner :: {index(), node()},
+           ModPartitions :: mod_partition(),
+           FilterModFun :: {module(), atom()}) -> ok.
 
 xfer({SrcPartition, SrcOwner},
      {Module, TargetPartition}, FilterModFun) ->
@@ -109,41 +164,81 @@ xfer({SrcPartition, SrcOwner},
                      FilterModFun}).
 
 %% @doc Associate `Data' with the inbound handoff `Recv'.
--spec set_recv_data(pid(), proplists:proplist()) -> ok.
+%% @param Recv Process ID of the handoff receiver.
+%% @param Data Data to associate with the receiver.
+%% @returns `ok'.
+-spec set_recv_data(Recv :: pid(),
+                    Data :: proplists:proplist()) -> ok.
 
 set_recv_data(Recv, Data) ->
     gen_server:call(?MODULE, {set_recv_data, Recv, Data},
                     infinity).
 
+%% @doc Get the list of all handoff status.
+%% @returns All handof_status in the current state.
+-spec status() -> [handoff_status()].
+
 status() -> status(none).
+
+%% @doc Get the list of all handoff status containing the given key-value pair.
+%% @param Filter A key-value pair that is necessary to consider a handoff status
+%%        part of the status. If `none' is given, nothing is filtered out.
+%% @returns The filtered list of handoff status.
+-spec status(Filter :: none |
+                       {term(), term()}) -> [handoff_status()].
 
 status(Filter) ->
     gen_server:call(?MODULE, {status, Filter}, infinity).
 
 %% @doc Send status updates `Stats' to the handoff manager for a
 %%      particular handoff identified by `ModSrcTgt'.
--spec status_update(mod_src_tgt(), ho_stats()) -> ok.
+%% @param ModSrcTgt Module, source and target index identifying the handoff.
+%% @param Stats Handoff stats.
+%% @returns `ok'.
+-spec status_update(ModSrcTgt :: mod_src_tgt(),
+                    Stats :: ho_stats()) -> ok.
 
 status_update(ModSrcTgt, Stats) ->
     gen_server:cast(?MODULE,
                     {status_update, ModSrcTgt, Stats}).
 
+%% @doc Set a new limit of concurrent handoffs. If the limit is less then the
+%%      current number of concurrent handoffs, some are discarded.
+%% @param Limit Maximum number of concurrent handoffs.
+%% @returns `ok'.
+-spec set_concurrency(Limit :: integer()) -> ok.
+
 set_concurrency(Limit) ->
     gen_server:call(?MODULE, {set_concurrency, Limit},
                     infinity).
+
+-spec get_concurrency() -> integer().
 
 get_concurrency() ->
     gen_server:call(?MODULE, get_concurrency, infinity).
 
 %% @doc Kill the transfer of `ModSrcTarget' with `Reason'.
--spec kill_xfer(node(), tuple(), any()) -> ok.
+%% @param SrcNode Node reqeusting to kill the transfer.
+%% @param ModSrcTarget Tupel of module, source and target index that identifies
+%%        the handoff.
+%% @param Reason Term giving a reason for the termination.
+%% @returns `ok'.
+-spec kill_xfer(SrcNode :: node(),
+                ModSrcTarget :: mod_src_tgt(), Reason :: any()) -> ok.
 
 kill_xfer(SrcNode, ModSrcTarget, Reason) ->
     gen_server:cast({?MODULE, SrcNode},
                     {kill_xfer, ModSrcTarget, Reason}).
 
+%% @doc Kill all handoffs.
+%% @returns `ok'.
+-spec kill_handoffs() -> ok.
+
 kill_handoffs() -> set_concurrency(0).
 
+%% @doc Kill all handoffs in the given direction
+%% @param Direction Determines if `inbound' or `outbound' handoffs are killed.
+%% @returns `ok'.
 -spec kill_handoffs_in_direction(inbound |
                                  outbound) -> ok.
 
@@ -151,13 +246,33 @@ kill_handoffs_in_direction(Direction) ->
     gen_server:call(?MODULE, {kill_in_direction, Direction},
                     infinity).
 
+%% @doc Add a handoff exclusion for a given module and source index.
+%% @param Module Module to add the exception for.
+%% @param Index Index to add the exception for.
+%% @returns `ok'.
+-spec add_exclusion(Module :: module(),
+                    Index :: index()) -> ok.
+
 add_exclusion(Module, Index) ->
     gen_server:cast(?MODULE,
                     {add_exclusion, {Module, Index}}).
 
+%% @doc Remove a handoff exclusion for the given module and index.
+%% @param Module MOdule identifying the exclusion.
+%% @param Index INdex identifying the exclusion.
+%% @returns `ok'.
+-spec remove_exclusion(Module :: module(),
+                       Index :: index()) -> ok.
+
 remove_exclusion(Module, Index) ->
     gen_server:cast(?MODULE,
                     {del_exclusion, {Module, Index}}).
+
+%% @doc Get all indices for which an exclusion on a module exists.
+%% @param Module Module to get exclusions for.
+%% @returns List of indices.
+-spec get_exclusions(Module :: module()) -> {ok,
+                                             [index()]}.
 
 get_exclusions(Module) ->
     gen_server:call(?MODULE, {get_exclusions, Module},
@@ -166,6 +281,20 @@ get_exclusions(Module) ->
 %%%===================================================================
 %%% Callbacks
 %%%===================================================================
+
+%% @doc Callback for {@link gen_server:call/3}.
+-spec handle_call(Msg :: {get_exclusions, module()} |
+                         {add_outbound, ho_type(), module(), index(), index(),
+                          node(), pid(), [{atom(), term()}]} |
+                         {add_inbound} |
+                         {set_recv_data, pid(), proplists:proplist()} |
+                         {xfer_status, handoff_status()} |
+                         {status, none | {term(), term()}} |
+                         {set_concurrency, integer()} | get_concurrency |
+                         {kill_in_direction, inound | outbound},
+                  From :: {pid(), term()}, State :: state()) -> {reply,
+                                                                 term(),
+                                                                 state()}.
 
 handle_call({get_exclusions, Module}, _From,
             State = #state{excl = Excl}) ->
@@ -262,6 +391,10 @@ handle_call({kill_in_direction, Direction}, _From,
          || #handoff_status{transport_pid = Pid} <- Kill],
     {reply, ok, State}.
 
+%% @doc Callback for {@link gen_server:cast/2}.
+-spec handle_cast(Msg :: term(), state()) -> {noreply,
+                                              state()}.
+
 handle_cast({del_exclusion, {Mod, Idx}},
             State = #state{excl = Excl}) ->
     Excl2 = sets:del_element({Mod, Idx}, Excl),
@@ -310,6 +443,13 @@ handle_cast({kill_xfer, ModSrcTarget, Reason}, State) ->
     HS = State#state.handoffs,
     HS2 = kill_xfer_i(ModSrcTarget, Reason, HS),
     {noreply, State#state{handoffs = HS2}}.
+
+%% @doc Callback for {@link gen_server} handling incoming messages that are not
+%%      a call or cast.
+%% @returns `{noreply, State}'.
+-spec handle_info({'DOWN', reference(), process, pid(),
+                   term()},
+                  state()) -> {noreply, state()}.
 
 handle_info({'DOWN', Ref, process, _Pid, Reason},
             State = #state{handoffs = HS}) ->
@@ -384,13 +524,28 @@ handle_info({'DOWN', Ref, process, _Pid, Reason},
           end
     end.
 
+%% @doc Callback for {@link gen_server:stop/1}. Not implemented.
+-spec terminate(Reason :: term(),
+                State :: state()) -> ok.
+
 terminate(_Reason, _State) -> ok.
+
+%% @doc Callback for {@link gen_server}. Not implemented.
+-spec code_change(OldVsn :: term(), State :: state(),
+                  Extra :: term()) -> {ok, state()}.
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%%===================================================================
 %%% Private
 %%%===================================================================
+
+%% @private
+%% @doc Build a status list from a `handoff_status' record.
+%% @param HO Handoff status record.
+%% @returns `{status_v2, StatusEntries}'.
+-spec build_status(HO ::
+                       handoff_status()) -> {status_v2, [{atom(), term()}]}.
 
 build_status(HO) ->
     #handoff_status{mod_src_tgt = {Mod, SrcP, TargetP},
@@ -405,6 +560,14 @@ build_status(HO) ->
       {status, Status}, {start_ts, StartTS},
       {sender_pid, TPid}, {stats, calc_stats(HO)},
       {type, Type}]}.
+
+%% @private
+%% @doc Retrieve statistics from a handoff status.
+%% @param HO Handoff status.
+%% @returns List of statistics or `no_stats'.
+-spec calc_stats(HO :: handoff_status()) -> [{atom(),
+                                              term()}] |
+                                            no_stats.
 
 calc_stats(#handoff_status{stats = Stats,
                            timestamp = StartTS, size = Size}) ->
@@ -424,12 +587,33 @@ calc_stats(#handoff_status{stats = Stats,
            {size, CalcSize}, {pct_done_decimal, Done}]
     end.
 
+%% @private
+%% @doc Get actual size from a size entry.
+-spec get_size(Size :: {function(), dynamic} |
+                       {non_neg_integer(), bytes | objects}) -> {integer(),
+                                                                 bytes |
+                                                                 objects} |
+                                                                undefined.
+
 get_size({F, dynamic}) -> F();
 get_size(S) -> S.
 
-calc_pct_done(_, _, undefined) -> undefined;
+%% @private
+%% @doc Calculate percentage of completed handoffs?
+-spec calc_pct_done(Objs :: integer(),
+                    Bytes :: integer(),
+                    Size :: undefined |
+                            {integer(), objects | bytes}) -> float() |
+                                                             undefined.
+
 calc_pct_done(Objs, _, {Size, objects}) -> Objs / Size;
-calc_pct_done(_, Bytes, {Size, bytes}) -> Bytes / Size.
+calc_pct_done(_, Bytes, {Size, bytes}) -> Bytes / Size;
+calc_pct_done(_, _, undefined) -> undefined.
+
+%% @private
+%% @doc Create a filter function from a key value pair.
+-spec filter(Filter :: none | {}) -> fun(({status_v2,
+                                           handoff_status()}) -> boolean()).
 
 filter(none) -> fun (_) -> true end;
 filter({Key, Value} = _Filter) ->
@@ -440,12 +624,36 @@ filter({Key, Value} = _Filter) ->
             end
     end.
 
+%% @private
+%% @doc Generate a resize tranfer filter function.
+%% @param Ring Ring affected by the transfer.
+%% @param Module Module involved in the handoff.
+%% @param Src Source index.
+%% @param Target Target index.
+%% @returns Filter function.
+-spec resize_transfer_filter(Ring ::
+                                 riak_core_ring:riak_core_ring(),
+                             Module :: module(), Src :: index(),
+                             Target :: index()) -> fun((term()) -> boolean()).
+
 resize_transfer_filter(Ring, Module, Src, Target) ->
     fun (K) ->
             {_, Hashed} = Module:object_info(K),
             riak_core_ring:is_future_index(Hashed, Src, Target,
                                            Ring)
     end.
+
+%% @private
+%% @doc Create a filter function that filters for unsent indices.
+%% @param Ring Ring the transfer takes place on.
+%% @param Module Module involved in the handoff.
+%% @param Src Source index of the handoffs.
+%% @returns Function filtering for unsent indices.
+-spec resize_transfer_notsent_fun(Ring ::
+                                      riak_core_ring:riak_core_ring(),
+                                  Module :: module(),
+                                  Src :: index()) -> fun((term(),
+                                                          [index()]) -> boolean()).
 
 resize_transfer_notsent_fun(Ring, Module, Src) ->
     Shrinking = riak_core_ring:num_partitions(Ring) >
@@ -462,6 +670,14 @@ resize_transfer_notsent_fun(Ring, Module, Src) ->
                               Module, Src, Key, Acc)
     end.
 
+-spec record_seen_index(Ring ::
+                            riak_core_ring:riak_core_ring(),
+                        Shrinking :: boolean(),
+                        NValMap :: [{term(), integer()}], DefaultN :: integer(),
+                        Module :: module(), Src :: index(), Key :: term(),
+                        Seen ::
+                            ordsets:ordset(index())) -> ordsets:ordset(index()).
+
 record_seen_index(Ring, Shrinking, NValMap, DefaultN,
                   Module, Src, Key, Seen) ->
     {Bucket, Hashed} = Module:object_info(Key),
@@ -476,11 +692,19 @@ record_seen_index(Ring, Shrinking, NValMap, DefaultN,
       FutureIndex -> ordsets:add_element(FutureIndex, Seen)
     end.
 
+%% @private
+%% @doc Retrieve the maximum number of concurrent handoffs.
+-spec get_concurrency_limit() -> integer().
+
 get_concurrency_limit() ->
     application:get_env(riak_core, handoff_concurrency,
                         ?HANDOFF_CONCURRENCY).
 
-%% true if handoff_concurrency (inbound + outbound) hasn't yet been reached
+%% @doc Check if the concurrency limit is reached.
+%% @returns `true' if handoff_concurrency (inbound + outbound) hasn't yet been
+%%          reached.
+-spec handoff_concurrency_limit_reached() -> boolean().
+
 handoff_concurrency_limit_reached() ->
     Receivers =
         supervisor:count_children(riak_core_handoff_receiver_sup),
@@ -492,24 +716,50 @@ handoff_concurrency_limit_reached() ->
     get_concurrency_limit() =<
       ActiveReceivers + ActiveSenders.
 
+%% @private
+%% @doc Like {@link send_handoff/8} without filters or an origin node.
+-spec send_handoff(HOType :: ho_type(),
+                   ModSourceTarget :: {module(), index(), index()},
+                   Node :: node(), Pid :: pid(), HS :: list(),
+                   Opts :: [{atom(), term()}]) -> {ok, handoff_status()} |
+                                                  {error, max_concurrency} |
+                                                  {false, handoff_status()}.
+
 send_handoff(HOType, ModSrcTarget, Node, Pid, HS,
              Opts) ->
     send_handoff(HOType, ModSrcTarget, Node, Pid, HS,
                  {none, none}, none, Opts).
 
 %% @private
-%%
 %% @doc Start a handoff process for the given `Mod' from
 %%      `Src'/`VNode' to `Target'/`Node' using the given `Filter'
 %%      function which is a predicate applied to the key.  The
 %%      `Origin' is the node this request originated from so a reply
 %%      can't be sent on completion.
--spec send_handoff(ho_type(),
-                   {module(), index(), index()}, node(), pid(), list(),
-                   {predicate() | none, {module(), atom()} | none}, node(),
-                   [{atom(), term()}]) -> {ok, handoff_status()} |
-                                          {error, max_concurrency} |
-                                          {false, handoff_status()}.
+%% @param HOType Type of the handoff.
+%% @param MST Triple of the module, source index and target index the handoff
+%%        affects.
+%% @param Node Target node of the handoff.
+%% @param Vnode Process id of the source node.
+%% @param HS List of handoff status.
+%% @param FilterTuple Tuple of filter predicate and filter function in a module.
+%% @param Origin Node requesting the hadoff.
+%% @param Opts List of options for the handoff.
+%% @returns `{ok, NewHandoff}' if the handoff is should happen,
+%%          `{false, CurrentHandoff}' if the handoff should not happen,
+%%          `{error, max_concurrency}' if the concurrency limit is reached.
+-spec send_handoff(HOType :: ho_type(),
+                   MST :: {Mod :: module(), Src :: index(),
+                           Target :: index()},
+                   Node :: node(), Vnode :: pid(), HS :: list(),
+                   FilterTuple :: {Filter :: predicate() | none,
+                                   FilterModFun :: {module(), atom()} | none},
+                   Origin :: node(), Opts :: [{atom(), term()}]) -> {ok,
+                                                                     handoff_status()} |
+                                                                    {error,
+                                                                     max_concurrency} |
+                                                                    {false,
+                                                                     handoff_status()}.
 
 send_handoff(HOType, {Mod, Src, Target}, Node, Vnode,
              HS, {Filter, FilterModFun}, Origin, Opts) ->
@@ -579,7 +829,12 @@ send_handoff(HOType, {Mod, Src, Target}, Node, Vnode,
           end
     end.
 
-%% spawn a receiver process
+%% @doc Spawn a receiver process.
+%% @returns `{ok, Status}' if the handoff receiver could be started,
+%%          `{error, max_concurrency}' if the concurrency limit is reached.
+-spec receive_handoff() -> {ok, handoff_status()} |
+                           {error, max_concurrency}.
+
 receive_handoff() ->
     case handoff_concurrency_limit_reached() of
       true -> {error, max_concurrency};
@@ -597,6 +852,15 @@ receive_handoff() ->
                            status = [], stats = dict:new(), req_origin = none}}
     end.
 
+%% @private
+%% @doc Update a stats dictionary with a new stats record.
+%% @param StatsUpdate handoff stats record containing new information.
+%% @param Stats Stats dictionary to update.
+%% @returns Updated stats dictionary.
+-spec update_stats(StatsUpdate :: ho_stats(),
+                   Stats :: dict:dict(term(), term())) -> dict:dict(term(),
+                                                                    term()).
+
 update_stats(StatsUpdate, Stats) ->
     #ho_stats{last_update = LU, objs = Objs,
               bytes = Bytes} =
@@ -604,6 +868,16 @@ update_stats(StatsUpdate, Stats) ->
     Stats2 = dict:update_counter(objs, Objs, Stats),
     Stats3 = dict:update_counter(bytes, Bytes, Stats2),
     dict:store(last_update, LU, Stats3).
+
+%% @private
+%% @doc Check if a size object is valid, i.e. for objects and bytes the integer
+%%      is positive and for dynamic size the function is a function.
+%% @returns Validated size or `undefined'.
+-spec validate_size(Size :: {function(), dynamic} |
+                            {integer(), bytes | objects}) -> function() |
+                                                             {integer(),
+                                                              bytes | objects} |
+                                                             undefined.
 
 validate_size(Size = {N, U})
     when is_number(N) andalso
@@ -615,10 +889,17 @@ validate_size(Size = {F, dynamic})
 validate_size(_) -> undefined.
 
 %% @private
-%%
 %% @doc Kill and remove _each_ xfer associated with `ModSrcTarget'
 %%      with `Reason'.  There might be more than one because repair
 %%      can have two simultaneous inbound xfers.
+%% @param ModSrcTarget Triple of module, source and target index to identify the
+%%        handoff.
+%% @param Reason Reason to kill the transfer.
+%% @param HS Handoff status to remove the transfer from.
+%% @returns Handoff status with the transfer removed.
+-spec kill_xfer_i(ModSrcTarget :: mod_src_tgt(),
+                  Reason :: term(), HS :: [tuple()]) -> [tuple()].
+
 kill_xfer_i(ModSrcTarget, Reason, HS) ->
     case lists:keytake(ModSrcTarget,
                        #handoff_status.mod_src_tgt, HS)
@@ -643,6 +924,17 @@ kill_xfer_i(ModSrcTarget, Reason, HS) ->
           kill_xfer_i(ModSrcTarget, Reason, HS2)
     end.
 
+%% @private
+%% @doc Change the application setting to enable or disable handoffs in the
+%%      given direction.
+%% @param EnOrDis Enable or disable handoffs.
+%% @param Direction Direction of the handoffs to enable or disable.
+%% @returns `ok'.
+-spec handoff_change_enabled_setting(EnOrDis :: enable |
+                                                disable,
+                                     Direction :: inbound | outbound |
+                                                  both) -> ok.
+
 handoff_change_enabled_setting(EnOrDis, Direction) ->
     SetFun = case EnOrDis of
                enable -> fun handoff_enable/1;
@@ -654,12 +946,25 @@ handoff_change_enabled_setting(EnOrDis, Direction) ->
       both -> SetFun(inbound), SetFun(outbound)
     end.
 
+%% @private
+%% @doc Enable handoffs in the given direction.
+%% @param Direction Enable inbound or outbound handoffs.
+-spec handoff_enable(Direction :: inbound |
+                                  outbound) -> ok.
+
 handoff_enable(inbound) ->
     application:set_env(riak_core, disable_inbound_handoff,
                         false);
 handoff_enable(outbound) ->
     application:set_env(riak_core, disable_outbound_handoff,
                         false).
+
+%% @private
+%% @doc Disable handoffs in the given direction.
+%% @param Direction Disable inbound or outbound handoffs.
+%% @returns `ok'.
+-spec handoff_disable(Direction :: inbound |
+                                   outbound) -> ok.
 
 handoff_disable(inbound) ->
     application:set_env(riak_core, disable_inbound_handoff,
