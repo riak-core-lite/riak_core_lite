@@ -38,3 +38,7 @@ jobs:
       run: make dialyzer
     - name: Documentation
       run: make docs
+    - name: Send Coverage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./rebar3 as test coveralls send
