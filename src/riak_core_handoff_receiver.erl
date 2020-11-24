@@ -41,18 +41,39 @@
          vnode  :: pid() | undefined,
          count = 0  :: non_neg_integer()}).
 
+-type state() :: #state{}.
+
 %% set the TCP receive timeout to five minutes to be conservative.
 -define(RECV_TIMEOUT, 300000).
 
 %% set the timeout for the vnode to process the handoff_data msg to 60s
 -define(VNODE_TIMEOUT, 60000).
 
+%% @doc Starts the receiver server.
+%% @see gen_server:start_link/3.
+-spec start_link() -> {ok, pid()} | ignore |
+                      {error, {already_started, pid()} | term()}.
+
 start_link() -> gen_server:start_link(?MODULE, [], []).
+
+%% @doc Set the socket to listen to.
+%% @param Pid Process ID of the receiver.
+%% @param Socket Socket to listen to.
+%% @returns `ok'.
+-spec set_socket(Pid :: pid(),
+                 Socket :: inet:socket()) -> ok.
 
 set_socket(Pid, Socket) ->
     gen_server:call(Pid, {set_socket, Socket}).
 
+%% @doc CHeck if the receiver supports batching. Currently every receiver
+%%      supports batching.
+-spec supports_batching() -> true.
+
 supports_batching() -> true.
+
+%% @doc Callback for {@link gen_server:start_link/3}. Sets the default timeouts.
+-spec init([]) -> {ok, state()}.
 
 init([]) ->
     {ok,
@@ -64,12 +85,22 @@ init([]) ->
                                     handoff_receive_vnode_timeout,
                                     ?VNODE_TIMEOUT)}}.
 
+%% @doc Callback for {@link gen_server:call/3}.
+-spec handle_call(Msg :: {set_socket, inet:socket()},
+                  From :: {pid(), term()}, State :: state()) -> {reply,
+                                                                 ok, state()}.
+
 handle_call({set_socket, Socket0}, _From, State) ->
     SockOpts = [{active, once}, {packet, 4}, {header, 1}],
     ok = inet:setopts(Socket0, SockOpts),
     Peer = safe_peername(Socket0, inet),
     Socket = Socket0,
     {reply, ok, State#state{sock = Socket, peer = Peer}}.
+
+%% @doc Callback for {@link gen_server}. Handles tcp messages.
+-spec handle_info(Msg :: term(),
+                  State :: state()) -> {stop, normal, state()} |
+                                       {noreply, state(), non_neg_integer()}.
 
 handle_info({tcp_closed, _Socket},
             State = #state{partition = Partition, count = Count,
@@ -107,6 +138,16 @@ handle_info(timeout, State) ->
                  [State#state.partition, State#state.count,
                   State#state.peer]),
     {stop, normal, State}.
+
+%% @private
+%% @doc Process incoming tcp messages. If the message leads to an error,
+%%      {@link erlang:exit/1} is called.
+%% @param MsgType Code for the type of message.
+%% @param MsgData Binary encoding of data.
+%% @param State Current state.
+%% @returns The updated state after the message has been processed.
+-spec process_message(MsgType :: integer(),
+                      MsgData :: binary(), State :: state()) -> state().
 
 process_message(?PT_MSG_INIT, MsgData,
                 State = #state{vnode_mod = VNodeMod, peer = Peer}) ->
@@ -173,11 +214,32 @@ process_message(_, _MsgData,
                  <<(?PT_MSG_UNKNOWN):8, "unknown_msg">>),
     State.
 
+%% @doc Callback for {@link gen_server:cast/2}. Not implemented.
+-spec handle_cast(Msg :: term(),
+                  State :: state()) -> {noreply, state()}.
+
 handle_cast(_Msg, State) -> {noreply, State}.
+
+%% @doc Callback for {@link gen_server:stop/1}. Not implemented.
+-spec terminate(Reason :: term(),
+                State :: state()) -> ok.
 
 terminate(_Reason, _State) -> ok.
 
+%% @doc Callback for {@link gen_server}. Not implemented.
+-spec code_change(OldVsn :: term() | {down, term()},
+                  State :: state(), Extra :: term()) -> {ok, state()}.
+
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
+
+%% @private
+%% @doc Transforms a socket to a safe peername via a module's callback function.
+%% @param Skt Socket to create the peername for.
+%% @param Module Module creating the peername.
+%% @returns Tuple containing the IP address as a string and port as an integer.
+-spec safe_peername(Skt :: inet:socket(),
+                    Module :: module()) -> {string(), integer()} |
+                                           {unknown, unknown}.
 
 safe_peername(Skt, Module) ->
     case Module:peername(Skt) of

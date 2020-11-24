@@ -29,11 +29,29 @@
         {I, {I, start_link, []}, permanent, brutal_kill, Type,
          [I]}).
 
-%% begins the supervisor, init/1 will be called
+%% @doc Begin the supervisor, init/1 will be called
+%% @see supervisor:start_link/3.
+-spec start_link() -> {ok, pid()} |
+                      {error,
+                       {already_started, pid()} | {shutdown | reason} |
+                       term()} |
+                      ignore.
+
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @private
+%% @doc Callback for {@link supervisor:start_link/3}. Starts the
+%%      {@link riak_core_handoff_listener} as its supervised child.
+%% @see riak_core_handoff_listener:start_link/0.
+%% @returns Parameters to start the supervised child.
+-spec init([]) -> {ok,
+                   {{one_for_one, 10, 10},
+                    [{riak_core_handoff_listener,
+                      {riak_core_handoff_listener, start_link, []}, permanent,
+                      brutal_kill, worker,
+                      [riak_core_handoff_listener]}, ...]}}.
+
 init([]) ->
     {ok,
      {{one_for_one, 10, 10},

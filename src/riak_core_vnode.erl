@@ -333,10 +333,15 @@ send_all_proxy_req(VNode, Req) ->
     gen_statem:call(VNode, Req).
 
 %% #16 - riak:core_handoff_sender - start_fold_
+-spec handoff_complete(VNode :: pid()) -> ok.
+
 handoff_complete(VNode) ->
     gen_statem:cast(VNode, handoff_complete).
 
 %% #17 - riak:core_handoff_sender - start_fold_
+-spec resize_transfer_complete(VNode :: pid(),
+                               NotSentAcc :: term()) -> ok.
+
 resize_transfer_complete(VNode, NotSentAcc) ->
     gen_statem:cast(VNode,
 		    {resize_transfer_complete, NotSentAcc}).
