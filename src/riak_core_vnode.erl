@@ -1395,6 +1395,8 @@ mod_set_forwarding(Forward,
 %% ===================================================================
 
 
+-ifdef(TEST).
+
 -type state() :: #state{}.
 
 %% @doc Reveal the underlying module state for testing
@@ -1405,7 +1407,6 @@ get_modstate(Pid) ->
 					  current_state),
 
     {State#state.mod, State#state.modstate}.
--ifdef(TEST).
 %% Start the garbage collection server
 test_link(Mod, Index) ->
     gen_statem:start_link(?MODULE,
