@@ -129,6 +129,29 @@
                                                  {stop, Reason :: term(),
                                                   NewModState :: term()}.
 
+%% handle_exit/3 is an optional behaviour callback that can be implemented.
+%% It will be called in the case that a process that is linked to the vnode
+%% process dies and allows the module using the behaviour to take appropriate
+%% action. It is called by handle_info when it receives an {'EXIT', Pid, Reason}
+%% message and the function signature is: handle_exit(Pid, Reason, State).
+%%
+%% It should return a tuple indicating the next state for the fsm. For a list of
+%% valid return types see the documentation for the gen_fsm_compat handle_info callback.
+%%
+%% Here is what the spec for handle_exit/3 would look like:
+%% -spec handle_exit(pid(), atom(), term()) ->
+%%                          {noreply, term()} |
+%%                          {stop, term(), term()}
+
+%% handle_info/2 is an optional behaviour callback too.
+%% It will be called in the case when a vnode receives any other message
+%% than an EXIT message.
+%% The function signature is: handle_info(Info, State).
+%% It should return a tuple of the form {ok, NextState}
+%%
+%% Here is what the spec for handle_info/2 would look like:
+%% -spec handle_info(term(), term()) -> {ok, term()}
+
 -callback handle_exit(pid(), Reason :: term(),
                       ModState :: term()) -> {noreply,
                                               NewModState :: term()} |
@@ -214,28 +237,7 @@
 -callback handle_overload_info(Request :: term(),
                                Idx :: partition()) -> ok.
 
-%% handle_exit/3 is an optional behaviour callback that can be implemented.
-%% It will be called in the case that a process that is linked to the vnode
-%% process dies and allows the module using the behaviour to take appropriate
-%% action. It is called by handle_info when it receives an {'EXIT', Pid, Reason}
-%% message and the function signature is: handle_exit(Pid, Reason, State).
-%%
-%% It should return a tuple indicating the next state for the fsm. For a list of
-%% valid return types see the documentation for the gen_fsm_compat handle_info callback.
-%%
-%% Here is what the spec for handle_exit/3 would look like:
-%% -spec handle_exit(pid(), atom(), term()) ->
-%%                          {noreply, term()} |
-%%                          {stop, term(), term()}
 
-%% handle_info/2 is an optional behaviour callback too.
-%% It will be called in the case when a vnode receives any other message
-%% than an EXIT message.
-%% The function signature is: handle_info(Info, State).
-%% It should return a tuple of the form {ok, NextState}
-%%
-%% Here is what the spec for handle_info/2 would look like:
-%% -spec handle_info(term(), term()) -> {ok, term()}
 
 -define(DEFAULT_TIMEOUT, 60000).
 
@@ -1388,7 +1390,7 @@ mod_set_forwarding(Forward,
 %% ===================================================================
 %% Test API
 %% ===================================================================
-
+-ifdef(TEST).
 
 -type state() :: #state{}.
 
@@ -1400,7 +1402,7 @@ get_modstate(Pid) ->
 					  current_state),
 
     {State#state.mod, State#state.modstate}.
--ifdef(TEST).
+
 %% Start the garbage collection server
 test_link(Mod, Index) ->
     gen_statem:start_link(?MODULE,

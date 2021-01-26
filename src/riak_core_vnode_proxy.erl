@@ -272,17 +272,34 @@ handle_overload(Msg,
     %% STATS
     %riak_core_stat:update(dropped_vnode_requests),
     case Msg of
-      {'$gen_event',
+      %for gen_fsm
+    %   {'$gen_event', %send_event
+    %    #riak_vnode_req_v1{sender = Sender,
+    %                       request = Request}} ->
+    %       catch Module:handle_overload_command(Request, Sender,
+    %                                            Index);
+    %   {'$gen_all_state_event', %send_all_state_event
+    %    #riak_vnode_req_v1{sender = Sender,
+    %                       request = Request}} ->
+    %       catch Module:handle_overload_command(Request, Sender,
+    %                                            Index);
+    %   {'$gen_event', %send_event
+    %    #riak_coverage_req_v1{sender = Sender,
+    %                          request = Request}} ->
+    %       catch Module:handle_overload_command(Request, Sender,
+    %                                            Index);
+      %for gen_statem
+      {'$gen_cast',
+      #riak_vnode_req_v1{sender = Sender,
+                         request = Request}} ->
+          catch Module:handle_overload_command(Request, Sender,
+                                               Index);
+      {'$gen_call',
        #riak_vnode_req_v1{sender = Sender,
                           request = Request}} ->
           catch Module:handle_overload_command(Request, Sender,
                                                Index);
-      {'$gen_all_state_event',
-       #riak_vnode_req_v1{sender = Sender,
-                          request = Request}} ->
-          catch Module:handle_overload_command(Request, Sender,
-                                               Index);
-      {'$gen_event',
+      {'$gen_cast',
        #riak_coverage_req_v1{sender = Sender,
                              request = Request}} ->
           catch Module:handle_overload_command(Request, Sender,
@@ -348,6 +365,20 @@ fake_loop_slow() ->
     end.
 
 fake_loop_block() -> receive unblock -> fake_loop() end.
+
+% handle_overload_test() ->
+%     VnodePid = spawn(fun fake_loop/0),
+%     meck:new(riak_core_vnode_manager, [passthrough]),
+%               meck:expect(riak_core_vnode_manager, get_vnode_pid,
+%                           fun (_Index, fakemod) -> {ok, VnodePid};
+%                               (Index, Mod) -> meck:passthrough([Index, Mod])
+%                           end),
+%               meck:new(fakemod, [non_strict]),
+%               meck:expect(fakemod, handle_overload_info,
+%                           fun (hello, _Idx) -> ok end),
+%     {ok, ProxyPid} =
+%                   riak_core_vnode_proxy:start_link(fakemod, 0),
+%     ProxyPid!{}.
 
 overload_test_() ->
     {timeout, 900,
