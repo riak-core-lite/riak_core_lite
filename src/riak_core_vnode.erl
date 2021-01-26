@@ -63,17 +63,6 @@
 
 -export([test_link/2, current_state/1, get_modstate/1]).
 
--ifdef(PULSE).
-
--compile(export_all).
-
--compile({parse_transform, pulse_instrument}).
-
--compile({pulse_replace_module,
-          [{gen_fsm_compat, pulse_gen_fsm},
-           {gen_server, pulse_gen_server}]}).
-
--endif.
 -endif.
 
 -define(NORMAL_REASON(R),
@@ -239,6 +228,7 @@
 
 
 
+
 -define(DEFAULT_TIMEOUT, 60000).
 
 -define(LOCK_RETRY_TIMEOUT, 10000).
@@ -335,10 +325,15 @@ send_all_proxy_req(VNode, Req) ->
     gen_statem:call(VNode, Req).
 
 %% #16 - riak:core_handoff_sender - start_fold_
+-spec handoff_complete(VNode :: pid()) -> ok.
+
 handoff_complete(VNode) ->
     gen_statem:cast(VNode, handoff_complete).
 
 %% #17 - riak:core_handoff_sender - start_fold_
+-spec resize_transfer_complete(VNode :: pid(),
+                               NotSentAcc :: term()) -> ok.
+
 resize_transfer_complete(VNode, NotSentAcc) ->
     gen_statem:cast(VNode,
 		    {resize_transfer_complete, NotSentAcc}).
@@ -1390,6 +1385,8 @@ mod_set_forwarding(Forward,
 %% ===================================================================
 %% Test API
 %% ===================================================================
+-ifdef(TEST).
+
 -ifdef(TEST).
 
 -type state() :: #state{}.

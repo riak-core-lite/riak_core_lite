@@ -1,4 +1,3 @@
-PULSE_TESTS = worker_pool_pulse
 COVERPATH = ./_build/test/cover
 REBAR ?= ./rebar3
 
@@ -14,7 +13,6 @@ clean: clean-test
 
 distclean: clean
 
-
 clean-test:
 	rm -rf t1000
 	rm -rf t2000
@@ -26,12 +24,6 @@ clean-test:
 	rm -rf log.nonode@nohost
 	rm -rf data.nonode@nohost
 	rm -rf data
-
-# You should 'clean' before your first run of this target
-# so that deps get built with PULSE where needed.
-pulse:
-	${REBAR} compile -D PULSE
-	${REBAR} eunit -D PULSE skip_deps=true suite=$(PULSE_TESTS)
 
 proper:
 	${REBAR} as proper do eunit

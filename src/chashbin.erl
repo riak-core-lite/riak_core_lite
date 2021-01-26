@@ -23,6 +23,7 @@
 %% -------------------------------------------------------------------
 -module(chashbin).
 
+
 -export([create/1, to_chash/1, to_list/1,
          to_list_filter/2, responsible_index/2,
          responsible_position/2, index_owner/2,
@@ -164,6 +165,16 @@ iterator(HashKey, CHBin) ->
     Pos = responsible_position(HashKey, CHBin),
     #iterator{pos = Pos, start = Pos, chbin = CHBin}.
 
+%% @doc Return iterator pointing to the given index
+-spec exact_iterator(Index :: index() | <<_:160>>,
+                     CHBin :: chashbin()) -> iterator().
+
+exact_iterator(<<Idx:160/integer>>, CHBin) ->
+    exact_iterator(Idx, CHBin);
+exact_iterator(Idx, CHBin) ->
+    Pos = index_position(Idx, CHBin),
+    #iterator{pos = Pos, start = Pos, chbin = CHBin}.
+
 %% @doc Return the `{Index, Owner}' pair pointed to by the iterator
 -spec itr_value(iterator()) -> {index(), node()}.
 
@@ -231,7 +242,8 @@ itr_next_while(Pred, Itr) ->
 %% Internal functions
 %% ===================================================================
 
-%% Convert list of {Index, Owner} pairs into `chashbin' binary representation
+%% @private
+%% @doc Convert list of {Index, Owner} pairs into `chashbin' binary representation
 -spec create_bin([{index(), node()}],
                  [{node(), pos_integer()}], binary()) -> owners_bin().
 
@@ -241,15 +253,12 @@ create_bin([{Idx, Owner} | Owners], Nodes, Bin) ->
     Bin2 = <<Bin/binary, Idx:160/integer, Id:16/integer>>,
     create_bin(Owners, Nodes, Bin2).
 
-%% Convert ring index into ring position
+%% @private
+%% @doc Convert ring index into ring position
+-spec index_position(Index :: index() | <<_:160>>,
+                     CHBin :: chashbin()) -> integer().
+
 index_position(<<Idx:160/integer>>, CHBin) ->
     index_position(Idx, CHBin);
 index_position(Idx, #chashbin{size = Size}) ->
     Inc = chash:ring_increment(Size), Idx div Inc rem Size.
-
-%% Return iterator pointing to the given index
-exact_iterator(<<Idx:160/integer>>, CHBin) ->
-    exact_iterator(Idx, CHBin);
-exact_iterator(Idx, CHBin) ->
-    Pos = index_position(Idx, CHBin),
-    #iterator{pos = Pos, start = Pos, chbin = CHBin}.

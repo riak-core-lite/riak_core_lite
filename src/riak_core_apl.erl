@@ -24,6 +24,7 @@
 %% -------------------------------------------------------------------
 -module(riak_core_apl).
 
+
 -export([active_owners/1, active_owners/2, get_apl/3,
          get_apl/4, get_apl_ann/2, get_apl_ann/3, get_apl_ann/4,
          get_apl_ann_with_pnum/1, get_primary_apl/3,
@@ -76,7 +77,11 @@ active_owners(Service) ->
     active_owners(Ring,
                   riak_core_node_watcher:nodes(Service)).
 
--spec active_owners(ring(), [node()]) -> preflist_ann().
+%% @doc Like {@link active_owners/1} with a specified ring and list of up nodes.
+%% @param Ring Ring to determine the owners.
+%% @param UpNodes List of node that are considered up.
+-spec active_owners(Ring :: ring(),
+                    UpNodes :: [node()]) -> preflist_ann().
 
 active_owners(Ring, UpNodes) ->
     UpNodes1 = UpNodes,
@@ -114,6 +119,9 @@ get_apl(DocIdx, N, Ring, UpNodes) ->
 
 %% @doc Get the active preflist taking account of which nodes are up for a given
 %%      chash/upnodes list and annotate each node with type of primary/fallback.
+-spec get_apl_ann(DocIdx :: docidx(), N :: n_val(),
+                  UpNodes :: [node()]) -> preflist_ann().
+
 get_apl_ann(DocIdx, N, UpNodes) ->
     {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
     get_apl_ann_chbin(DocIdx, N, CHBin, UpNodes).
@@ -200,6 +208,9 @@ get_primary_apl(DocIdx, N, Ring, UpNodes) ->
 
 %% @doc Return the first entry that is up in the preflist for `DocIdx'. This
 %%      will crash if all owning nodes are offline.
+-spec first_up(DocIdx :: docidx(),
+               Service :: atom()) -> {index(), node()}.
+
 first_up(DocIdx, Service) ->
     {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
     Itr = chashbin:iterator(DocIdx, CHBin),
@@ -211,9 +222,19 @@ first_up(DocIdx, Service) ->
                                    Itr),
     chashbin:itr_value(Itr2).
 
+%% @doc Return a list of owners that are not up.
+%% @param Service on which nodes are running or list of up nodes.
+%% @return List of all indices with owners that are currently not up.
+-spec offline_owners(Service :: atom() |
+                                [node()]) -> [{index(), node()}].
+
 offline_owners(Service) ->
     {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
     offline_owners(Service, CHBin).
+
+%% @doc Returns list of all owners that are curently not up.
+-spec offline_owners(atom() | [node()],
+                     CHBin :: chashbin()) -> [{index(), node()}].
 
 offline_owners(Service, CHBin) when is_atom(Service) ->
     UpSet =
@@ -285,6 +306,9 @@ find_fallbacks_chbin([{Partition, _Node} | Rest] =
     end.
 
 %% @doc Return true if a node is up.
+-spec is_up(Node :: node(),
+            UpNodes :: [node()]) -> boolean().
+
 is_up(Node, UpNodes) -> lists:member(Node, UpNodes).
 
 %% @doc Return annotated preflist with partition ids/nums instead of hashes.
@@ -296,6 +320,10 @@ apl_with_partition_nums(Apl, Size) ->
        Node},
       Ann}
      || {{Hash, Node}, Ann} <- Apl].
+
+%% ===================================================================
+%% EUnit tests
+%% ===================================================================
 
 -ifdef(TEST).
 
