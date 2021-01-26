@@ -1387,8 +1387,6 @@ mod_set_forwarding(Forward,
 %% ===================================================================
 -ifdef(TEST).
 
--ifdef(TEST).
-
 -type state() :: #state{}.
 
 %% @doc Reveal the underlying module state for testing
