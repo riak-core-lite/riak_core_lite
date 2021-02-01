@@ -22,7 +22,6 @@
 
 -module(riak_core_app).
 
-
 -behaviour(application).
 
 %% Application callbacks
@@ -39,7 +38,7 @@
 %% @param StartArgs ignored.
 %% Returns `{ok, Pid}' if the start was succesful, otherwise `{error, Reason}'.
 -spec start(StartType :: application:start_type(),
-            StartArgs :: term()) -> {ok, pid()} | {error, term()}.
+	    StartArgs :: term()) -> {ok, pid()} | {error, term()}.
 
 start(_StartType, _StartArgs) ->
     ok = validate_ring_state_directory_exists(),
@@ -51,7 +50,8 @@ start(_StartType, _StartArgs) ->
 -spec stop(State :: term()) -> ok.
 
 stop(_State) ->
-    logger:info("Stopped application riak_core", []), ok.
+    logger:info("Stopped application riak_core", []),
+    ok.
 
 %% @doc Start all application dependencies and try to read the ring directory.
 %% @returns `ok' if the directory exists and can be written to.
@@ -61,17 +61,17 @@ stop(_State) ->
 validate_ring_state_directory_exists() ->
     riak_core_util:start_app_deps(riak_core),
     {ok, RingStateDir} = application:get_env(riak_core,
-                                             ring_state_dir),
+					     ring_state_dir),
     case filelib:ensure_dir(filename:join(RingStateDir,
-                                          "dummy"))
-        of
-      ok -> ok;
-      {error, RingReason} ->
-          logger:critical("Ring state directory ~p does not exist, "
-                          "and could not be created: ~p",
-                          [RingStateDir,
-                           riak_core_util:posix_error(RingReason)]),
-          throw({error, invalid_ring_state_dir})
+					  "dummy"))
+	of
+	ok -> ok;
+	{error, RingReason} ->
+	    logger:critical("Ring state directory ~p does not exist, "
+			    "and could not be created: ~p",
+			    [RingStateDir,
+			     riak_core_util:posix_error(RingReason)]),
+	    throw({error, invalid_ring_state_dir})
     end.
 
 %% @doc Start the riak_core supervisor and register the ring event handler.
@@ -79,16 +79,16 @@ validate_ring_state_directory_exists() ->
 %%          otherwise.
 %% @see riak_core_sup:init/1.
 -spec start_riak_core_sup() -> {ok, pid()} |
-                               {error, term()}.
+			       {error, term()}.
 
 start_riak_core_sup() ->
     %% Spin up the supervisor; prune ring files as necessary
     case riak_core_sup:start_link() of
-      {ok, Pid} ->
-          ok = register_applications(),
-          ok = add_ring_event_handler(),
-          {ok, Pid};
-      {error, Reason} -> {error, Reason}
+	{ok, Pid} ->
+	    ok = register_applications(),
+	    ok = add_ring_event_handler(),
+	    {ok, Pid};
+	{error, Reason} -> {error, Reason}
     end.
 
 %% @doc Currently NoOp.
@@ -101,5 +101,5 @@ register_applications() -> ok.
 
 add_ring_event_handler() ->
     ok =
-        riak_core_ring_events:add_guarded_handler(riak_core_ring_handler,
-                                                  []).
+	riak_core_ring_events:add_guarded_handler(riak_core_ring_handler,
+						  []).

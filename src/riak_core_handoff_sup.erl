@@ -26,16 +26,21 @@
 -export([start_link/0, init/1]).
 
 -define(CHILD(I, Type),
-        {I, {I, start_link, []}, permanent, brutal_kill, Type,
-         [I]}).
+	{I,
+	 {I, start_link, []},
+	 permanent,
+	 brutal_kill,
+	 Type,
+	 [I]}).
 
 %% @doc Begin the supervisor, init/1 will be called
 %% @see supervisor:start_link/3.
 -spec start_link() -> {ok, pid()} |
-                      {error,
-                       {already_started, pid()} | {shutdown | reason} |
-                       term()} |
-                      ignore.
+		      {error,
+		       {already_started, pid()} |
+		       {shutdown | reason} |
+		       term()} |
+		      ignore.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
@@ -49,21 +54,21 @@ start_link() ->
 %% @see riak_core_handoff_sender:start_link/0.
 %% @returns Parameters to start the supervised children.
 -spec init([]) -> {ok,
-                   {{one_for_all, 10, 10},
-                    [{riak_core_handoff_receiver_sup |
-                      riak_core_handoff_sender_sup |
-                      riak_core_handoff_listener_sup |
-                      riak_core_handoff_manager,
-                      {riak_core_handoff_receiver_sup |
-                       riak_core_handoff_sender_sup |
-                       riak_core_handoff_listener_sup |
-                       riak_core_handoff_manager,
-                       start_link, []},
-                      permanent, brutal_kill, supervisor | worker,
-                      [riak_core_handoff_receiver_sup |
-                       riak_core_handoff_sender_sup |
-                       riak_core_handoff_listener_sup |
-                       riak_core_handoff_manager]}]}}.
+		   {{one_for_all, 10, 10},
+		    [{riak_core_handoff_receiver_sup |
+		      riak_core_handoff_sender_sup |
+		      riak_core_handoff_listener_sup |
+		      riak_core_handoff_manager,
+		      {riak_core_handoff_receiver_sup |
+		       riak_core_handoff_sender_sup |
+		       riak_core_handoff_listener_sup |
+		       riak_core_handoff_manager,
+		       start_link, []},
+		      permanent, brutal_kill, supervisor | worker,
+		      [riak_core_handoff_receiver_sup |
+		       riak_core_handoff_sender_sup |
+		       riak_core_handoff_listener_sup |
+		       riak_core_handoff_manager]}]}}.
 
 init([]) ->
     {ok,

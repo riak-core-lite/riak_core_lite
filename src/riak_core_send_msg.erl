@@ -22,8 +22,10 @@
 
 -module(riak_core_send_msg).
 
--export([reply_unreliable/2, cast_unreliable/2,
-         send_event_unreliable/2, bang_unreliable/2]).
+-export([reply_unreliable/2,
+	 cast_unreliable/2,
+	 send_event_unreliable/2,
+	 bang_unreliable/2]).
 
 %% NOTE: We'ed peeked inside gen_server.erl's guts to see its internals.
 reply_unreliable({To, Tag}, Reply) ->
@@ -34,13 +36,14 @@ cast_unreliable(Dest, Request) ->
 
 %% NOTE: We'ed peeked inside gen_fsm.erl's guts to see its internals.
 send_event_unreliable({global, _Name} = GlobalTo,
-                      Event) ->
+		      Event) ->
     erlang:error({unimplemented_send, GlobalTo, Event});
 send_event_unreliable({via, _Module, _Name} = ViaTo,
-                      Event) ->
+		      Event) ->
     erlang:error({unimplemented_send, ViaTo, Event});
 send_event_unreliable(Name, Event) ->
-    bang_unreliable(Name, {'$gen_event', Event}), ok.
+    bang_unreliable(Name, {'$gen_event', Event}),
+    ok.
 
 bang_unreliable(Dest, Msg) ->
     catch erlang:send(Dest, Msg, [noconnect, nosuspend]),

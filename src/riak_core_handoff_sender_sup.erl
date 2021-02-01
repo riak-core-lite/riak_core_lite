@@ -31,8 +31,12 @@
 -include("riak_core_handoff.hrl").
 
 -define(CHILD(I, Type),
-        {I, {I, start_link, []}, temporary, brutal_kill, Type,
-         [I]}).
+	{I,
+	 {I, start_link, []},
+	 temporary,
+	 brutal_kill,
+	 Type,
+	 [I]}).
 
 %%%===================================================================
 %%% API
@@ -41,10 +45,11 @@
 %% @doc Begin the supervisor, init/1 will be called
 %% @see supervisor:start_link/3.
 -spec start_link() -> {ok, pid()} |
-                      {error,
-                       {already_started, pid()} | {shutdown | reason} |
-                       term()} |
-                      ignore.
+		      {error,
+		       {already_started, pid()} |
+		       {shutdown | reason} |
+		       term()} |
+		      ignore.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
@@ -64,11 +69,11 @@ start_link() ->
 %%        * unsent_acc0 - optional. The intial accumulator value passed to unsent_fun
 %%                        for the first unsent key
 -spec start_sender(ho_type(), atom(), term(), pid(),
-                   [{atom(), term()}]) -> {ok, pid()}.
+		   [{atom(), term()}]) -> {ok, pid()}.
 
 start_sender(Type, Module, TargetNode, VNode, Opts) ->
     supervisor:start_child(?MODULE,
-                           [TargetNode, Module, {Type, Opts}, VNode]).
+			   [TargetNode, Module, {Type, Opts}, VNode]).
 
 %%%===================================================================
 %%% Callbacks
@@ -80,11 +85,11 @@ start_sender(Type, Module, TargetNode, VNode, Opts) ->
 %% @see riak_core_handoff_sender:start_link/0.
 %% @returns Parameters to start the supervised child.
 -spec init([]) -> {ok,
-                   {{simple_one_for_one, 10, 10},
-                    [{riak_core_handoff_sender,
-                      {riak_core_handoff_sender, start_link, []}, temporary,
-                      brutal_kill, worker,
-                      [riak_core_handoff_sender]}, ...]}}.
+		   {{simple_one_for_one, 10, 10},
+		    [{riak_core_handoff_sender,
+		      {riak_core_handoff_sender, start_link, []}, temporary,
+		      brutal_kill, worker,
+		      [riak_core_handoff_sender]}, ...]}}.
 
 init([]) ->
     {ok,
