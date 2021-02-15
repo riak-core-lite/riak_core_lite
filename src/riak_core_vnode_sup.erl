@@ -46,5 +46,9 @@ start_link() ->
 init([]) ->
     {ok,
      {{simple_one_for_one, 10, 10},
-      [{undefined, {riak_core_vnode, start_link, []},
-        temporary, 300000, worker, dynamic}]}}.
+      [{undefined,
+        {riak_core_vnode, start_link, []},
+        temporary,
+        300000,
+        worker,
+        dynamic}]}}.

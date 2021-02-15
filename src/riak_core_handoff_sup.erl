@@ -26,14 +26,19 @@
 -export([start_link/0, init/1]).
 
 -define(CHILD(I, Type),
-        {I, {I, start_link, []}, permanent, brutal_kill, Type,
+        {I,
+         {I, start_link, []},
+         permanent,
+         brutal_kill,
+         Type,
          [I]}).
 
 %% @doc Begin the supervisor, init/1 will be called
 %% @see supervisor:start_link/3.
 -spec start_link() -> {ok, pid()} |
                       {error,
-                       {already_started, pid()} | {shutdown | reason} |
+                       {already_started, pid()} |
+                       {shutdown | reason} |
                        term()} |
                       ignore.
 

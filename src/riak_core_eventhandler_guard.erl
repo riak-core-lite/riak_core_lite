@@ -25,8 +25,12 @@
 
 -export([start_link/3, start_link/4]).
 
--export([init/1, handle_call/3, handle_cast/2,
-         handle_info/2, terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -record(state, {handlermod, handler, exitfun}).
 
@@ -35,10 +39,12 @@ start_link(HandlerMod, Handler, Args) ->
 
 start_link(HandlerMod, Handler, Args, ExitFun) ->
     gen_server:start_link(?MODULE,
-                          [HandlerMod, Handler, Args, ExitFun], []).
+                          [HandlerMod, Handler, Args, ExitFun],
+                          []).
 
 init([HandlerMod, Handler, Args, ExitFun]) ->
-    ok = gen_event:add_sup_handler(HandlerMod, Handler,
+    ok = gen_event:add_sup_handler(HandlerMod,
+                                   Handler,
                                    Args),
     {ok,
      #state{handlermod = HandlerMod, handler = Handler,

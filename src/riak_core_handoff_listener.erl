@@ -28,30 +28,41 @@
 
 -export([start_link/0]).
 
--export([init/1, handle_call/3, handle_cast/2,
-         handle_info/2, terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
--export([get_handoff_ip/0, sock_opts/0,
+-export([get_handoff_ip/0,
+         sock_opts/0,
          new_connection/2]).
 
 -record(state,
-        {ipaddr  :: string(), portnum  :: integer()}).
+        {ipaddr :: string(), portnum :: integer()}).
 
 -type state() :: #state{}.
 
--type sock_opts() :: binary | {packet, integer()} |
-                     {reuseaddr, boolean()} | {backlog, integer()}.
+-type sock_opts() :: binary |
+                     {packet, integer()} |
+                     {reuseaddr, boolean()} |
+                     {backlog, integer()}.
 
 %% @doc Start the handoff listener listening on the configered ip and port.
 %% @see gen_nb_server:start_link/4.
 -spec start_link() -> {ok, pid()} | {error, any()}.
 
 start_link() ->
-    PortNum = application:get_env(riak_core, handoff_port,
+    PortNum = application:get_env(riak_core,
+                                  handoff_port,
                                   undefined),
-    IpAddr = application:get_env(riak_core, handoff_ip,
+    IpAddr = application:get_env(riak_core,
+                                 handoff_ip,
                                  undefined),
-    gen_nb_server:start_link(?MODULE, IpAddr, PortNum,
+    gen_nb_server:start_link(?MODULE,
+                             IpAddr,
+                             PortNum,
                              [IpAddr, PortNum]).
 
 %% @doc Return the IP address this server is listening to.
@@ -128,13 +139,13 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 new_connection(Socket, State) ->
     case riak_core_handoff_manager:add_inbound() of
-      {ok, Pid} ->
-          ok = gen_tcp:controlling_process(Socket, Pid),
-          ok = riak_core_handoff_receiver:set_socket(Pid, Socket),
-          {ok, State};
-      {error, _Reason} ->
-          %% STATS
-          %%            riak_core_stat:update(rejected_handoffs),
-          gen_tcp:close(Socket),
-          {ok, State}
+        {ok, Pid} ->
+            ok = gen_tcp:controlling_process(Socket, Pid),
+            ok = riak_core_handoff_receiver:set_socket(Pid, Socket),
+            {ok, State};
+        {error, _Reason} ->
+            %% STATS
+            %%            riak_core_stat:update(rejected_handoffs),
+            gen_tcp:close(Socket),
+            {ok, State}
     end.

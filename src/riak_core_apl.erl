@@ -24,14 +24,23 @@
 %% -------------------------------------------------------------------
 -module(riak_core_apl).
 
+-export([active_owners/1,
+         active_owners/2,
+         get_apl/3,
+         get_apl/4,
+         get_apl_ann/2,
+         get_apl_ann/3,
+         get_apl_ann/4,
+         get_apl_ann_with_pnum/1,
+         get_primary_apl/3,
+         get_primary_apl/4,
+         get_primary_apl_chbin/4,
+         first_up/2,
+         offline_owners/1,
+         offline_owners/2]).
 
--export([active_owners/1, active_owners/2, get_apl/3,
-         get_apl/4, get_apl_ann/2, get_apl_ann/3, get_apl_ann/4,
-         get_apl_ann_with_pnum/1, get_primary_apl/3,
-         get_primary_apl/4, get_primary_apl_chbin/4, first_up/2,
-         offline_owners/1, offline_owners/2]).
-
--export_type([preflist/0, preflist_ann/0,
+-export_type([preflist/0,
+              preflist_ann/0,
               preflist_with_pnum_ann/0]).
 
 -ifdef(TEST).
@@ -94,7 +103,9 @@ active_owners(Ring, UpNodes) ->
 
 get_apl(DocIdx, N, Service) ->
     {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
-    get_apl_chbin(DocIdx, N, CHBin,
+    get_apl_chbin(DocIdx,
+                  N,
+                  CHBin,
                   riak_core_node_watcher:nodes(Service)).
 
 %% @doc Get the active preflist taking account of which nodes are up
@@ -181,7 +192,9 @@ get_apl_ann_chbin(DocIdx, N, CHBin, UpNodes) ->
 
 get_primary_apl(DocIdx, N, Service) ->
     {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
-    get_primary_apl_chbin(DocIdx, N, CHBin,
+    get_primary_apl_chbin(DocIdx,
+                          N,
+                          CHBin,
                           riak_core_node_watcher:nodes(Service)).
 
 %% @doc Same as get_apl, but returns only the primaries.
@@ -258,11 +271,13 @@ check_up([], _UpNodes, Up, Pangs) ->
 check_up([{Partition, Node} | Rest], UpNodes, Up,
          Pangs) ->
     case is_up(Node, UpNodes) of
-      true ->
-          check_up(Rest, UpNodes,
-                   [{{Partition, Node}, primary} | Up], Pangs);
-      false ->
-          check_up(Rest, UpNodes, Up, [{Partition, Node} | Pangs])
+        true ->
+            check_up(Rest,
+                     UpNodes,
+                     [{{Partition, Node}, primary} | Up],
+                     Pangs);
+        false ->
+            check_up(Rest, UpNodes, Up, [{Partition, Node} | Pangs])
     end.
 
 %% @doc Find fallbacks for downed nodes in the preference list.
@@ -276,11 +291,13 @@ find_fallbacks([], _Fallbacks, _UpNodes, Secondaries) ->
 find_fallbacks([{Partition, _Node} | Rest] = Pangs,
                [{_, FN} | Fallbacks], UpNodes, Secondaries) ->
     case is_up(FN, UpNodes) of
-      true ->
-          find_fallbacks(Rest, Fallbacks, UpNodes,
-                         [{{Partition, FN}, fallback} | Secondaries]);
-      false ->
-          find_fallbacks(Pangs, Fallbacks, UpNodes, Secondaries)
+        true ->
+            find_fallbacks(Rest,
+                           Fallbacks,
+                           UpNodes,
+                           [{{Partition, FN}, fallback} | Secondaries]);
+        false ->
+            find_fallbacks(Pangs, Fallbacks, UpNodes, Secondaries)
     end.
 
 %% @doc Find fallbacks for downed nodes in the preference list.
@@ -298,11 +315,13 @@ find_fallbacks_chbin([{Partition, _Node} | Rest] =
     {_, FN} = chashbin:itr_value(Itr),
     Itr2 = chashbin:itr_next(Itr),
     case is_up(FN, UpNodes) of
-      true ->
-          find_fallbacks_chbin(Rest, Itr2, UpNodes,
-                               [{{Partition, FN}, fallback} | Secondaries]);
-      false ->
-          find_fallbacks_chbin(Pangs, Itr2, UpNodes, Secondaries)
+        true ->
+            find_fallbacks_chbin(Rest,
+                                 Itr2,
+                                 UpNodes,
+                                 [{{Partition, FN}, fallback} | Secondaries]);
+        false ->
+            find_fallbacks_chbin(Pangs, Itr2, UpNodes, Secondaries)
     end.
 
 %% @doc Return true if a node is up.
@@ -347,7 +366,9 @@ four_node_test() ->
                   {365375409332725729550921208179070754913983135744,
                    nodec},
                   {0, noded}],
-                 (get_apl(last_in_ring(), 3, Ring,
+                 (get_apl(last_in_ring(),
+                          3,
+                          Ring,
                           [nodeb, nodec, noded]))),
     %% With two nodes down
     ?assertEqual([{365375409332725729550921208179070754913983135744,
@@ -375,7 +396,8 @@ perfect_ring(RingSize, Nodes)
                             Rest ++ [NewOwner]}
                    end,
     {PerfectRing, _} = lists:foldl(TransferNode,
-                                   {Ring, Nodes}, Owners),
+                                   {Ring, Nodes},
+                                   Owners),
     PerfectRing.
 
 last_in_ring() ->
@@ -388,8 +410,11 @@ six_node_test() ->
     %DocIdx = riak_core_util:chash_key({<<"foo">>, <<"bar">>}),
     DocIdx = <<73, 212, 27, 234, 104, 13, 150, 207, 0, 82,
                86, 183, 125, 225, 172, 154, 135, 46, 6, 112>>,
-    Nodes = ['dev1@127.0.0.1', 'dev2@127.0.0.1',
-             'dev3@127.0.0.1', 'dev4@127.0.0.1', 'dev5@127.0.0.1',
+    Nodes = ['dev1@127.0.0.1',
+             'dev2@127.0.0.1',
+             'dev3@127.0.0.1',
+             'dev4@127.0.0.1',
+             'dev5@127.0.0.1',
              'dev6@127.0.0.1'],
     %% Fallbacks should be selected by finding the next-highest partition after
     %% the DocIdx of the key, in this case the 433883 partition. The N
@@ -409,7 +434,9 @@ six_node_test() ->
                    'dev4@127.0.0.1'},
                   {433883298582611803841718934712646521460354973696,
                    'dev5@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes -- ['dev2@127.0.0.1']))),
     ?assertEqual([{479555224749202520035584085735030365824602865664,
                    'dev4@127.0.0.1'},
@@ -417,7 +444,9 @@ six_node_test() ->
                    'dev5@127.0.0.1'},
                   {456719261665907161938651510223838443642478919680,
                    'dev6@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes -- ['dev2@127.0.0.1', 'dev3@127.0.0.1']))),
     ?assertEqual([{433883298582611803841718934712646521460354973696,
                    'dev5@127.0.0.1'},
@@ -425,27 +454,36 @@ six_node_test() ->
                    'dev6@127.0.0.1'},
                   {479555224749202520035584085735030365824602865664,
                    'dev1@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes --
-                            ['dev2@127.0.0.1', 'dev3@127.0.0.1',
-                             'dev4@127.0.0.1']))),
+                              ['dev2@127.0.0.1',
+                               'dev3@127.0.0.1',
+                               'dev4@127.0.0.1']))),
     ?assertEqual([{433883298582611803841718934712646521460354973696,
                    'dev5@127.0.0.1'},
                   {456719261665907161938651510223838443642478919680,
                    'dev6@127.0.0.1'},
                   {479555224749202520035584085735030365824602865664,
                    'dev5@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes --
-                            ['dev2@127.0.0.1', 'dev3@127.0.0.1',
-                             'dev4@127.0.0.1', 'dev1@127.0.0.1']))),
+                              ['dev2@127.0.0.1',
+                               'dev3@127.0.0.1',
+                               'dev4@127.0.0.1',
+                               'dev1@127.0.0.1']))),
     ?assertEqual([{433883298582611803841718934712646521460354973696,
                    'dev2@127.0.0.1'},
                   {456719261665907161938651510223838443642478919680,
                    'dev3@127.0.0.1'},
                   {479555224749202520035584085735030365824602865664,
                    'dev5@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes -- ['dev4@127.0.0.1']))),
     ?assertEqual([{433883298582611803841718934712646521460354973696,
                    'dev2@127.0.0.1'},
@@ -453,7 +491,9 @@ six_node_test() ->
                    'dev5@127.0.0.1'},
                   {479555224749202520035584085735030365824602865664,
                    'dev6@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes -- ['dev4@127.0.0.1', 'dev3@127.0.0.1']))),
     ?assertEqual([{433883298582611803841718934712646521460354973696,
                    'dev2@127.0.0.1'},
@@ -461,45 +501,61 @@ six_node_test() ->
                    'dev5@127.0.0.1'},
                   {479555224749202520035584085735030365824602865664,
                    'dev1@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes --
-                            ['dev4@127.0.0.1', 'dev3@127.0.0.1',
-                             'dev6@127.0.0.1']))),
+                              ['dev4@127.0.0.1',
+                               'dev3@127.0.0.1',
+                               'dev6@127.0.0.1']))),
     ?assertEqual([{433883298582611803841718934712646521460354973696,
                    'dev2@127.0.0.1'},
                   {456719261665907161938651510223838443642478919680,
                    'dev5@127.0.0.1'},
                   {479555224749202520035584085735030365824602865664,
                    'dev2@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes --
-                            ['dev4@127.0.0.1', 'dev3@127.0.0.1',
-                             'dev6@127.0.0.1', 'dev1@127.0.0.1']))),
+                              ['dev4@127.0.0.1',
+                               'dev3@127.0.0.1',
+                               'dev6@127.0.0.1',
+                               'dev1@127.0.0.1']))),
     ?assertEqual([{433883298582611803841718934712646521460354973696,
                    'dev2@127.0.0.1'},
                   {456719261665907161938651510223838443642478919680,
                    'dev2@127.0.0.1'},
                   {479555224749202520035584085735030365824602865664,
                    'dev2@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes --
-                            ['dev4@127.0.0.1', 'dev3@127.0.0.1',
-                             'dev6@127.0.0.1', 'dev1@127.0.0.1',
-                             'dev5@127.0.0.1']))),
+                              ['dev4@127.0.0.1',
+                               'dev3@127.0.0.1',
+                               'dev6@127.0.0.1',
+                               'dev1@127.0.0.1',
+                               'dev5@127.0.0.1']))),
     ?assertEqual([{433883298582611803841718934712646521460354973696,
                    'dev2@127.0.0.1'},
                   {479555224749202520035584085735030365824602865664,
                    'dev4@127.0.0.1'},
                   {456719261665907161938651510223838443642478919680,
                    'dev5@127.0.0.1'}],
-                 (get_apl(DocIdx, 3, Ring,
+                 (get_apl(DocIdx,
+                          3,
+                          Ring,
                           Nodes -- ['dev3@127.0.0.1']))),
     ok.
 
 six_node_bucket_key_ann_test() ->
     {ok, [Ring]} = file:consult("test/my_ring"),
-    Nodes = ['dev1@127.0.0.1', 'dev2@127.0.0.1',
-             'dev3@127.0.0.1', 'dev4@127.0.0.1', 'dev5@127.0.0.1',
+    Nodes = ['dev1@127.0.0.1',
+             'dev2@127.0.0.1',
+             'dev3@127.0.0.1',
+             'dev4@127.0.0.1',
+             'dev5@127.0.0.1',
              'dev6@127.0.0.1'],
     Bucket = <<"favorite">>,
     Key = <<"jethrotull">>,
@@ -518,53 +574,53 @@ six_node_bucket_key_ann_test() ->
                   {{34, 'dev2@127.0.0.1'}, fallback}],
                  (apl_with_partition_nums(get_apl_ann({Bucket, Key},
                                                       Nodes --
-                                                        ['dev5@127.0.0.1']),
+                                                          ['dev5@127.0.0.1']),
                                           Size))),
     ?assertEqual([{{36, 'dev1@127.0.0.1'}, primary},
                   {{34, 'dev2@127.0.0.1'}, fallback},
                   {{35, 'dev3@127.0.0.1'}, fallback}],
                  (apl_with_partition_nums(get_apl_ann({Bucket, Key},
                                                       Nodes --
-                                                        ['dev5@127.0.0.1',
-                                                         'dev6@127.0.0.1']),
+                                                          ['dev5@127.0.0.1',
+                                                           'dev6@127.0.0.1']),
                                           Size))),
     ?assertEqual([{{34, 'dev2@127.0.0.1'}, fallback},
                   {{35, 'dev3@127.0.0.1'}, fallback},
                   {{36, 'dev4@127.0.0.1'}, fallback}],
                  (apl_with_partition_nums(get_apl_ann({Bucket, Key},
                                                       Nodes --
-                                                        ['dev5@127.0.0.1',
-                                                         'dev6@127.0.0.1',
-                                                         'dev1@127.0.0.1']),
+                                                          ['dev5@127.0.0.1',
+                                                           'dev6@127.0.0.1',
+                                                           'dev1@127.0.0.1']),
                                           Size))),
     ?assertEqual([{{34, 'dev3@127.0.0.1'}, fallback},
                   {{35, 'dev4@127.0.0.1'}, fallback},
                   {{36, 'dev3@127.0.0.1'}, fallback}],
                  (apl_with_partition_nums(get_apl_ann({Bucket, Key},
                                                       Nodes --
-                                                        ['dev5@127.0.0.1',
-                                                         'dev6@127.0.0.1',
-                                                         'dev1@127.0.0.1',
-                                                         'dev2@127.0.0.1']),
+                                                          ['dev5@127.0.0.1',
+                                                           'dev6@127.0.0.1',
+                                                           'dev1@127.0.0.1',
+                                                           'dev2@127.0.0.1']),
                                           Size))),
     ?assertEqual([{{34, 'dev4@127.0.0.1'}, fallback},
                   {{35, 'dev4@127.0.0.1'}, fallback},
                   {{36, 'dev4@127.0.0.1'}, fallback}],
                  (apl_with_partition_nums(get_apl_ann({Bucket, Key},
                                                       Nodes --
-                                                        ['dev5@127.0.0.1',
-                                                         'dev6@127.0.0.1',
-                                                         'dev1@127.0.0.1',
-                                                         'dev2@127.0.0.1',
-                                                         'dev3@127.0.0.1']),
+                                                          ['dev5@127.0.0.1',
+                                                           'dev6@127.0.0.1',
+                                                           'dev1@127.0.0.1',
+                                                           'dev2@127.0.0.1',
+                                                           'dev3@127.0.0.1']),
                                           Size))),
     ?assertEqual([{{34, 'dev5@127.0.0.1'}, primary},
                   {{35, 'dev6@127.0.0.1'}, primary},
                   {{36, 'dev3@127.0.0.1'}, fallback}],
                  (apl_with_partition_nums(get_apl_ann({Bucket, Key},
                                                       Nodes --
-                                                        ['dev1@127.0.0.1',
-                                                         'dev2@127.0.0.1']),
+                                                          ['dev1@127.0.0.1',
+                                                           'dev2@127.0.0.1']),
                                           Size))),
     riak_core_ring_manager:cleanup_ets(test),
     ok.
@@ -590,14 +646,16 @@ chbin_test_scenario(Size, NumNodes) ->
     Shuffled = riak_core_util:shuffle(Nodes),
     _ = CHBin,
     [begin
-       Up = max(0, NumNodes - Down),
-       UpNodes = lists:sublist(Shuffled, Up),
-       ?assertEqual((get_apl(HashKey, N, Ring, UpNodes)),
-                    (get_apl_chbin(HashKey, N, CHBin, UpNodes))),
-       ?assertEqual((get_primary_apl(HashKey, N, Ring,
-                                     UpNodes)),
-                    (get_primary_apl_chbin(HashKey, N, CHBin, UpNodes))),
-       ok
+         Up = max(0, NumNodes - Down),
+         UpNodes = lists:sublist(Shuffled, Up),
+         ?assertEqual((get_apl(HashKey, N, Ring, UpNodes)),
+                      (get_apl_chbin(HashKey, N, CHBin, UpNodes))),
+         ?assertEqual((get_primary_apl(HashKey,
+                                       N,
+                                       Ring,
+                                       UpNodes)),
+                      (get_primary_apl_chbin(HashKey, N, CHBin, UpNodes))),
+         ok
      end
      || HashKey <- HashKeys, N <- [1, 2, 3, 4],
         Down <- [0, 1, 2, Size div 2, Size - 1, Size]],

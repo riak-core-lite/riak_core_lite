@@ -28,12 +28,18 @@
 -export([start_link/4]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2,
-         handle_info/2, terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -define(SERVER, ?MODULE).
 
 -record(state, {cb, sock, server_state}).
+
+-type state() :: #state{}.
 
 -callback init(InitArgs :: list()) -> {ok,
                                        State :: term()} |
@@ -98,20 +104,23 @@
 
 start_link(Module, IpAddr, Port, InitParams) ->
     gen_server:start_link(?MODULE,
-                          [Module, IpAddr, Port, InitParams], []).
+                          [Module, IpAddr, Port, InitParams],
+                          []).
 
 %% @hidden
 init([Module, IpAddr, Port, InitParams]) ->
     case Module:init(InitParams) of
-      {ok, ServerState} ->
-          case listen_on(Module, IpAddr, Port) of
-            {ok, Sock} ->
-                {ok,
-                 #state{cb = Module, sock = Sock,
-                        server_state = ServerState}};
-            Error -> Module:terminate(Error, ServerState), Error
-          end;
-      Err -> Err
+        {ok, ServerState} ->
+            case listen_on(Module, IpAddr, Port) of
+                {ok, Sock} ->
+                    {ok,
+                     #state{cb = Module, sock = Sock,
+                            server_state = ServerState}};
+                Error ->
+                    Module:terminate(Error, ServerState),
+                    Error
+            end;
+        Err -> Err
     end.
 
 %% @hidden
@@ -119,70 +128,91 @@ handle_call(Request, From,
             #state{cb = Module, server_state = ServerState} =
                 State) ->
     case Module:handle_call(Request, From, ServerState) of
-      {reply, Reply, NewServerState} ->
-          {reply, Reply,
-           State#state{server_state = NewServerState}};
-      {reply, Reply, NewServerState, Arg}
-          when Arg =:= hibernate orelse is_number(Arg) ->
-          {reply, Reply,
-           State#state{server_state = NewServerState}, Arg};
-      {noreply, NewServerState} ->
-          {noreply, State#state{server_state = NewServerState}};
-      {noreply, NewServerState, Arg}
-          when Arg =:= hibernate orelse is_number(Arg) ->
-          {noreply, State#state{server_state = NewServerState},
-           Arg};
-      {stop, Reason, NewServerState} ->
-          {stop, Reason,
-           State#state{server_state = NewServerState}};
-      {stop, Reason, Reply, NewServerState} ->
-          {stop, Reason, Reply,
-           State#state{server_state = NewServerState}}
+        {reply, Reply, NewServerState} ->
+            {reply,
+             Reply,
+             State#state{server_state = NewServerState}};
+        {reply, Reply, NewServerState, Arg}
+            when Arg =:= hibernate orelse is_number(Arg) ->
+            {reply,
+             Reply,
+             State#state{server_state = NewServerState},
+             Arg};
+        {noreply, NewServerState} ->
+            {noreply, State#state{server_state = NewServerState}};
+        {noreply, NewServerState, Arg}
+            when Arg =:= hibernate orelse is_number(Arg) ->
+            {noreply,
+             State#state{server_state = NewServerState},
+             Arg};
+        {stop, Reason, NewServerState} ->
+            {stop,
+             Reason,
+             State#state{server_state = NewServerState}};
+        {stop, Reason, Reply, NewServerState} ->
+            {stop,
+             Reason,
+             Reply,
+             State#state{server_state = NewServerState}}
     end.
 
 %% @hidden
+-spec handle_cast(term(), state()) -> {noreply, _} |
+                                      {noreply, _,
+                                       hibernate |
+                                       infinity |
+                                       non_neg_integer()} |
+                                      {stop, _, _}.
+
 handle_cast(Msg,
             #state{cb = Module, server_state = ServerState} =
                 State) ->
     case Module:handle_cast(Msg, ServerState) of
-      {noreply, NewServerState} ->
-          {noreply, State#state{server_state = NewServerState}};
-      {noreply, NewServerState, Arg}
-          when Arg =:= hibernate orelse is_number(Arg) ->
-          {noreply, State#state{server_state = NewServerState},
-           Arg};
-      {stop, Reason, NewServerState} ->
-          {stop, Reason,
-           State#state{server_state = NewServerState}}
+        {noreply, NewServerState} ->
+            {noreply, State#state{server_state = NewServerState}};
+        {noreply, NewServerState, Arg}
+            when Arg =:= hibernate orelse is_number(Arg) ->
+            {noreply,
+             State#state{server_state = NewServerState},
+             Arg};
+        {stop, Reason, NewServerState} ->
+            {stop,
+             Reason,
+             State#state{server_state = NewServerState}}
     end.
 
 %% @hidden
-handle_info({inet_async, ListSock, _Ref,
+handle_info({inet_async,
+             ListSock,
+             _Ref,
              {ok, CliSocket}},
             #state{cb = Module, server_state = ServerState} =
                 State) ->
     inet_db:register_socket(CliSocket, inet_tcp),
     case Module:new_connection(CliSocket, ServerState) of
-      {ok, NewServerState} ->
-          {ok, _} = prim_inet:async_accept(ListSock, -1),
-          {noreply, State#state{server_state = NewServerState}};
-      {stop, Reason, NewServerState} ->
-          {stop, Reason,
-           State#state{server_state = NewServerState}}
+        {ok, NewServerState} ->
+            {ok, _} = prim_inet:async_accept(ListSock, -1),
+            {noreply, State#state{server_state = NewServerState}};
+        {stop, Reason, NewServerState} ->
+            {stop,
+             Reason,
+             State#state{server_state = NewServerState}}
     end;
 handle_info(Info,
             #state{cb = Module, server_state = ServerState} =
                 State) ->
     case Module:handle_info(Info, ServerState) of
-      {noreply, NewServerState} ->
-          {noreply, State#state{server_state = NewServerState}};
-      {noreply, NewServerState, Arg}
-          when Arg =:= hibernate orelse is_number(Arg) ->
-          {noreply, State#state{server_state = NewServerState},
-           Arg};
-      {stop, Reason, NewServerState} ->
-          {stop, Reason,
-           State#state{server_state = NewServerState}}
+        {noreply, NewServerState} ->
+            {noreply, State#state{server_state = NewServerState}};
+        {noreply, NewServerState, Arg}
+            when Arg =:= hibernate orelse is_number(Arg) ->
+            {noreply,
+             State#state{server_state = NewServerState},
+             Arg};
+        {stop, Reason, NewServerState} ->
+            {stop,
+             Reason,
+             State#state{server_state = NewServerState}}
     end.
 
 %% @hidden
@@ -206,21 +236,21 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% Result = {ok, port()} | {error, any()}
 listen_on(Module, IpAddr, Port)
     when is_tuple(IpAddr) andalso
-           (8 =:= size(IpAddr) orelse 4 =:= size(IpAddr)) ->
+             (8 =:= size(IpAddr) orelse 4 =:= size(IpAddr)) ->
     SockOpts = [{ip, IpAddr} | Module:sock_opts()],
     case gen_tcp:listen(Port, SockOpts) of
-      {ok, LSock} ->
-          {ok, _Ref} = prim_inet:async_accept(LSock, -1),
-          {ok, LSock};
-      Err -> Err
+        {ok, LSock} ->
+            {ok, _Ref} = prim_inet:async_accept(LSock, -1),
+            {ok, LSock};
+        Err -> Err
     end;
 listen_on(Module, IpAddrStr, Port) ->
     case inet_parse:address(IpAddrStr) of
-      {ok, IpAddr} -> listen_on(Module, IpAddr, Port);
-      Err ->
-          logger:critical("Cannot start listener for ~p\n      "
-                          "                      on invalid address "
-                          "~p:~p",
-                          [Module, IpAddrStr, Port]),
-          Err
+        {ok, IpAddr} -> listen_on(Module, IpAddr, Port);
+        Err ->
+            logger:critical("Cannot start listener for ~p\n      "
+                            "                      on invalid address "
+                            "~p:~p",
+                            [Module, IpAddrStr, Port]),
+            Err
     end.

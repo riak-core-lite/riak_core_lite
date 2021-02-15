@@ -31,7 +31,11 @@
 -include("riak_core_handoff.hrl").
 
 -define(CHILD(I, Type),
-        {I, {I, start_link, []}, temporary, brutal_kill, Type,
+        {I,
+         {I, start_link, []},
+         temporary,
+         brutal_kill,
+         Type,
          [I]}).
 
 %%%===================================================================
@@ -42,7 +46,8 @@
 %% @see supervisor:start_link/3.
 -spec start_link() -> {ok, pid()} |
                       {error,
-                       {already_started, pid()} | {shutdown | reason} |
+                       {already_started, pid()} |
+                       {shutdown | reason} |
                        term()} |
                       ignore.
 

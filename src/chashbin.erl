@@ -23,14 +23,21 @@
 %% -------------------------------------------------------------------
 -module(chashbin).
 
-
--export([create/1, to_chash/1, to_list/1,
-         to_list_filter/2, responsible_index/2,
-         responsible_position/2, index_owner/2,
+-export([create/1,
+         to_chash/1,
+         to_list/1,
+         to_list_filter/2,
+         responsible_index/2,
+         responsible_position/2,
+         index_owner/2,
          num_partitions/1]).
 
--export([iterator/2, exact_iterator/2, itr_value/1,
-         itr_pop/2, itr_next/1, itr_next_while/2]).
+-export([iterator/2,
+         exact_iterator/2,
+         itr_value/1,
+         itr_pop/2,
+         itr_next/1,
+         itr_next_while/2]).
 
 -export_type([chashbin/0]).
 
@@ -52,22 +59,25 @@
 -ifndef(namespaced_types).
 
 -record(chashbin,
-        {size  :: pos_integer(), owners  :: owners_bin(),
-         nodes  :: erlang:tuple(node())}).
+        {size :: pos_integer(),
+         owners :: owners_bin(),
+         nodes :: erlang:tuple(node())}).
 
 -else.
 
 -record(chashbin,
-        {size  :: pos_integer(), owners  :: owners_bin(),
-         nodes  :: erlang:tuple(node())}).
+        {size :: pos_integer(),
+         owners :: owners_bin(),
+         nodes :: erlang:tuple(node())}).
 
 -endif.
 
 -type chashbin() :: #chashbin{}.
 
 -record(iterator,
-        {pos  :: non_neg_integer(), start  :: non_neg_integer(),
-         chbin  :: chashbin()}).
+        {pos :: non_neg_integer(),
+         start :: non_neg_integer(),
+         chbin :: chashbin()}).
 
 -type iterator() :: #iterator{}.
 
@@ -91,7 +101,8 @@ create({Size, Owners}) ->
 -spec to_chash(chashbin()) -> chash:chash().
 
 to_chash(CHBin = #chashbin{size = Size}) ->
-    L = to_list(CHBin), {Size, L}.
+    L = to_list(CHBin),
+    {Size, L}.
 
 %% @doc Convert a `chashbin' to a list of `{Index, Owner}' pairs
 -spec to_list(chashbin()) -> [{index(), node()}].
@@ -137,10 +148,10 @@ responsible_position(HashKey, #chashbin{size = Size}) ->
 
 index_owner(Idx, CHBin) ->
     case itr_value(exact_iterator(Idx, CHBin)) of
-      {Idx, Owner} -> Owner;
-      _ ->
-          %% Match the behavior for riak_core_ring:index_owner/2
-          exit({badmatch, false})
+        {Idx, Owner} -> Owner;
+        _ ->
+            %% Match the behavior for riak_core_ring:index_owner/2
+            exit({badmatch, false})
     end.
 
 %% @doc Return the number of partitions in a given `chashbin'
@@ -193,8 +204,8 @@ itr_next(Itr = #iterator{pos = Pos, start = Start,
                          chbin = CHBin}) ->
     Pos2 = (Pos + 1) rem CHBin#chashbin.size,
     case Pos2 of
-      Start -> done;
-      _ -> Itr#iterator{pos = Pos2}
+        Start -> done;
+        _ -> Itr#iterator{pos = Pos2}
     end.
 
 %% @doc
@@ -208,21 +219,21 @@ itr_pop(N, Itr = #iterator{pos = Pos, chbin = CHBin}) ->
     #chashbin{size = Size, owners = Bin, nodes = Nodes} =
         CHBin,
     L = case Bin of
-          <<_:Pos/binary-unit:176, Bin2:N/binary-unit:176,
-            _/binary>> ->
-              [{Idx, element(Id, Nodes)}
-               || <<Idx:160/integer, Id:16/integer>> <= Bin2];
-          _ ->
-              Left = N + Pos - Size,
-              Skip = Pos - Left,
-              <<Bin3:Left/binary-unit:176, _:Skip/binary-unit:176,
-                Bin2/binary>> =
-                  Bin,
-              L1 = [{Idx, element(Id, Nodes)}
-                    || <<Idx:160/integer, Id:16/integer>> <= Bin2],
-              L2 = [{Idx, element(Id, Nodes)}
-                    || <<Idx:160/integer, Id:16/integer>> <= Bin3],
-              L1 ++ L2
+            <<_:Pos/binary-unit:176, Bin2:N/binary-unit:176,
+              _/binary>> ->
+                [{Idx, element(Id, Nodes)}
+                 || <<Idx:160/integer, Id:16/integer>> <= Bin2];
+            _ ->
+                Left = N + Pos - Size,
+                Skip = Pos - Left,
+                <<Bin3:Left/binary-unit:176, _:Skip/binary-unit:176,
+                  Bin2/binary>> =
+                    Bin,
+                L1 = [{Idx, element(Id, Nodes)}
+                      || <<Idx:160/integer, Id:16/integer>> <= Bin2],
+                L2 = [{Idx, element(Id, Nodes)}
+                      || <<Idx:160/integer, Id:16/integer>> <= Bin3],
+                L1 ++ L2
         end,
     Pos2 = (Pos + N) rem Size,
     Itr2 = Itr#iterator{pos = Pos2},
@@ -234,8 +245,8 @@ itr_pop(N, Itr = #iterator{pos = Pos, chbin = CHBin}) ->
 
 itr_next_while(Pred, Itr) ->
     case Pred(itr_value(Itr)) of
-      false -> Itr;
-      true -> itr_next_while(Pred, itr_next(Itr))
+        false -> Itr;
+        true -> itr_next_while(Pred, itr_next(Itr))
     end.
 
 %% ===================================================================
@@ -261,4 +272,5 @@ create_bin([{Idx, Owner} | Owners], Nodes, Bin) ->
 index_position(<<Idx:160/integer>>, CHBin) ->
     index_position(Idx, CHBin);
 index_position(Idx, #chashbin{size = Size}) ->
-    Inc = chash:ring_increment(Size), Idx div Inc rem Size.
+    Inc = chash:ring_increment(Size),
+    Idx div Inc rem Size.

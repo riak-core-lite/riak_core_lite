@@ -22,7 +22,6 @@
 
 -module(riak_core_app).
 
-
 -behaviour(application).
 
 %% Application callbacks
@@ -51,7 +50,8 @@ start(_StartType, _StartArgs) ->
 -spec stop(State :: term()) -> ok.
 
 stop(_State) ->
-    logger:info("Stopped application riak_core", []), ok.
+    logger:info("Stopped application riak_core", []),
+    ok.
 
 %% @doc Start all application dependencies and try to read the ring directory.
 %% @returns `ok' if the directory exists and can be written to.
@@ -65,13 +65,13 @@ validate_ring_state_directory_exists() ->
     case filelib:ensure_dir(filename:join(RingStateDir,
                                           "dummy"))
         of
-      ok -> ok;
-      {error, RingReason} ->
-          logger:critical("Ring state directory ~p does not exist, "
-                          "and could not be created: ~p",
-                          [RingStateDir,
-                           riak_core_util:posix_error(RingReason)]),
-          throw({error, invalid_ring_state_dir})
+        ok -> ok;
+        {error, RingReason} ->
+            logger:critical("Ring state directory ~p does not exist, "
+                            "and could not be created: ~p",
+                            [RingStateDir,
+                             riak_core_util:posix_error(RingReason)]),
+            throw({error, invalid_ring_state_dir})
     end.
 
 %% @doc Start the riak_core supervisor and register the ring event handler.
@@ -84,11 +84,11 @@ validate_ring_state_directory_exists() ->
 start_riak_core_sup() ->
     %% Spin up the supervisor; prune ring files as necessary
     case riak_core_sup:start_link() of
-      {ok, Pid} ->
-          ok = register_applications(),
-          ok = add_ring_event_handler(),
-          {ok, Pid};
-      {error, Reason} -> {error, Reason}
+        {ok, Pid} ->
+            ok = register_applications(),
+            ok = add_ring_event_handler(),
+            {ok, Pid};
+        {error, Reason} -> {error, Reason}
     end.
 
 %% @doc Currently NoOp.

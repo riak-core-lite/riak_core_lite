@@ -21,25 +21,62 @@
 %% @doc Various functions that are useful throughout Riak.
 -module(riak_core_util).
 
--export([moment/0, make_tmp_dir/0, replace_file/2,
-         compare_dates/2, reload_all/1, integer_to_list/2,
-         unique_id_62/0, str_to_node/1, chash_key/1, chash_key/2,
-         chash_std_keyfun/1, chash_bucketonly_keyfun/1,
-         mkclientid/1, start_app_deps/1, build_tree/3,
-         orddict_delta/2, safe_rpc/4, safe_rpc/5,
-         rpc_every_member/4, rpc_every_member_ann/4, count/2,
-         keydelete/2, multi_keydelete/2, multi_keydelete/3,
-         compose/1, compose/2, pmap/2, pmap/3, multi_rpc/4,
-         multi_rpc/5, multi_rpc_ann/4, multi_rpc_ann/5,
-         multicall_ann/4, multicall_ann/5, shuffle/1, is_arch/1,
-         format_ip_and_port/2, peername/2, sockname/2, sha/1,
-         md5/1, make_fold_req/1, make_fold_req/2,
-         make_fold_req/4, make_newest_fold_req/1, proxy_spawn/1,
-         proxy/2, enable_job_class/1, enable_job_class/2,
-         disable_job_class/1, disable_job_class/2,
-         job_class_enabled/1, job_class_enabled/2,
+-export([moment/0,
+         make_tmp_dir/0,
+         replace_file/2,
+         compare_dates/2,
+         reload_all/1,
+         integer_to_list/2,
+         unique_id_62/0,
+         str_to_node/1,
+         chash_key/1,
+         chash_key/2,
+         chash_std_keyfun/1,
+         chash_bucketonly_keyfun/1,
+         mkclientid/1,
+         start_app_deps/1,
+         build_tree/3,
+         orddict_delta/2,
+         safe_rpc/4,
+         safe_rpc/5,
+         rpc_every_member/4,
+         rpc_every_member_ann/4,
+         count/2,
+         keydelete/2,
+         multi_keydelete/2,
+         multi_keydelete/3,
+         compose/1,
+         compose/2,
+         pmap/2,
+         pmap/3,
+         multi_rpc/4,
+         multi_rpc/5,
+         multi_rpc_ann/4,
+         multi_rpc_ann/5,
+         multicall_ann/4,
+         multicall_ann/5,
+         shuffle/1,
+         is_arch/1,
+         format_ip_and_port/2,
+         peername/2,
+         sockname/2,
+         sha/1,
+         md5/1,
+         make_fold_req/1,
+         make_fold_req/2,
+         make_fold_req/4,
+         make_newest_fold_req/1,
+         proxy_spawn/1,
+         proxy/2,
+         enable_job_class/1,
+         enable_job_class/2,
+         disable_job_class/1,
+         disable_job_class/2,
+         job_class_enabled/1,
+         job_class_enabled/2,
          job_class_disabled_message/2,
-         report_job_request_disposition/6, get_index_n/1,
+         report_job_request_disposition/6,
+         get_index_n/1,
          posix_error/1]).
 
 -include("riak_core_vnode.hrl").
@@ -55,7 +92,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([counter_loop/1, incr_counter/1,
+-export([counter_loop/1,
+         incr_counter/1,
          decr_counter/1]).
 
 -endif.
@@ -77,9 +115,9 @@
 
 posix_error(Error) ->
     case erl_posix_msg:message(Error) of
-      "unknown POSIX error" ->
-          lists:flatten(io_lib:format("~p", [Error]));
-      Message -> Message
+        "unknown POSIX error" ->
+            lists:flatten(io_lib:format("~p", [Error]));
+        Message -> Message
     end.
 
 %% @spec moment() -> integer()
@@ -119,8 +157,10 @@ make_tmp_dir() ->
                           [erlang:phash2({rand:uniform(), self()})]),
     TempDir = filename:join("/tmp", TmpId),
     case filelib:is_dir(TempDir) of
-      true -> make_tmp_dir();
-      false -> ok = file:make_dir(TempDir), TempDir
+        true -> make_tmp_dir();
+        false ->
+            ok = file:make_dir(TempDir),
+            TempDir
     end.
 
 %% @doc Atomically/safely (to some reasonable level of durablity)
@@ -133,18 +173,18 @@ make_tmp_dir() ->
 replace_file(FN, Data) ->
     TmpFN = FN ++ ".tmp",
     case file:open(TmpFN, [write, raw]) of
-      {ok, FH} ->
-          try ok = file:write(FH, Data),
-              ok = file:sync(FH),
-              ok = file:close(FH),
-              ok = file:rename(TmpFN, FN),
-              {ok, Contents} = read_file(FN),
-              true = Contents == iolist_to_binary(Data),
-              ok
-          catch
-            _:Err -> {error, Err}
-          end;
-      Err -> Err
+        {ok, FH} ->
+            try ok = file:write(FH, Data),
+                ok = file:sync(FH),
+                ok = file:close(FH),
+                ok = file:rename(TmpFN, FN),
+                {ok, Contents} = read_file(FN),
+                true = Contents == iolist_to_binary(Data),
+                ok
+            catch
+                _:Err -> {error, Err}
+            end;
+        Err -> Err
     end.
 
 %% @doc Similar to {@link file:read_file/1} but uses raw file `I/O'
@@ -156,8 +196,8 @@ read_file(FName) ->
 
 read_file(FD, Acc) ->
     case file:read(FD, 4096) of
-      {ok, Data} -> read_file(FD, [Data | Acc]);
-      eof -> lists:reverse(Acc)
+        {ok, Data} -> read_file(FD, [Data | Acc]);
+        eof -> lists:reverse(Acc)
     end.
 
 %% @spec integer_to_list(Integer :: integer(), Base :: integer()) ->
@@ -221,8 +261,16 @@ reload_all(Module) ->
 mkclientid(RemoteNode) ->
     {{Y, Mo, D}, {H, Mi, S}} = erlang:universaltime(),
     {_, _, NowPart} = os:timestamp(),
-    Id = erlang:phash2([Y, Mo, D, H, Mi, S, node(),
-                        RemoteNode, NowPart, self()]),
+    Id = erlang:phash2([Y,
+                        Mo,
+                        D,
+                        H,
+                        Mi,
+                        S,
+                        node(),
+                        RemoteNode,
+                        NowPart,
+                        self()]),
     <<Id:32>>.
 
 %% @spec chash_key(BKey :: riak_object:bkey()) -> chash:index()
@@ -253,21 +301,21 @@ str_to_node(Node) when is_atom(Node) ->
     str_to_node(atom_to_list(Node));
 str_to_node(NodeStr) ->
     case string:tokens(NodeStr, "@") of
-      [NodeName] ->
-          %% Node name only; no host name. If the local node has a hostname,
-          %% append it
-          case node_hostname() of
-            [] -> list_to_atom(NodeName);
-            Hostname -> list_to_atom(NodeName ++ "@" ++ Hostname)
-          end;
-      _ -> list_to_atom(NodeStr)
+        [NodeName] ->
+            %% Node name only; no host name. If the local node has a hostname,
+            %% append it
+            case node_hostname() of
+                [] -> list_to_atom(NodeName);
+                Hostname -> list_to_atom(NodeName ++ "@" ++ Hostname)
+            end;
+        _ -> list_to_atom(NodeStr)
     end.
 
 node_hostname() ->
     NodeStr = atom_to_list(node()),
     case string:tokens(NodeStr, "@") of
-      [_NodeName, Hostname] -> Hostname;
-      _ -> []
+        [_NodeName, Hostname] -> Hostname;
+        _ -> []
     end.
 
 %% @spec start_app_deps(App :: atom()) -> ok
@@ -281,8 +329,8 @@ start_app_deps(App) ->
 %% @doc Start the named application if not already started.
 ensure_started(App) ->
     case application:start(App) of
-      ok -> ok;
-      {error, {already_started, App}} -> ok
+        ok -> ok;
+        {error, {already_started, App}} -> ok
     end.
 
 %% @doc Applies `Pred' to each element in `List', and returns a count of how many
@@ -293,8 +341,8 @@ ensure_started(App) ->
 count(Pred, List) ->
     FoldFun = fun (E, A) ->
                       case Pred(E) of
-                        false -> A;
-                        true -> A + 1
+                          false -> A;
+                          true -> A + 1
                       end
               end,
     lists:foldl(FoldFun, 0, List).
@@ -325,7 +373,8 @@ multi_keydelete(KeysToDelete, N, TupleList) ->
     lists:foldl(fun (Key, Acc) ->
                         lists:keydelete(Key, N, Acc)
                 end,
-                TupleList, KeysToDelete).
+                TupleList,
+                KeysToDelete).
 
 %% @doc Function composition: returns a function that is the composition of
 %% `F' and `G'.
@@ -359,14 +408,20 @@ pmap(F, L) ->
                         spawn_link(fun () -> Parent ! {pmap, N, F(X)} end),
                         N + 1
                 end,
-                0, L),
+                0,
+                L),
     L2 = [receive {pmap, N, R} -> {N, R} end || _ <- L],
     L3 = lists:keysort(1, L2),
     [R || {_, R} <- L3].
 
 -record(pmap_acc,
-        {mapper, fn, n_pending = 0, pending = sets:new(),
-         n_done = 0, done = [], max_concurrent = 1}).
+        {mapper,
+         fn,
+         n_pending = 0,
+         pending = sets:new(),
+         n_done = 0,
+         done = [],
+         max_concurrent = 1}).
 
 %% @doc Parallel map with a cap on the number of concurrent worker processes.
 %% Note: Worker processes are linked to the parent, so a crash propagates.
@@ -414,21 +469,21 @@ pmap_worker(X,
 %% @doc Waits for one pending pmap task to finish
 pmap_collect_one(Pending) ->
     receive
-      {pmap_result, Pid, Result} ->
-          Size = sets:size(Pending),
-          NewPending = sets:del_element(Pid, Pending),
-          case sets:size(NewPending) of
-            Size -> pmap_collect_one(Pending);
-            _ -> {Result, NewPending}
-          end
+        {pmap_result, Pid, Result} ->
+            Size = sets:size(Pending),
+            NewPending = sets:del_element(Pid, Pending),
+            case sets:size(NewPending) of
+                Size -> pmap_collect_one(Pending);
+                _ -> {Result, NewPending}
+            end
     end.
 
 pmap_collect_rest(Pending, Done) ->
     case sets:size(Pending) of
-      0 -> Done;
-      _ ->
-          {Result, NewPending} = pmap_collect_one(Pending),
-          pmap_collect_rest(NewPending, [Result | Done])
+        0 -> Done;
+        _ ->
+            {Result, NewPending} = pmap_collect_one(Pending),
+            pmap_collect_rest(NewPending, [Result | Done])
     end.
 
 %% @doc Wraps an rpc:call/4 in a try/catch to handle the case where the
@@ -442,10 +497,10 @@ pmap_collect_rest(Pending, Done) ->
 
 safe_rpc(Node, Module, Function, Args) ->
     try rpc:call(Node, Module, Function, Args) of
-      Result -> Result
+        Result -> Result
     catch
-      exit:{noproc, _NoProcDetails} ->
-          {badrpc, rpc_process_down}
+        exit:{noproc, _NoProcDetails} ->
+            {badrpc, rpc_process_down}
     end.
 
 %% @doc Wraps an rpc:call/5 in a try/catch to handle the case where the
@@ -458,10 +513,10 @@ safe_rpc(Node, Module, Function, Args) ->
 
 safe_rpc(Node, Module, Function, Args, Timeout) ->
     try rpc:call(Node, Module, Function, Args, Timeout) of
-      Result -> Result
+        Result -> Result
     catch
-      'EXIT':{noproc, _NoProcDetails} ->
-          {badrpc, rpc_process_down}
+        'EXIT':{noproc, _NoProcDetails} ->
+            {badrpc, rpc_process_down}
     end.
 
 %% @spec rpc_every_member(atom(), atom(), [term()], integer()|infinity)
@@ -479,8 +534,11 @@ rpc_every_member(Module, Function, Args, Timeout) ->
 rpc_every_member_ann(Module, Function, Args, Timeout) ->
     {ok, MyRing} = riak_core_ring_manager:get_my_ring(),
     Nodes = riak_core_ring:all_members(MyRing),
-    {Results, Down} = multicall_ann(Nodes, Module, Function,
-                                    Args, Timeout),
+    {Results, Down} = multicall_ann(Nodes,
+                                    Module,
+                                    Function,
+                                    Args,
+                                    Timeout),
     {Results, Down}.
 
 %% @doc Perform an RPC call to a list of nodes in parallel, returning the
@@ -564,9 +622,9 @@ multicall_ann(Nodes, Mod, Fun, Args, Timeout) ->
 
 build_tree(N, Nodes, Opts) ->
     case lists:member(cycles, Opts) of
-      true ->
-          Expand = lists:flatten(lists:duplicate(N + 1, Nodes));
-      false -> Expand = Nodes
+        true ->
+            Expand = lists:flatten(lists:duplicate(N + 1, Nodes));
+        false -> Expand = Nodes
     end,
     {Tree, _} = lists:foldl(fun (Elm, {Result, Worklist}) ->
                                     Len = erlang:min(N, length(Worklist)),
@@ -575,22 +633,26 @@ build_tree(N, Nodes, Opts) ->
                                     NewResult = [{Elm, Children} | Result],
                                     {NewResult, Rest}
                             end,
-                            {[], tl(Expand)}, Nodes),
+                            {[], tl(Expand)},
+                            Nodes),
     orddict:from_list(Tree).
 
 orddict_delta(A, B) ->
     %% Pad both A and B to the same length
     DummyA = [{Key, '$none'} || {Key, _} <- B],
-    A2 = orddict:merge(fun (_, Value, _) -> Value end, A,
+    A2 = orddict:merge(fun (_, Value, _) -> Value end,
+                       A,
                        DummyA),
     DummyB = [{Key, '$none'} || {Key, _} <- A],
-    B2 = orddict:merge(fun (_, Value, _) -> Value end, B,
+    B2 = orddict:merge(fun (_, Value, _) -> Value end,
+                       B,
                        DummyB),
     %% Merge and filter out equal values
     Merged = orddict:merge(fun (_, AVal, BVal) ->
                                    {AVal, BVal}
                            end,
-                           A2, B2),
+                           A2,
+                           B2),
     Diff = orddict:filter(fun (_, {_Same, _Same}) -> false;
                               (_, _) -> true
                           end,
@@ -628,18 +690,18 @@ format_ip_and_port(Ip, Port) when is_tuple(Ip) ->
 
 peername(Socket, Module) ->
     case Module:peername(Socket) of
-      {ok, {Ip, Port}} -> format_ip_and_port(Ip, Port);
-      {error, Reason} ->
-          %% just return a string so JSON doesn't blow up
-          lists:flatten(io_lib:format("error:~p", [Reason]))
+        {ok, {Ip, Port}} -> format_ip_and_port(Ip, Port);
+        {error, Reason} ->
+            %% just return a string so JSON doesn't blow up
+            lists:flatten(io_lib:format("error:~p", [Reason]))
     end.
 
 sockname(Socket, Module) ->
     case Module:sockname(Socket) of
-      {ok, {Ip, Port}} -> format_ip_and_port(Ip, Port);
-      {error, Reason} ->
-          %% just return a string so JSON doesn't blow up
-          lists:flatten(io_lib:format("error:~p", [Reason]))
+        {ok, {Ip, Port}} -> format_ip_and_port(Ip, Port);
+        {error, Reason} ->
+            %% just return a string so JSON doesn't blow up
+            lists:flatten(io_lib:format("error:~p", [Reason]))
     end.
 
 %% @doc Convert a #riak_core_fold_req_v? record to the cluster's maximum
@@ -677,16 +739,17 @@ proxy_spawn(Fun) ->
     MRef = monitor(process, Pid),
     Pid ! {proxy, MRef},
     receive
-      {proxy_reply, MRef, Result} ->
-          demonitor(MRef, [flush]), Result;
-      {'DOWN', MRef, _, _, Reason} -> {error, Reason}
+        {proxy_reply, MRef, Result} ->
+            demonitor(MRef, [flush]),
+            Result;
+        {'DOWN', MRef, _, _, Reason} -> {error, Reason}
     end.
 
 %% @private
 make_fold_reqv(_, FoldFun, Acc0, Forwardable, Opts)
     when is_function(FoldFun, 3) andalso
-           (Forwardable == true orelse Forwardable == false)
-             andalso is_list(Opts) ->
+             (Forwardable == true orelse Forwardable == false)
+                 andalso is_list(Opts) ->
     #riak_core_fold_req_v2{foldfun = FoldFun, acc0 = Acc0,
                            forwardable = Forwardable, opts = Opts}.
 
@@ -694,9 +757,10 @@ make_fold_reqv(_, FoldFun, Acc0, Forwardable, Opts)
 proxy(Parent, Fun) ->
     _ = monitor(process, Parent),
     receive
-      {proxy, MRef} ->
-          Result = Fun(), Parent ! {proxy_reply, MRef, Result};
-      {'DOWN', _, _, _, _} -> ok
+        {proxy, MRef} ->
+            Result = Fun(),
+            Parent ! {proxy_reply, MRef, Result};
+        {'DOWN', _, _, _, _} -> ok
     end.
 
 -spec enable_job_class(atom(), atom()) -> ok |
@@ -708,7 +772,7 @@ proxy(Parent, Fun) ->
 %% or its complement disable_job_class/2.
 enable_job_class(Application, Operation)
     when erlang:is_atom(Application) andalso
-           erlang:is_atom(Operation) ->
+             erlang:is_atom(Operation) ->
     enable_job_class({Application, Operation});
 enable_job_class(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
@@ -722,7 +786,7 @@ enable_job_class(Application, Operation) ->
 %% or its complement enable_job_class/2.
 disable_job_class(Application, Operation)
     when erlang:is_atom(Application) andalso
-           erlang:is_atom(Operation) ->
+             erlang:is_atom(Operation) ->
     disable_job_class({Application, Operation});
 disable_job_class(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
@@ -734,7 +798,7 @@ disable_job_class(Application, Operation) ->
 %% This is the public API for use via RPC.
 job_class_enabled(Application, Operation)
     when erlang:is_atom(Application) andalso
-           erlang:is_atom(Operation) ->
+             erlang:is_atom(Operation) ->
     job_class_enabled({Application, Operation});
 job_class_enabled(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
@@ -748,19 +812,22 @@ job_class_enabled(Application, Operation) ->
 %% * Parameter types ARE NOT validated by the same rules as the public API!
 %% You are STRONGLY advised to use enable_job_class/2.
 enable_job_class(Class) ->
-    case application:get_env(riak_core, job_accept_class,
+    case application:get_env(riak_core,
+                             job_accept_class,
                              undefined)
         of
-      [_ | _] = EnabledClasses ->
-          case lists:member(Class, EnabledClasses) of
-            true -> ok;
-            _ ->
-                application:set_env(riak_core, job_accept_class,
-                                    [Class | EnabledClasses])
-          end;
-      _ ->
-          application:set_env(riak_core, job_accept_class,
-                              [Class])
+        [_ | _] = EnabledClasses ->
+            case lists:member(Class, EnabledClasses) of
+                true -> ok;
+                _ ->
+                    application:set_env(riak_core,
+                                        job_accept_class,
+                                        [Class | EnabledClasses])
+            end;
+        _ ->
+            application:set_env(riak_core,
+                                job_accept_class,
+                                [Class])
     end.
 
 -spec disable_job_class(Class :: term()) -> ok |
@@ -772,17 +839,19 @@ enable_job_class(Class) ->
 %% * Parameter types ARE NOT validated by the same rules as the public API!
 %% You are STRONGLY advised to use disable_job_class/2.
 disable_job_class(Class) ->
-    case application:get_env(riak_core, job_accept_class,
+    case application:get_env(riak_core,
+                             job_accept_class,
                              undefined)
         of
-      [_ | _] = EnabledClasses ->
-          case lists:member(Class, EnabledClasses) of
-            false -> ok;
-            _ ->
-                application:set_env(riak_core, job_accept_class,
-                                    lists:delete(Class, EnabledClasses))
-          end;
-      _ -> ok
+        [_ | _] = EnabledClasses ->
+            case lists:member(Class, EnabledClasses) of
+                false -> ok;
+                _ ->
+                    application:set_env(riak_core,
+                                        job_accept_class,
+                                        lists:delete(Class, EnabledClasses))
+            end;
+        _ -> ok
     end.
 
 -spec job_class_enabled(Class :: term()) -> boolean().
@@ -793,22 +862,23 @@ disable_job_class(Class) ->
 %% * Parameter types ARE NOT validated by the same rules as the public API!
 %% You are STRONGLY advised to use job_class_enabled/2.
 job_class_enabled(Class) ->
-    case application:get_env(riak_core, job_accept_class,
+    case application:get_env(riak_core,
+                             job_accept_class,
                              undefined)
         of
-      undefined -> true;
-      [] -> false;
-      [_ | _] = EnabledClasses ->
-          lists:member(Class, EnabledClasses);
-      Other ->
-          % Don't crash if it's not a list - that should never be the case,
-          % but since the value *can* be manipulated externally be more
-          % accommodating. If someone mucks it up, nothing's going to be
-          % allowed, but give them a chance to catch on instead of crashing.
-          _ = logger:error("riak_core.job_accept_class is not a "
-                           "list: ~p",
-                           [Other]),
-          false
+        undefined -> true;
+        [] -> false;
+        [_ | _] = EnabledClasses ->
+            lists:member(Class, EnabledClasses);
+        Other ->
+            % Don't crash if it's not a list - that should never be the case,
+            % but since the value *can* be manipulated externally be more
+            % accommodating. If someone mucks it up, nothing's going to be
+            % allowed, but give them a chance to catch on instead of crashing.
+            _ = logger:error("riak_core.job_accept_class is not a "
+                             "list: ~p",
+                             [Other]),
+            false
     end.
 
 -spec job_class_disabled_message(ReturnType :: atom(),
@@ -890,51 +960,89 @@ clientid_uniqueness_test() ->
     ClientIds = [mkclientid(somenode@somehost)
                  || _I <- lists:seq(0, 10000)],
     length(ClientIds) =:=
-      length(sets:to_list(sets:from_list(ClientIds))).
+        length(sets:to_list(sets:from_list(ClientIds))).
 
 build_tree_test() ->
-    Flat = [1, 11, 12, 111, 112, 121, 122, 1111, 1112, 1121,
-            1122, 1211, 1212, 1221, 1222],
+    Flat = [1,
+            11,
+            12,
+            111,
+            112,
+            121,
+            122,
+            1111,
+            1112,
+            1121,
+            1122,
+            1211,
+            1212,
+            1221,
+            1222],
     %% 2-ary tree decomposition
-    ATree = [{1, [11, 12]}, {11, [111, 112]},
-             {12, [121, 122]}, {111, [1111, 1112]},
-             {112, [1121, 1122]}, {121, [1211, 1212]},
-             {122, [1221, 1222]}, {1111, []}, {1112, []}, {1121, []},
-             {1122, []}, {1211, []}, {1212, []}, {1221, []},
+    ATree = [{1, [11, 12]},
+             {11, [111, 112]},
+             {12, [121, 122]},
+             {111, [1111, 1112]},
+             {112, [1121, 1122]},
+             {121, [1211, 1212]},
+             {122, [1221, 1222]},
+             {1111, []},
+             {1112, []},
+             {1121, []},
+             {1122, []},
+             {1211, []},
+             {1212, []},
+             {1221, []},
              {1222, []}],
     %% 2-ary tree decomposition with cyclic wrap-around
-    CTree = [{1, [11, 12]}, {11, [111, 112]},
-             {12, [121, 122]}, {111, [1111, 1112]},
-             {112, [1121, 1122]}, {121, [1211, 1212]},
-             {122, [1221, 1222]}, {1111, [1, 11]}, {1112, [12, 111]},
-             {1121, [112, 121]}, {1122, [122, 1111]},
-             {1211, [1112, 1121]}, {1212, [1122, 1211]},
-             {1221, [1212, 1221]}, {1222, [1222, 1]}],
+    CTree = [{1, [11, 12]},
+             {11, [111, 112]},
+             {12, [121, 122]},
+             {111, [1111, 1112]},
+             {112, [1121, 1122]},
+             {121, [1211, 1212]},
+             {122, [1221, 1222]},
+             {1111, [1, 11]},
+             {1112, [12, 111]},
+             {1121, [112, 121]},
+             {1122, [122, 1111]},
+             {1211, [1112, 1121]},
+             {1212, [1122, 1211]},
+             {1221, [1212, 1221]},
+             {1222, [1222, 1]}],
     ?assertEqual(ATree, (build_tree(2, Flat, []))),
     ?assertEqual(CTree, (build_tree(2, Flat, [cycles]))),
     ok.
 
 counter_loop(N) ->
     receive
-      {up, Pid} ->
-          N2 = N + 1, Pid ! {counter_value, N2}, counter_loop(N2);
-      down -> counter_loop(N - 1);
-      exit -> exit(normal)
+        {up, Pid} ->
+            N2 = N + 1,
+            Pid ! {counter_value, N2},
+            counter_loop(N2);
+        down -> counter_loop(N - 1);
+        exit -> exit(normal)
     end.
 
 incr_counter(CounterPid) ->
     CounterPid ! {up, self()},
     receive
-      {counter_value, N} -> N after 3000 -> ?assert(false)
+        {counter_value, N} -> N after 3000 -> ?assert(false)
     end.
 
 decr_counter(CounterPid) -> CounterPid ! down.
 
 multi_keydelete_test_() ->
-    Languages = [{lisp, 1958}, {ml, 1973}, {erlang, 1986},
-                 {haskell, 1990}, {ocaml, 1996}, {clojure, 2007},
+    Languages = [{lisp, 1958},
+                 {ml, 1973},
+                 {erlang, 1986},
+                 {haskell, 1990},
+                 {ocaml, 1996},
+                 {clojure, 2007},
                  {elixir, 2012}],
-    ?_assertMatch([{lisp, _}, {ml, _}, {erlang, _},
+    ?_assertMatch([{lisp, _},
+                   {ml, _},
+                   {erlang, _},
                    {haskell, _}],
                   (multi_keydelete([ocaml, clojure, elixir], Languages))).
 
@@ -946,7 +1054,8 @@ compose_test_() ->
     Increment = fun (N) when is_integer(N) -> N + 1 end,
     Double = fun (N) when is_integer(N) -> N * 2 end,
     Square = fun (N) when is_integer(N) -> N * N end,
-    SquareDoubleIncrement = compose([Increment, Double,
+    SquareDoubleIncrement = compose([Increment,
+                                     Double,
                                      Square]),
     CompatibleTypes = compose(Increment,
                               fun (X) when is_list(X) -> list_to_integer(X)
@@ -971,7 +1080,8 @@ pmap_test_() ->
            end,
     Lin = [1, 2, 3, 4],
     Lout = [2, 4, 6, 8],
-    {setup, fun () -> error_logger:tty(false) end,
+    {setup,
+     fun () -> error_logger:tty(false) end,
      fun (_) -> error_logger:tty(true) end,
      [fun () ->
               % Test simple map case
@@ -988,8 +1098,8 @@ pmap_test_() ->
                           end),
               MonRef = monitor(process, Pid),
               receive
-                {'DOWN', MonRef, _, _, _} -> ok;
-                no_crash_yo -> ?assert(pmap_did_not_crash_as_expected)
+                  {'DOWN', MonRef, _, _, _} -> ok;
+                  no_crash_yo -> ?assert(pmap_did_not_crash_as_expected)
               end
       end]}.
 
@@ -999,7 +1109,7 @@ bounded_pmap_test_() ->
                     GFun = fun (Max) ->
                                    fun (X) ->
                                            ?assert((incr_counter(CountPid) =<
-                                                      Max)),
+                                                        Max)),
                                            timer:sleep(1),
                                            decr_counter(CountPid),
                                            Fun1(X)
@@ -1007,7 +1117,8 @@ bounded_pmap_test_() ->
                            end,
                     [fun () ->
                              ?assertEqual((lists:seq(Fun1(1), Fun1(N))),
-                                          (pmap(GFun(MaxP), lists:seq(1, N),
+                                          (pmap(GFun(MaxP),
+                                                lists:seq(1, N),
                                                 MaxP)))
                      end
                      || MaxP <- lists:seq(1, 20), N <- lists:seq(0, 10)]
@@ -1021,11 +1132,11 @@ bounded_pmap_test_() ->
      fun (Pid) ->
              Pid ! exit,
              receive
-               {'DOWN', _Ref, process, Pid, _Info} -> ok
-               after 3000 ->
-                         ?debugMsg("pmap counter process did not go down "
-                                   "in time"),
-                         ?assert(false)
+                 {'DOWN', _Ref, process, Pid, _Info} -> ok
+                 after 3000 ->
+                           ?debugMsg("pmap counter process did not go down "
+                                     "in time"),
+                           ?assert(false)
              end,
              ok
      end,
@@ -1038,10 +1149,10 @@ proxy_spawn_test() ->
     ?assertEqual({error, killer_fun}, B),
     %% Ensure no errant 'DOWN' messages
     receive
-      {'DOWN', _, _, _, _} = Msg ->
-          throw({error, {badmsg, Msg}});
-      _ -> ok
-      after 1000 -> ok
+        {'DOWN', _, _, _, _} = Msg ->
+            throw({error, {badmsg, Msg}});
+        _ -> ok
+        after 1000 -> ok
     end.
 
 -ifdef(PROPER).
@@ -1052,7 +1163,7 @@ count_test() ->
 prop_count_correct() ->
     ?FORALL(List, (list(bool())),
             (count(fun (E) -> E end, List) =:=
-               length([E || E <- List, E]))).
+                 length([E || E <- List, E]))).
 
 -endif. %% EQC
 

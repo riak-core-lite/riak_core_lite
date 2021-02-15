@@ -21,9 +21,15 @@
 %% -------------------------------------------------------------------
 -module(riak_core).
 
-
--export([stop/0, stop/1, join/1, join/4, staged_join/1,
-         remove/1, down/1, leave/0, remove_from_cluster/1]).
+-export([stop/0,
+         stop/1,
+         join/1,
+         join/4,
+         staged_join/1,
+         remove/1,
+         down/1,
+         leave/0,
+         remove_from_cluster/1]).
 
 -export([vnode_modules/0, health_check/1]).
 
@@ -83,9 +89,12 @@ stop(Reason) ->
 %% @returns `ok' on successful join, `{error, Reason}' otherwise.
 -spec join(Node :: node()) -> ok |
                               {error,
-                               self_join | not_reachable |
-                               unable_to_get_join_ring | node_still_starting |
-                               not_single_node | different_ring_sizes}.
+                               self_join |
+                               not_reachable |
+                               unable_to_get_join_ring |
+                               node_still_starting |
+                               not_single_node |
+                               different_ring_sizes}.
 
 join(Node) -> join(Node, false).
 
@@ -97,9 +106,11 @@ join(Node) -> join(Node, false).
 %% @see riak_core_claimant.
 -spec staged_join(Node :: node()) -> ok |
                                      {error,
-                                      self_join | not_reachable |
+                                      self_join |
+                                      not_reachable |
                                       unable_to_get_join_ring |
-                                      node_still_starting | not_single_node |
+                                      node_still_starting |
+                                      not_single_node |
                                       different_ring_sizes}.
 
 staged_join(Node) -> join(Node, false).
@@ -111,9 +122,11 @@ staged_join(Node) -> join(Node, false).
 -spec join(NodeStr :: atom() | string(),
            Auto :: boolean()) -> ok |
                                  {error,
-                                  self_join | not_reachable |
+                                  self_join |
+                                  not_reachable |
                                   unable_to_get_join_ring |
-                                  node_still_starting | not_single_node |
+                                  node_still_starting |
+                                  not_single_node |
                                   different_ring_sizes}.
 
 join(NodeStr, Auto) when is_list(NodeStr) ->
@@ -128,9 +141,11 @@ join(Node, Auto) when is_atom(Node) ->
 -spec join(JoiningNode :: node(), JoinedNode :: node(),
            Auto :: boolean()) -> ok |
                                  {error,
-                                  self_join | not_reachable |
+                                  self_join |
+                                  not_reachable |
                                   unable_to_get_join_ring |
-                                  node_still_starting | not_single_node |
+                                  node_still_starting |
+                                  not_single_node |
                                   different_ring_sizes}.
 
 join(Node, Node, _) -> {error, self_join};
@@ -150,8 +165,8 @@ join(_, Node, Auto) -> join(node(), Node, false, Auto).
 
 join(_, Node, Rejoin, Auto) ->
     case net_adm:ping(Node) of
-      pang -> {error, not_reachable};
-      pong -> standard_join(Node, Rejoin, Auto)
+        pang -> {error, not_reachable};
+        pong -> standard_join(Node, Rejoin, Auto)
     end.
 
 %% @private
@@ -164,8 +179,10 @@ join(_, Node, Rejoin, Auto) ->
                                         {badrpc, rpc_process_down}.
 
 get_other_ring(Node) ->
-    riak_core_util:safe_rpc(Node, riak_core_ring_manager,
-                            get_raw_ring, []).
+    riak_core_util:safe_rpc(Node,
+                            riak_core_ring_manager,
+                            get_raw_ring,
+                            []).
 
 %% @private
 %% @doc Join the ring of the given node locally and distribute the new ring.
@@ -185,12 +202,12 @@ get_other_ring(Node) ->
 
 standard_join(Node, Rejoin, Auto) when is_atom(Node) ->
     case net_adm:ping(Node) of
-      pong ->
-          case get_other_ring(Node) of
-            {ok, Ring} -> standard_join(Node, Ring, Rejoin, Auto);
-            _ -> {error, unable_to_get_join_ring}
-          end;
-      pang -> {error, not_reachable}
+        pong ->
+            case get_other_ring(Node) of
+                {ok, Ring} -> standard_join(Node, Ring, Rejoin, Auto);
+                _ -> {error, unable_to_get_join_ring}
+            end;
+        pang -> {error, not_reachable}
     end.
 
 %% @private
@@ -221,22 +238,25 @@ standard_join(Node, Ring, Rejoin, Auto) ->
     {ok, MyRing} = riak_core_ring_manager:get_raw_ring(),
     InitComplete = init_complete(init:get_status()),
     SameSize = riak_core_ring:num_partitions(MyRing) =:=
-                 riak_core_ring:num_partitions(Ring),
+                   riak_core_ring:num_partitions(Ring),
     Singleton = [node()] =:=
-                  riak_core_ring:all_members(MyRing),
+                    riak_core_ring:all_members(MyRing),
     case {InitComplete, Rejoin or Singleton, SameSize} of
-      {false, _, _} -> {error, node_still_starting};
-      {_, false, _} -> {error, not_single_node};
-      {_, _, false} -> {error, different_ring_sizes};
-      _ ->
-          Ring2 = riak_core_ring:add_member(node(), Ring, node()),
-          Ring3 = riak_core_ring:set_owner(Ring2, node()),
-          Ring4 = riak_core_ring:update_member_meta(node(), Ring3,
-                                                    node(), gossip_vsn, 2),
-          Ring5 = Ring4,
-          Ring6 = maybe_auto_join(Auto, node(), Ring5),
-          riak_core_ring_manager:set_my_ring(Ring6),
-          riak_core_gossip:send_ring(Node, node())
+        {false, _, _} -> {error, node_still_starting};
+        {_, false, _} -> {error, not_single_node};
+        {_, _, false} -> {error, different_ring_sizes};
+        _ ->
+            Ring2 = riak_core_ring:add_member(node(), Ring, node()),
+            Ring3 = riak_core_ring:set_owner(Ring2, node()),
+            Ring4 = riak_core_ring:update_member_meta(node(),
+                                                      Ring3,
+                                                      node(),
+                                                      gossip_vsn,
+                                                      2),
+            Ring5 = Ring4,
+            Ring6 = maybe_auto_join(Auto, node(), Ring5),
+            riak_core_ring_manager:set_my_ring(Ring6),
+            riak_core_gossip:send_ring(Node, node())
     end.
 
 %% @private
@@ -251,8 +271,11 @@ standard_join(Node, Ring, Rejoin, Auto) ->
 
 maybe_auto_join(false, _Node, Ring) -> Ring;
 maybe_auto_join(true, Node, Ring) ->
-    riak_core_ring:update_member_meta(Node, Ring, Node,
-                                      '$autojoin', true).
+    riak_core_ring:update_member_meta(Node,
+                                      Ring,
+                                      Node,
+                                      '$autojoin',
+                                      true).
 
 %% @doc Remove a node from the cluster and cause all owned partitions to be
 %%      redistributed.
@@ -266,9 +289,9 @@ remove(Node) ->
     case {riak_core_ring:all_members(Ring),
           riak_core_ring:member_status(Ring, Node)}
         of
-      {_, invalid} -> {error, not_member};
-      {[Node], _} -> {error, only_member};
-      _ -> standard_remove(Node)
+        {_, invalid} -> {error, not_member};
+        {[Node], _} -> {error, only_member};
+        _ -> standard_remove(Node)
     end.
 
 %% @private
@@ -301,27 +324,27 @@ standard_remove(Node) ->
 down(Node) ->
     {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
     case net_adm:ping(Node) of
-      pong -> {error, is_up};
-      pang ->
-          case {riak_core_ring:all_members(Ring),
-                riak_core_ring:member_status(Ring, Node)}
-              of
-            {_, invalid} -> {error, not_member};
-            {[Node], _} -> {error, only_member};
-            _ ->
-                riak_core_ring_manager:ring_trans(fun (Ring2, _) ->
-                                                          Ring3 =
-                                                              riak_core_ring:down_member(node(),
-                                                                                         Ring2,
-                                                                                         Node),
-                                                          Ring4 =
-                                                              riak_core_ring:ring_changed(node(),
-                                                                                          Ring3),
-                                                          {new_ring, Ring4}
-                                                  end,
-                                                  []),
-                ok
-          end
+        pong -> {error, is_up};
+        pang ->
+            case {riak_core_ring:all_members(Ring),
+                  riak_core_ring:member_status(Ring, Node)}
+                of
+                {_, invalid} -> {error, not_member};
+                {[Node], _} -> {error, only_member};
+                _ ->
+                    riak_core_ring_manager:ring_trans(fun (Ring2, _) ->
+                                                              Ring3 =
+                                                                  riak_core_ring:down_member(node(),
+                                                                                             Ring2,
+                                                                                             Node),
+                                                              Ring4 =
+                                                                  riak_core_ring:ring_changed(node(),
+                                                                                              Ring3),
+                                                              {new_ring, Ring4}
+                                                      end,
+                                                      []),
+                    ok
+            end
     end.
 
 %% @doc Leave the cluster with the local node.
@@ -335,10 +358,10 @@ leave() ->
     case {riak_core_ring:all_members(Ring),
           riak_core_ring:member_status(Ring, Node)}
         of
-      {_, invalid} -> {error, not_member};
-      {[Node], _} -> {error, only_member};
-      {_, valid} -> standard_leave(Node);
-      {_, _} -> {error, already_leaving}
+        {_, invalid} -> {error, not_member};
+        {[Node], _} -> {error, only_member};
+        {_, valid} -> standard_leave(Node);
+        {_, _} -> {error, already_leaving}
     end.
 
 %% @private
@@ -377,8 +400,8 @@ remove_from_cluster(ExitingNode)
 
 vnode_modules() ->
     case application:get_env(riak_core, vnode_modules) of
-      undefined -> [];
-      {ok, Mods} -> Mods
+        undefined -> [];
+        {ok, Mods} -> Mods
     end.
 
 %% @doc Retrieve list of all stat modules.
@@ -389,8 +412,8 @@ vnode_modules() ->
 %% TODO Are stats still used?
 stat_mods() ->
     case application:get_env(riak_core, stat_mods) of
-      undefined -> [];
-      {ok, Mods} -> Mods
+        undefined -> [];
+        {ok, Mods} -> Mods
     end.
 
 %% @doc Find the health-check module for a given app name.
@@ -401,12 +424,12 @@ stat_mods() ->
 
 health_check(App) ->
     case application:get_env(riak_core, health_checks) of
-      undefined -> undefined;
-      {ok, Mods} ->
-          case lists:keyfind(App, 1, Mods) of
-            false -> undefined;
-            {App, MFA} -> MFA
-          end
+        undefined -> undefined;
+        {ok, Mods} ->
+            case lists:keyfind(App, 1, Mods) of
+                false -> undefined;
+                {App, MFA} -> MFA
+            end
     end.
 
 %% @private
@@ -417,8 +440,8 @@ health_check(App) ->
 
 get_app(undefined, Module) ->
     {ok, App} = case application:get_application(self()) of
-                  {ok, AppName} -> {ok, AppName};
-                  undefined -> app_for_module(Module)
+                    {ok, AppName} -> {ok, AppName};
+                    undefined -> app_for_module(Module)
                 end,
     App;
 get_app(App, _Module) -> App.
@@ -448,11 +471,13 @@ register(_App, []) ->
     riak_core_ring_events:force_sync_update(),
     ok;
 register(App, [{vnode_module, VNodeMod} | T]) ->
-    register_mod(get_app(App, VNodeMod), VNodeMod,
+    register_mod(get_app(App, VNodeMod),
+                 VNodeMod,
                  vnode_modules),
     register(App, T);
 register(App, [{health_check, HealthMFA} | T]) ->
-    register_metadata(get_app(App, HealthMFA), HealthMFA,
+    register_metadata(get_app(App, HealthMFA),
+                      HealthMFA,
                       health_checks),
     register(App, T).
 
@@ -466,15 +491,16 @@ register(App, [{health_check, HealthMFA} | T]) ->
 
 register_mod(App, Module, Type) when is_atom(Type) ->
     case Type of
-      vnode_modules ->
-          riak_core_vnode_proxy_sup:start_proxies(Module)
+        vnode_modules ->
+            riak_core_vnode_proxy_sup:start_proxies(Module)
     end,
     case application:get_env(riak_core, Type) of
-      undefined ->
-          application:set_env(riak_core, Type, [{App, Module}]);
-      {ok, Mods} ->
-          application:set_env(riak_core, Type,
-                              lists:usort([{App, Module} | Mods]))
+        undefined ->
+            application:set_env(riak_core, Type, [{App, Module}]);
+        {ok, Mods} ->
+            application:set_env(riak_core,
+                                Type,
+                                lists:usort([{App, Module} | Mods]))
     end.
 
 %% @doc Register metadata for an application.
@@ -487,11 +513,12 @@ register_mod(App, Module, Type) when is_atom(Type) ->
 
 register_metadata(App, Value, Type) ->
     case application:get_env(riak_core, Type) of
-      undefined ->
-          application:set_env(riak_core, Type, [{App, Value}]);
-      {ok, Values} ->
-          application:set_env(riak_core, Type,
-                              lists:usort([{App, Value} | Values]))
+        undefined ->
+            application:set_env(riak_core, Type, [{App, Value}]);
+        {ok, Values} ->
+            application:set_env(riak_core,
+                                Type,
+                                lists:usort([{App, Value} | Values]))
     end.
 
 %% @doc Adds an event handler to a gen_event instance.
@@ -506,7 +533,9 @@ register_metadata(App, Value, Type) ->
                                                      {error, Reason :: term()}.
 
 add_guarded_event_handler(HandlerMod, Handler, Args) ->
-    add_guarded_event_handler(HandlerMod, Handler, Args,
+    add_guarded_event_handler(HandlerMod,
+                              Handler,
+                              Args,
                               undefined).
 
 %% @doc Add a "guarded" event handler to a gen_event instance.
@@ -531,7 +560,9 @@ add_guarded_event_handler(HandlerMod, Handler, Args) ->
 add_guarded_event_handler(HandlerMod, Handler, Args,
                           ExitFun) ->
     riak_core_eventhandler_sup:start_guarded_handler(HandlerMod,
-                                                     Handler, Args, ExitFun).
+                                                     Handler,
+                                                     Args,
+                                                     ExitFun).
 
 %% @doc Delete a guarded event handler from a gen_event instance.
 %%
@@ -550,7 +581,8 @@ add_guarded_event_handler(HandlerMod, Handler, Args,
 delete_guarded_event_handler(HandlerMod, Handler,
                              Args) ->
     riak_core_eventhandler_sup:stop_guarded_handler(HandlerMod,
-                                                    Handler, Args).
+                                                    Handler,
+                                                    Args).
 
 %% @private
 %% @doc Find the name of the application the given module is registered for.
@@ -574,8 +606,8 @@ app_for_module([], _Mod) -> {ok, undefined};
 app_for_module([{App, _, _} | T], Mod) ->
     {ok, Mods} = application:get_key(App, modules),
     case lists:member(Mod, Mods) of
-      true -> {ok, App};
-      false -> app_for_module(T, Mod)
+        true -> {ok, App};
+        false -> app_for_module(T, Mod)
     end.
 
 %% @doc Only returns when the given application is registered and periodically
@@ -593,29 +625,30 @@ wait_for_application(App) ->
                            Elapsed :: integer()) -> ok.
 
 wait_for_application(App, Elapsed) ->
-    case lists:keymember(App, 1,
+    case lists:keymember(App,
+                         1,
                          application:which_applications())
         of
-      true when Elapsed == 0 -> ok;
-      true when Elapsed > 0 ->
-          logger:info("Wait complete for application ~p (~p "
-                      "seconds)",
-                      [App, Elapsed div 1000]),
-          ok;
-      false ->
-          %% Possibly print a notice.
-          ShouldPrint = Elapsed rem (?WAIT_PRINT_INTERVAL) == 0,
-          case ShouldPrint of
-            true ->
-                logger:info("Waiting for application ~p to start\n "
-                            "                                    "
-                            "(~p seconds).",
-                            [App, Elapsed div 1000]);
-            false -> skip
-          end,
-          timer:sleep(?WAIT_POLL_INTERVAL),
-          wait_for_application(App,
-                               Elapsed + (?WAIT_POLL_INTERVAL))
+        true when Elapsed == 0 -> ok;
+        true when Elapsed > 0 ->
+            logger:info("Wait complete for application ~p (~p "
+                        "seconds)",
+                        [App, Elapsed div 1000]),
+            ok;
+        false ->
+            %% Possibly print a notice.
+            ShouldPrint = Elapsed rem (?WAIT_PRINT_INTERVAL) == 0,
+            case ShouldPrint of
+                true ->
+                    logger:info("Waiting for application ~p to start\n "
+                                "                                    "
+                                "(~p seconds).",
+                                [App, Elapsed div 1000]);
+                false -> skip
+            end,
+            timer:sleep(?WAIT_POLL_INTERVAL),
+            wait_for_application(App,
+                                 Elapsed + (?WAIT_POLL_INTERVAL))
     end.
 
 %% @doc Only returns when the given service is registered and periodically
@@ -636,25 +669,25 @@ wait_for_service(Service, Elapsed) ->
     case lists:member(Service,
                       riak_core_node_watcher:services(node()))
         of
-      true when Elapsed == 0 -> ok;
-      true when Elapsed > 0 ->
-          logger:info("Wait complete for service ~p (~p seconds)",
-                      [Service, Elapsed div 1000]),
-          ok;
-      false ->
-          %% Possibly print a notice.
-          ShouldPrint = Elapsed rem (?WAIT_PRINT_INTERVAL) == 0,
-          case ShouldPrint of
-            true ->
-                logger:info("Waiting for service ~p to start\n   "
-                            "                                  (~p "
-                            "seconds)",
-                            [Service, Elapsed div 1000]);
-            false -> skip
-          end,
-          timer:sleep(?WAIT_POLL_INTERVAL),
-          wait_for_service(Service,
-                           Elapsed + (?WAIT_POLL_INTERVAL))
+        true when Elapsed == 0 -> ok;
+        true when Elapsed > 0 ->
+            logger:info("Wait complete for service ~p (~p seconds)",
+                        [Service, Elapsed div 1000]),
+            ok;
+        false ->
+            %% Possibly print a notice.
+            ShouldPrint = Elapsed rem (?WAIT_PRINT_INTERVAL) == 0,
+            case ShouldPrint of
+                true ->
+                    logger:info("Waiting for service ~p to start\n   "
+                                "                                  (~p "
+                                "seconds)",
+                                [Service, Elapsed div 1000]);
+                false -> skip
+            end,
+            timer:sleep(?WAIT_POLL_INTERVAL),
+            wait_for_service(Service,
+                             Elapsed + (?WAIT_POLL_INTERVAL))
     end.
 
 %% @doc Retrieve the stat prefix.
