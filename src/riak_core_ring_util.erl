@@ -22,12 +22,12 @@
 -module(riak_core_ring_util).
 
 -export([assign/2,
-	 check_ring/0,
-	 check_ring/1,
-	 check_ring/2,
-	 hash_to_partition_id/2,
-	 partition_id_to_hash/2,
-	 hash_is_partition_boundary/2]).
+         check_ring/0,
+         check_ring/1,
+         check_ring/2,
+         hash_to_partition_id/2,
+         partition_id_to_hash/2,
+         hash_is_partition_boundary/2]).
 
 -ifdef(TEST).
 
@@ -59,14 +59,14 @@ check_ring(Ring) ->
 check_ring(Ring, Nval) ->
     Preflists = riak_core_ring:all_preflists(Ring, Nval),
     lists:foldl(fun (PL, Acc) ->
-			PLNodes = lists:usort([Node || {_, Node} <- PL]),
-			case length(PLNodes) of
-			    Nval -> Acc;
-			    _ -> ordsets:add_element(PL, Acc)
-			end
-		end,
-		[],
-		Preflists).
+                        PLNodes = lists:usort([Node || {_, Node} <- PL]),
+                        case length(PLNodes) of
+                            Nval -> Acc;
+                            _ -> ordsets:add_element(PL, Acc)
+                        end
+                end,
+                [],
+                Preflists).
 
 -spec hash_to_partition_id(chash:index() |
 			   chash:index_as_int(),
@@ -125,8 +125,8 @@ reverse_test() ->
 %% to partition IDs.
 partition_test() ->
     IntIndex = riak_core_ring_util:partition_id_to_hash(20,
-							32)
-		   + chash:ring_increment(32) div 3,
+                                                        32)
+                   + chash:ring_increment(32) div 3,
     HashIndex = <<IntIndex:160>>,
     ?assertEqual(20,
 		 (riak_core_ring_util:hash_to_partition_id(HashIndex,
@@ -139,28 +139,28 @@ boundary_test() ->
     ?assert((riak_core_ring_util:hash_is_partition_boundary(<<BoundaryIndex:160>>,
 							    32))),
     ?assertNot((riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex
-								      +
-								      32):160>>,
-							       32))),
+                                                                      +
+                                                                      32):160>>,
+                                                               32))),
     ?assertNot((riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex
-								      -
-								      32):160>>,
-							       32))),
+                                                                      -
+                                                                      32):160>>,
+                                                               32))),
     ?assertNot((riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex
-								      +
-								      1):160>>,
-							       32))),
+                                                                      +
+                                                                      1):160>>,
+                                                               32))),
     ?assertNot((riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex
-								      -
-								      1):160>>,
-							       32))),
+                                                                      -
+                                                                      1):160>>,
+                                                               32))),
     ?assertNot((riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex
-								      +
-								      2):160>>,
-							       32))),
+                                                                      +
+                                                                      2):160>>,
+                                                               32))),
     ?assertNot((riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex
-								      +
-								      10):160>>,
-							       32))).
+                                                                      +
+                                                                      10):160>>,
+                                                               32))).
 
 -endif. % TEST

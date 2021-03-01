@@ -55,16 +55,16 @@
 -module(riak_core_priority_queue).
 
 -export([new/0,
-	 is_queue/1,
-	 is_empty/1,
-	 len/1,
-	 to_list/1,
-	 in/2,
-	 in/3,
-	 out/1,
-	 out/2,
-	 pout/1,
-	 join/2]).
+         is_queue/1,
+         is_empty/1,
+         len/1,
+         to_list/1,
+         in/2,
+         in/3,
+         out/1,
+         out/2,
+         pout/1,
+         join/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -130,10 +130,10 @@ in(X, Priority, {pqueue, Queues}) ->
     P = -Priority,
     {pqueue,
      case lists:keysearch(P, 1, Queues) of
-	 {value, {_, Q}} ->
-	     lists:keyreplace(P, 1, Queues, {P, in(X, Q)});
-	 false ->
-	     lists:keysort(1, [{P, {queue, [X], []}} | Queues])
+         {value, {_, Q}} ->
+             lists:keyreplace(P, 1, Queues, {P, in(X, Q)});
+         false ->
+             lists:keysort(1, [{P, {queue, [X], []}} | Queues])
      end}.
 
 -spec out(pqueue()) -> {empty | {value, any()},
@@ -151,14 +151,14 @@ out({queue, In, [V | Out]}) when is_list(In) ->
 out({pqueue, [{P, Q} | Queues]}) ->
     {R, Q1} = out(Q),
     NewQ = case is_empty(Q1) of
-	       true ->
-		   case Queues of
-		       [] -> {queue, [], []};
-		       [{0, OnlyQ}] -> OnlyQ;
-		       [_ | _] -> {pqueue, Queues}
-		   end;
-	       false -> {pqueue, [{P, Q1} | Queues]}
-	   end,
+               true ->
+                   case Queues of
+                       [] -> {queue, [], []};
+                       [{0, OnlyQ}] -> OnlyQ;
+                       [_ | _] -> {pqueue, Queues}
+                   end;
+               false -> {pqueue, [{P, Q1} | Queues]}
+           end,
     {R, NewQ}.
 
 -spec out(priority(), pqueue()) -> {empty |
@@ -185,14 +185,14 @@ pout({queue, _, _} = Q) ->
 pout({pqueue, [{P, Q} | Queues]}) ->
     {{value, V}, Q1} = out(Q),
     NewQ = case is_empty(Q1) of
-	       true ->
-		   case Queues of
-		       [] -> {queue, [], []};
-		       [{0, OnlyQ}] -> OnlyQ;
-		       [_ | _] -> {pqueue, Queues}
-		   end;
-	       false -> {pqueue, [{P, Q1} | Queues]}
-	   end,
+               true ->
+                   case Queues of
+                       [] -> {queue, [], []};
+                       [{0, OnlyQ}] -> OnlyQ;
+                       [_ | _] -> {pqueue, Queues}
+                   end;
+               false -> {pqueue, [{P, Q1} | Queues]}
+           end,
     {{value, V, -P}, NewQ}.
 
 -spec join(pqueue(), pqueue()) -> pqueue().
@@ -205,21 +205,21 @@ join(A = {queue, _, _}, {pqueue, BPQ}) ->
     {Pre, Post} = lists:splitwith(fun ({P, _}) -> P < 0 end,
 				  BPQ),
     Post1 = case Post of
-		[] -> [{0, A}];
-		[{0, ZeroQueue} | Rest] ->
-		    [{0, join(A, ZeroQueue)} | Rest];
-		_ -> [{0, A} | Post]
-	    end,
+                [] -> [{0, A}];
+                [{0, ZeroQueue} | Rest] ->
+                    [{0, join(A, ZeroQueue)} | Rest];
+                _ -> [{0, A} | Post]
+            end,
     {pqueue, Pre ++ Post1};
 join({pqueue, APQ}, B = {queue, _, _}) ->
     {Pre, Post} = lists:splitwith(fun ({P, _}) -> P < 0 end,
 				  APQ),
     Post1 = case Post of
-		[] -> [{0, B}];
-		[{0, ZeroQueue} | Rest] ->
-		    [{0, join(ZeroQueue, B)} | Rest];
-		_ -> [{0, B} | Post]
-	    end,
+                [] -> [{0, B}];
+                [{0, ZeroQueue} | Rest] ->
+                    [{0, join(ZeroQueue, B)} | Rest];
+                _ -> [{0, B} | Post]
+            end,
     {pqueue, Pre ++ Post1};
 join({pqueue, APQ}, {pqueue, BPQ}) ->
     {pqueue, merge(APQ, BPQ, [])}.
@@ -251,18 +251,18 @@ simple_case(Order) ->
     ?assertEqual(0, ((?MODULE):len(Queue))),
     ?assertEqual([], ((?MODULE):to_list(Queue))),
     case Order of
-	forward ->
-	    Queue2 = (?MODULE):in(low, Queue),
-	    Queue3 = (?MODULE):in(mid, 500, Queue2),
-	    Queue4 = (?MODULE):in(high, 1000, Queue3);
-	reverse ->
-	    Queue2 = (?MODULE):in(high, 1000, Queue),
-	    Queue3 = (?MODULE):in(mid, 500, Queue2),
-	    Queue4 = (?MODULE):in(low, Queue3);
-	mixed ->
-	    Queue2 = (?MODULE):in(high, 1000, Queue),
-	    Queue3 = (?MODULE):in(low, Queue2),
-	    Queue4 = (?MODULE):in(mid, 500, Queue3)
+        forward ->
+            Queue2 = (?MODULE):in(low, Queue),
+            Queue3 = (?MODULE):in(mid, 500, Queue2),
+            Queue4 = (?MODULE):in(high, 1000, Queue3);
+        reverse ->
+            Queue2 = (?MODULE):in(high, 1000, Queue),
+            Queue3 = (?MODULE):in(mid, 500, Queue2),
+            Queue4 = (?MODULE):in(low, Queue3);
+        mixed ->
+            Queue2 = (?MODULE):in(high, 1000, Queue),
+            Queue3 = (?MODULE):in(low, Queue2),
+            Queue4 = (?MODULE):in(mid, 500, Queue3)
     end,
     ?assertEqual(false, ((?MODULE):is_empty(Queue4))),
     ?assertEqual(3, ((?MODULE):len(Queue4))),
@@ -293,12 +293,12 @@ merge_case() ->
     QueueB4 = (?MODULE):in(6, QueueB3),
     Merged1 = (?MODULE):join(QueueA4, QueueB4),
     ?assertEqual([{0, 1},
-		  {0, 3},
-		  {0, 5},
-		  {0, 2},
-		  {0, 4},
-		  {0, 6}],
-		 ((?MODULE):to_list(Merged1))),
+                  {0, 3},
+                  {0, 5},
+                  {0, 2},
+                  {0, 4},
+                  {0, 6}],
+                 ((?MODULE):to_list(Merged1))),
     QueueC1 = (?MODULE):new(),
     QueueC2 = (?MODULE):in(1, 10, QueueC1),
     QueueC3 = (?MODULE):in(3, 30, QueueC2),
@@ -309,12 +309,12 @@ merge_case() ->
     QueueD4 = (?MODULE):in(6, 60, QueueD3),
     Merged2 = (?MODULE):join(QueueC4, QueueD4),
     ?assertEqual([{60, 6},
-		  {50, 5},
-		  {40, 4},
-		  {30, 3},
-		  {20, 2},
-		  {10, 1}],
-		 ((?MODULE):to_list(Merged2))),
+                  {50, 5},
+                  {40, 4},
+                  {30, 3},
+                  {20, 2},
+                  {10, 1}],
+                 ((?MODULE):to_list(Merged2))),
     ok.
 
 basic_test() ->

@@ -25,36 +25,36 @@
 -module(riak_core_claim_util).
 
 -export([ring_stats/2,
-	 violation_stats/2,
-	 balance_stats/1,
-	 diversity_stats/2]).
+         violation_stats/2,
+         balance_stats/1,
+         diversity_stats/2]).
 
 -export([node_load/3,
-	 print_analysis/1,
-	 print_analysis/2,
-	 sort_by_down_fbmax/1]).
+         print_analysis/1,
+         print_analysis/2,
+         sort_by_down_fbmax/1]).
 
 -export([adjacency_matrix/1,
-	 summarize_am/1,
-	 adjacency_matrix_from_al/1,
-	 adjacency_list/1,
-	 fixup_dam/2,
-	 score_am/2,
-	 count/2,
-	 rms/1]).
+         summarize_am/1,
+         adjacency_matrix_from_al/1,
+         adjacency_list/1,
+         fixup_dam/2,
+         score_am/2,
+         count/2,
+         rms/1]).
 
 -export([make_ring/1,
-	 gen_complete_diverse/1,
-	 gen_complete_len/1,
-	 construct/3]).
+         gen_complete_diverse/1,
+         gen_complete_len/1,
+         construct/3]).
 
 -export([num_perms/2,
-	 num_combs/2,
-	 fac/1,
-	 perm_gen/1,
-	 down_combos/2,
-	 rotations/1,
-	 substitutions/2]).
+         num_combs/2,
+         fac/1,
+         perm_gen/1,
+         down_combos/2,
+         rotations/1,
+         substitutions/2]).
 
 -record(load,
 	{node,    % Node name
@@ -63,14 +63,14 @@
 	 norm_fb}). % Normalised fallbacks - ratio of how many there are
 
 -record(failure,
-	{down = [], % List of downed nodes
-	 load = [], % List of #load{} records per up node
-	 fbmin,
-	 fbmean,
-	 fbstddev,
-	 fb10,
-	 fb90,
-	 fbmax}).
+        {down = [], % List of downed nodes
+         load = [], % List of #load{} records per up node
+         fbmin,
+         fbmean,
+         fbstddev,
+         fb10,
+         fb90,
+         fbmax}).
 
 %% -------------------------------------------------------------------
 %% Ring statistics
@@ -78,7 +78,7 @@
 
 ring_stats(R, TN) ->
     violation_stats(R, TN) ++
-	balance_stats(R) ++ diversity_stats(R, TN).
+        balance_stats(R) ++ diversity_stats(R, TN).
 
 %% TargetN violations
 violation_stats(R, TN) ->
@@ -90,15 +90,15 @@ balance_stats(R) ->
     M = length(riak_core_ring:claiming_members(R)),
     AllOwners = riak_core_ring:all_owners(R),
     Counts = lists:foldl(fun ({_, N}, A) ->
-				 orddict:update_counter(N, 1, A)
-			 end,
-			 [],
-			 AllOwners),
+                                 orddict:update_counter(N, 1, A)
+                         end,
+                         [],
+                         AllOwners),
     Avg = Q / M,
     Balance = lists:sum([begin
-			     Delta = trunc(Avg - Count), Delta * Delta
-			 end
-			 || {_, Count} <- Counts]),
+                             Delta = trunc(Avg - Count), Delta * Delta
+                         end
+                         || {_, Count} <- Counts]),
     [{balance, Balance}, {ownership, Counts}].
 
 diversity_stats(R, TN) ->
@@ -106,7 +106,7 @@ diversity_stats(R, TN) ->
     AM = adjacency_matrix(Owners),
     try [{diversity, riak_core_claim_util:score_am(AM, TN)}]
     catch
-	_:empty_list -> [{diversity, undefined}]
+        _:empty_list -> [{diversity, undefined}]
     end.
 
 %% -------------------------------------------------------------------
@@ -132,18 +132,18 @@ vnode_load(R, NVal, DownNodes) ->
 	    || {I, _Owner} <- riak_core_ring:all_owners(R)],
     %% NValParts = Nval * riak_core_ring:num_partitions(R),
     AllPLs = [riak_core_apl:get_apl_ann(Key,
-					NVal,
-					R,
-					UpNodes)
-	      || Key <- Keys],
+                                        NVal,
+                                        R,
+                                        UpNodes)
+              || Key <- Keys],
     FlatPLs = lists:flatten(AllPLs),
     [begin
-	 Pris = lists:usort([Idx
-			     || {{Idx, PN}, primary} <- FlatPLs, PN == N]),
-	 FBs = lists:usort([Idx
-			    || {{Idx, FN}, fallback} <- FlatPLs, FN == N])
-		   -- Pris,
-	 {N, length(Pris), length(FBs)}
+         Pris = lists:usort([Idx
+                             || {{Idx, PN}, primary} <- FlatPLs, PN == N]),
+         FBs = lists:usort([Idx
+                            || {{Idx, FN}, fallback} <- FlatPLs, FN == N])
+                   -- Pris,
+         {N, length(Pris), length(FBs)}
      end
      || N <- UpNodes].
 
@@ -178,20 +178,20 @@ print_analysis1(IoDev,
 		 | Rest]) ->
     %% Find the 3 worst FBmax
     Worst = [{N, NumFB}
-	     || #load{node = N, num_fb = NumFB}
-		    <- lists:sublist(lists:reverse(lists:keysort(#load.num_fb,
-								 Load)),
-				     3)],
+             || #load{node = N, num_fb = NumFB}
+                    <- lists:sublist(lists:reverse(lists:keysort(#load.num_fb,
+                                                                 Load)),
+                                     3)],
     io:format(IoDev,
-	      "~4b  ~4b/~4b  ~4b  ~4b  ~4b  ~w/~w\n",
-	      [FBMin,
-	       toint(FBMean),
-	       toint(FBStdDev),
-	       toint(FB10),
-	       toint(FB90),
-	       FBMax,
-	       Down,
-	       Worst]),
+              "~4b  ~4b/~4b  ~4b  ~4b  ~4b  ~w/~w\n",
+              [FBMin,
+               toint(FBMean),
+               toint(FBStdDev),
+               toint(FB10),
+               toint(FB90),
+               FBMax,
+               Down,
+               Worst]),
     print_analysis1(IoDev, Rest).
 
 %% @private round to nearest int
@@ -201,20 +201,20 @@ toint(X) -> X.
 %% Order failures by number of nodes down ascending, then fbmax, then down list
 sort_by_down_fbmax(Failures) ->
     Cmp = fun (#failure{down = DownA, fbmax = FBMaxA},
-	       #failure{down = DownB, fbmax = FBMaxB}) ->
-		  %% length(DownA) =< length(DownB) andalso
-		  %%     FBMaxA >= FBMaxB andalso
-		  %%     DownA =< DownB
-		  case {length(DownA), length(DownB)} of
-		      {DownALen, DownBLen} when DownALen < DownBLen -> true;
-		      {DownALen, DownBLen} when DownALen > DownBLen -> false;
-		      _ ->
-			  if FBMaxA > FBMaxB -> true;
-			     FBMaxA < FBMaxB -> false;
-			     true -> DownA >= DownB
-			  end
-		  end
-	  end,
+               #failure{down = DownB, fbmax = FBMaxB}) ->
+                  %% length(DownA) =< length(DownB) andalso
+                  %%     FBMaxA >= FBMaxB andalso
+                  %%     DownA =< DownB
+                  case {length(DownA), length(DownB)} of
+                      {DownALen, DownBLen} when DownALen < DownBLen -> true;
+                      {DownALen, DownBLen} when DownALen > DownBLen -> false;
+                      _ ->
+                          if FBMaxA > FBMaxB -> true;
+                             FBMaxA < FBMaxB -> false;
+                             true -> DownA >= DownB
+                          end
+                  end
+          end,
     lists:sort(Cmp, Failures).
 
 %% -------------------------------------------------------------------
@@ -274,12 +274,12 @@ adjacency_matrix(Owners) ->
     M = lists:usort(Owners),
     Tid = ets:new(am, [private, duplicate_bag]),
     try adjacency_matrix_populate(Tid,
-				  M,
-				  Owners,
-				  Owners ++ Owners),
-	adjacency_matrix_result(Tid, ets:first(Tid), [])
+                                  M,
+                                  Owners,
+                                  Owners ++ Owners),
+        adjacency_matrix_result(Tid, ets:first(Tid), [])
     after
-	ets:delete(Tid)
+        ets:delete(Tid)
     end.
 
 %% @private extract the adjacency matrix from the duplicate bag
@@ -289,18 +289,18 @@ adjacency_matrix_result(Tid, NodePair, Acc) ->
     ALs = ets:lookup(Tid, NodePair),
     Ds = [D || {_, D} <- ALs],
     adjacency_matrix_result(Tid,
-			    ets:next(Tid, NodePair),
-			    [{NodePair, Ds} | Acc]).
+                            ets:next(Tid, NodePair),
+                            [{NodePair, Ds} | Acc]).
 
 adjacency_matrix_populate(_Tid, _M, [], _OwnersCycle) ->
     ok;
 adjacency_matrix_populate(Tid, M, [Node | Owners],
-			  [Node | OwnersCycle]) ->
+                          [Node | OwnersCycle]) ->
     adjacency_matrix_add_dist(Tid,
-			      Node,
-			      M -- [Node],
-			      OwnersCycle,
-			      0),
+                              Node,
+                              M -- [Node],
+                              OwnersCycle,
+                              0),
     adjacency_matrix_populate(Tid, M, Owners, OwnersCycle).
 
 %% @private Compute the distance from node to the next of M nodes
@@ -311,19 +311,19 @@ adjacency_matrix_add_dist(_Tid, _Node, [], _OwnersCycle,
 adjacency_matrix_add_dist(Tid, Node, M,
 			  [OtherNode | OwnersCycle], Distance) ->
     case lists:member(OtherNode, M) of
-	true -> % haven't seen this node yet, add distance
-	    ets:insert(Tid, {{Node, OtherNode}, Distance}),
-	    adjacency_matrix_add_dist(Tid,
-				      Node,
-				      M -- [OtherNode],
-				      OwnersCycle,
-				      Distance + 1);
-	_ -> % already passed OtherNode
-	    adjacency_matrix_add_dist(Tid,
-				      Node,
-				      M,
-				      OwnersCycle,
-				      Distance + 1)
+        true -> % haven't seen this node yet, add distance
+            ets:insert(Tid, {{Node, OtherNode}, Distance}),
+            adjacency_matrix_add_dist(Tid,
+                                      Node,
+                                      M -- [OtherNode],
+                                      OwnersCycle,
+                                      Distance + 1);
+        _ -> % already passed OtherNode
+            adjacency_matrix_add_dist(Tid,
+                                      Node,
+                                      M,
+                                      OwnersCycle,
+                                      Distance + 1)
     end.
 
 %% Make adjacency summary by working out counts of each distance
@@ -350,10 +350,10 @@ count_distances(Ds) ->
 adjacency_matrix_from_al(AL) ->
     %% Make a count by distance of N1,N2
     dict:to_list(lists:foldl(fun ({NPair, D}, Acc) ->
-				     dict:append_list(NPair, [D], Acc)
-			     end,
-			     dict:new(),
-			     AL)).
+                                     dict:append_list(NPair, [D], Acc)
+                             end,
+                             dict:new(),
+                             AL)).
 
 %% Create a pair of node names and a list of distances
 adjacency_list(Owners) ->
@@ -362,11 +362,11 @@ adjacency_list(Owners) ->
 
 adjacency_list(_M, [], _OwnersCycle, Acc) -> Acc;
 adjacency_list(M, [Node | Owners], [Node | OwnersCycle],
-	       Acc) ->
+               Acc) ->
     adjacency_list(M,
-		   Owners,
-		   OwnersCycle,
-		   distances(Node, M -- [Node], OwnersCycle, 0, Acc)).
+                   Owners,
+                   OwnersCycle,
+                   distances(Node, M -- [Node], OwnersCycle, 0, Acc)).
 
 %% Compute the distance from node to the next of M nodes
 distances(_Node, _M, [], _, Distances) -> Distances;
@@ -375,33 +375,33 @@ distances(_Node, [], _OwnersCycle, _, Distances) ->
 distances(Node, M, [OtherNode | OwnersCycle], Distance,
 	  Distances) ->
     case lists:member(OtherNode, M) of
-	true -> % haven't seen this node yet, add distance
-	    distances(Node,
-		      M -- [OtherNode],
-		      OwnersCycle,
-		      Distance + 1,
-		      [{{Node, OtherNode}, Distance} | Distances]);
-	_ -> % already passed OtherNode
-	    distances(Node, M, OwnersCycle, Distance + 1, Distances)
+        true -> % haven't seen this node yet, add distance
+            distances(Node,
+                      M -- [OtherNode],
+                      OwnersCycle,
+                      Distance + 1,
+                      [{{Node, OtherNode}, Distance} | Distances]);
+        _ -> % already passed OtherNode
+            distances(Node, M, OwnersCycle, Distance + 1, Distances)
     end.
 
 %% For each pair, get the count of distances < NVal
 score_am([], _NVal) -> undefined;
 score_am(AM, NVal) ->
     Cs = lists:flatten([begin
-			    [C || {D, C} <- count(Ds, NVal), D < NVal]
-			end
-			|| {_Pair, Ds} <- AM]),
+                            [C || {D, C} <- count(Ds, NVal), D < NVal]
+                        end
+                        || {_Pair, Ds} <- AM]),
     rms(Cs).
 
 count(L, NVal) ->
     Acc0 = orddict:from_list([{D, 0}
 			      || D <- lists:seq(0, NVal - 1)]),
     lists:foldl(fun (E, A) ->
-			orddict:update_counter(E, 1, A)
-		end,
-		Acc0,
-		L).
+                        orddict:update_counter(E, 1, A)
+                end,
+                Acc0,
+                L).
 
 rms([]) -> throw(empty_list);
 rms(L) ->
@@ -418,25 +418,25 @@ make_ring(Nodes) ->
     Idxs = [I || {I, _} <- riak_core_ring:all_owners(R0)],
     NewOwners = lists:zip(Idxs, Nodes),
     R1 = lists:foldl(fun (N, R) ->
-			     riak_core_ring:add_member(hd(Nodes), R, N)
-		     end,
-		     R0,
-		     Nodes),
+                             riak_core_ring:add_member(hd(Nodes), R, N)
+                     end,
+                     R0,
+                     Nodes),
     lists:foldl(fun ({I, N}, R) ->
-			riak_core_ring:transfer_node(I, N, R)
-		end,
-		R1,
-		NewOwners).
+                        riak_core_ring:transfer_node(I, N, R)
+                end,
+                R1,
+                NewOwners).
 
 %% Generate a completion test function that makes sure all required
 %% distances are created
 gen_complete_diverse(RequiredDs) ->
     fun (Owners, DAM) ->
-	    OwnersLen = length(Owners),
-	    NextPow2 = next_pow2(OwnersLen),
-	    {met_required(Owners, DAM, RequiredDs) andalso
-		 OwnersLen == NextPow2,
-	     NextPow2}
+            OwnersLen = length(Owners),
+            NextPow2 = next_pow2(OwnersLen),
+            {met_required(Owners, DAM, RequiredDs) andalso
+                 OwnersLen == NextPow2,
+             NextPow2}
     end.
 
 %% Generate until a fixed length has been hit
@@ -452,47 +452,47 @@ construct(Complete, M, NVal) ->
 %% Make an empty adjacency matrix for all pairs of members
 empty_adjacency_matrix(M) ->
     lists:foldl(fun (Pair, AM0) ->
-			dict:append_list(Pair, [], AM0)
-		end,
-		dict:new(),
-		[{F, T} || F <- M, T <- M, F /= T]).
+                        dict:append_list(Pair, [], AM0)
+                end,
+                dict:new(),
+                [{F, T} || F <- M, T <- M, F /= T]).
 
 construct(Complete, M, Owners, DAM, NVal) ->
     %% Work out which pairs do not have the requiredDs
     case Complete(Owners, DAM) of
-	{true, _DesiredLen} -> {ok, Owners, DAM};
-	{false, DesiredLen} ->
-	    %% Easy ones - restrict the eligible list to not include the N-1
-	    %% previous nodes.  If within NVal-1 of possibly closing the ring
-	    %% then restrict in that direction as well.
-	    Eligible0 = M -- lists:sublist(Owners, NVal - 1),
-	    Eligible = case DesiredLen - length(Owners) of
-			   Left when Left >= NVal ->
-			       Eligible0; % At least Nval lest, no restriction
-			   Left ->
-			       Eligible0 --
-				   lists:sublist(lists:reverse(Owners),
-						 NVal - Left)
-		       end,
-	    case Eligible of
-		[] ->
-		    %% No eligible nodes - not enough to meet NVal, use any node
-		    logger:debug("construct -- unable to construct without "
-				 "violating NVal"),
-		    {Owners1, DAM1} = prepend_next_owner(M,
-							 M,
-							 Owners,
-							 DAM,
-							 NVal),
-		    construct(Complete, M, Owners1, DAM1, NVal);
-		_ ->
-		    {Owners1, DAM1} = prepend_next_owner(M,
-							 Eligible,
-							 Owners,
-							 DAM,
-							 NVal),
-		    construct(Complete, M, Owners1, DAM1, NVal)
-	    end
+        {true, _DesiredLen} -> {ok, Owners, DAM};
+        {false, DesiredLen} ->
+            %% Easy ones - restrict the eligible list to not include the N-1
+            %% previous nodes.  If within NVal-1 of possibly closing the ring
+            %% then restrict in that direction as well.
+            Eligible0 = M -- lists:sublist(Owners, NVal - 1),
+            Eligible = case DesiredLen - length(Owners) of
+                           Left when Left >= NVal ->
+                               Eligible0; % At least Nval lest, no restriction
+                           Left ->
+                               Eligible0 --
+                                   lists:sublist(lists:reverse(Owners),
+                                                 NVal - Left)
+                       end,
+            case Eligible of
+                [] ->
+                    %% No eligible nodes - not enough to meet NVal, use any node
+                    logger:debug("construct -- unable to construct without "
+                                 "violating NVal"),
+                    {Owners1, DAM1} = prepend_next_owner(M,
+                                                         M,
+                                                         Owners,
+                                                         DAM,
+                                                         NVal),
+                    construct(Complete, M, Owners1, DAM1, NVal);
+                _ ->
+                    {Owners1, DAM1} = prepend_next_owner(M,
+                                                         Eligible,
+                                                         Owners,
+                                                         DAM,
+                                                         NVal),
+                    construct(Complete, M, Owners1, DAM1, NVal)
+            end
     end.
 
 %% Returns true only when we have met all required distances across all
@@ -500,11 +500,11 @@ construct(Complete, M, Owners, DAM, NVal) ->
 met_required(Owners, DAM, RequiredDs) ->
     FixupDAM = fixup_dam(Owners, DAM),
     case [Pair
-	  || {Pair, Ds} <- dict:to_list(FixupDAM),
-	     RequiredDs -- Ds /= []]
-	of
-	[] -> true;
-	_ -> false
+          || {Pair, Ds} <- dict:to_list(FixupDAM),
+             RequiredDs -- Ds /= []]
+        of
+        [] -> true;
+        _ -> false
     end.
 
 %% Return next greatest power of 2
@@ -521,40 +521,40 @@ prepend_next_owner(M, [Node], Owners, DAM,
     prepend(M, Node, Owners, DAM);
 prepend_next_owner(M, Eligible, Owners, DAM, TN) ->
     {_BestScore, Owners2, DAM2} = lists:foldl(fun (Node,
-						   {RunningScore,
-						    _RunningO,
-						    _RunningDAM} =
-						       Acc) ->
-						      {Owners1, DAM1} =
-							  prepend(M,
-								  Node,
-								  Owners,
-								  DAM),
-						      case
-							  score_am(dict:to_list(DAM1),
-								   TN)
-							  of
-							  BetterScore
-							      when BetterScore <
-								       RunningScore ->
-							      {BetterScore,
-							       Owners1,
-							       DAM1};
-							  _ -> Acc
-						      end
-					      end,
-					      {undefined, undefined, undefined},
-					      Eligible),
+                                                   {RunningScore,
+                                                    _RunningO,
+                                                    _RunningDAM} =
+                                                       Acc) ->
+                                                      {Owners1, DAM1} =
+                                                          prepend(M,
+                                                                  Node,
+                                                                  Owners,
+                                                                  DAM),
+                                                      case
+                                                          score_am(dict:to_list(DAM1),
+                                                                   TN)
+                                                          of
+                                                          BetterScore
+                                                              when BetterScore <
+                                                                       RunningScore ->
+                                                              {BetterScore,
+                                                               Owners1,
+                                                               DAM1};
+                                                          _ -> Acc
+                                                      end
+                                              end,
+                                              {undefined, undefined, undefined},
+                                              Eligible),
     {Owners2, DAM2}.
 
 %% Prepend N to the front of Owners, and update AM
 prepend(M, N, Owners, DAM) ->
     Ds = distances2(M -- [N], Owners),
     DAM2 = lists:foldl(fun ({T, D}, DAM1) ->
-			       dict:append_list({N, T}, [D], DAM1)
-		       end,
-		       DAM,
-		       Ds),
+                               dict:append_list({N, T}, [D], DAM1)
+                       end,
+                       DAM,
+                       Ds),
     {[N | Owners], DAM2}.
 
 %% Calculate the distances to each of the M nodes until
@@ -565,19 +565,19 @@ distances2([], _Owners, _D, Acc) -> Acc;
 distances2(_M, [], _D, Acc) -> Acc;
 distances2(M, [T | Owners], D, Acc) ->
     case lists:member(T, M) of
-	true ->
-	    distances2(M -- [T], Owners, D + 1, [{T, D} | Acc]);
-	false -> distances2(M, Owners, D + 1, Acc)
+        true ->
+            distances2(M -- [T], Owners, D + 1, [{T, D} | Acc]);
+        false -> distances2(M, Owners, D + 1, Acc)
     end.
 
 %% Fix up the dictionary AM adding in entries for the end of the owners list
 %% wrapping around to the start.
 fixup_dam(Owners, DAM) ->
     fixup_dam(lists:usort(Owners),
-	      lists:reverse(Owners),
-	      Owners,
-	      0,
-	      DAM).
+              lists:reverse(Owners),
+              Owners,
+              0,
+              DAM).
 
 fixup_dam([], _ToFix, _Owners, _D, DAM) -> DAM;
 fixup_dam(_M, [], _Owners, _D, DAM) -> DAM;
@@ -585,10 +585,10 @@ fixup_dam(M, [N | ToFix], Owners, D, DAM) ->
     M2 = M -- [N],
     Ds = distances2(M2, Owners, D, []),
     DAM2 = lists:foldl(fun ({T, D0}, DAM1) ->
-			       dict:append_list({N, T}, [D0], DAM1)
-		       end,
-		       DAM,
-		       Ds),
+                               dict:append_list({N, T}, [D0], DAM1)
+                       end,
+                       DAM,
+                       Ds),
     fixup_dam(M2, ToFix, Owners, D + 1, DAM2).
 
 %% -------------------------------------------------------------------
@@ -610,9 +610,9 @@ fac(N) when N > 0 -> N * fac(N - 1).
 perm_gen([E]) -> [[E]];
 perm_gen(L) ->
     lists:append([begin
-		      [[X | Y] || Y <- perm_gen(lists:delete(X, L))]
-		  end
-		  || X <- L]).
+                      [[X | Y] || Y <- perm_gen(lists:delete(X, L))]
+                  end
+                  || X <- L]).
 
 %% Pick all combinations of Depth nodes from the MemFbers list
 %% 0 = []

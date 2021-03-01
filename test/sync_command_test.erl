@@ -20,39 +20,43 @@
 -module(sync_command_test).
 
 -include_lib("eunit/include/eunit.hrl").
+
 -include_lib("riak_core_vnode.hrl").
 
 sync_test_() ->
     {foreach,
      fun setup_simple/0,
      fun stop_servers/1,
-     [ {<<"Assert ok throw">>,
-        fun() ->
-            ?assertEqual(ok, mock_vnode:sync_error({0, node()}, goodthrow))
-        end},
-       {<<"Assert error throw">>,
-        fun() ->
-            ?assertEqual({error, terrible}, mock_vnode:sync_error({0, node()}, badthrow))
-        end},
-       {<<"Assert sync error">>,
-        fun() ->
-            ?assertError(core_breach, mock_vnode:sync_error({0, node()}, error))
-        end},
-       {<<"Assert sync exit">>,
-        fun() ->
-            ?assertError(core_breach, mock_vnode:sync_error({0, node()}, exit))
-        end},
-       {<<"Assert non-blocking sync error">>,
-        fun() ->
-            ?assertError(core_breach, mock_vnode:spawn_error({0, node()}, error))
-        end},
-       {<<"Assert non-blocking sync exit">>,
-        fun() ->
-            ?assertError(core_breach, mock_vnode:spawn_error({0, node()}, exit))
-        end}
-       ]
-    }.
-
+     [{<<"Assert ok throw">>,
+       fun () ->
+               ?assertEqual(ok,
+                            (mock_vnode:sync_error({0, node()}, goodthrow)))
+       end},
+      {<<"Assert error throw">>,
+       fun () ->
+               ?assertEqual({error, terrible},
+                            (mock_vnode:sync_error({0, node()}, badthrow)))
+       end},
+      {<<"Assert sync error">>,
+       fun () ->
+               ?assertError(core_breach,
+                            (mock_vnode:sync_error({0, node()}, error)))
+       end},
+      {<<"Assert sync exit">>,
+       fun () ->
+               ?assertError(core_breach,
+                            (mock_vnode:sync_error({0, node()}, exit)))
+       end},
+      {<<"Assert non-blocking sync error">>,
+       fun () ->
+               ?assertError(core_breach,
+                            (mock_vnode:spawn_error({0, node()}, error)))
+       end},
+      {<<"Assert non-blocking sync exit">>,
+       fun () ->
+               ?assertError(core_breach,
+                            (mock_vnode:spawn_error({0, node()}, exit)))
+       end}]}.
 
 setup_simple() ->
     stop_servers(self()),
@@ -64,27 +68,24 @@ setup_simple() ->
             {vnode_rolling_start, 0}],
     error_logger:tty(false),
     _ = [begin
-        Old = application:get_env(riak_core, AppKey, undefined),
-        ok = application:set_env(riak_core, AppKey, Val),
-        {AppKey, Old}
-     end || {AppKey, Val} <- Vars],
+             Old = application:get_env(riak_core, AppKey, undefined),
+             ok = application:set_env(riak_core, AppKey, Val),
+             {AppKey, Old}
+         end
+         || {AppKey, Val} <- Vars],
     riak_core_ring_events:start_link(),
     riak_core_ring_manager:start_link(test),
     riak_core_vnode_proxy_sup:start_link(),
-
     {ok, _Sup} = riak_core_vnode_sup:start_link(),
     {ok, _} = riak_core_vnode_manager:start_link(),
-    {ok, _VMaster} = riak_core_vnode_master:start_link(mock_vnode),
-
-
+    {ok, _VMaster} =
+        riak_core_vnode_master:start_link(mock_vnode),
     ok = mock_vnode:start_vnode(0),
     %% NOTE: The return value from this call is currently not being
     %%       used.  This call is made to ensure that all msgs sent to
     %%       the vnode mgr before this call have been handled.  This
     %%       guarantees that the vnode mgr ets tab is up-to-date
-
     riak_core:register([{vnode_module, mock_vnode}]).
-
 
 stop_servers(_Pid) ->
     %% Make sure VMaster is killed before sup as start_vnode is a cast

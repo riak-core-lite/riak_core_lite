@@ -31,12 +31,12 @@
 -include("riak_core_handoff.hrl").
 
 -define(CHILD(I, Type),
-	{I,
-	 {I, start_link, []},
-	 temporary,
-	 brutal_kill,
-	 Type,
-	 [I]}).
+        {I,
+         {I, start_link, []},
+         temporary,
+         brutal_kill,
+         Type,
+         [I]}).
 
 %%%===================================================================
 %%% API
@@ -45,11 +45,11 @@
 %% @doc Begin the supervisor, init/1 will be called
 %% @see supervisor:start_link/3.
 -spec start_link() -> {ok, pid()} |
-		      {error,
-		       {already_started, pid()} |
-		       {shutdown | reason} |
-		       term()} |
-		      ignore.
+                      {error,
+                       {already_started, pid()} |
+                       {shutdown | reason} |
+                       term()} |
+                      ignore.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).

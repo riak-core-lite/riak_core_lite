@@ -39,9 +39,9 @@ init([]) ->
 start_proxy(Mod, Index) ->
     Ref = proxy_ref(Mod, Index),
     Pid = case supervisor:start_child(?MODULE, Ref) of
-	      {ok, Child} -> Child;
-	      {error, {already_started, Child}} -> Child
-	  end,
+              {ok, Child} -> Child;
+              {error, {already_started, Child}} -> Child
+          end,
     Pid.
 
 stop_proxy(Mod, Index) ->

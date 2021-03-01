@@ -801,12 +801,12 @@ active({info, _F}, Info,
 	true ->
 	    {ok, NewModState} = Module:handle_info(Info, ModState),
 	    {next_state,
-	     active,
+         active,
 	     State#state{modstate = NewModState},
 	     State#state.inactivity_timeout};
 	false ->
 	    {next_state,
-	     active,
+         active,
 	     State,
 	     State#state.inactivity_timeout}
     end;
@@ -1236,6 +1236,12 @@ finish_handoff(SeenIdxs,
 	    {ok, NewModState} = Module:delete(ModState),
 	    logger:debug("~p ~p vnode finished handoff and deleted.",
 			 [Idx, Module]),
+        riak_core_vnode_manager:unregister_vnode(Idx, Module),
+        logger:debug("vnode hn/fwd :: ~p/~p :: ~p -> ~p~n",
+                    [State#state.mod,
+                     State#state.index,
+                     State#state.forward,
+                     HN]),
 	    State2 = mod_set_forwarding(HN, State),
 	    continue(State2#state{modstate =
 				      {deleted,

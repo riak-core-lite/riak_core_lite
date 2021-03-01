@@ -29,28 +29,28 @@
 -behaviour(gen_server).
 
 -export([start_link/1,
-	 get_vnode_pid/2,
-	 start_vnode/2,
-	 command/3,
-	 command/4,
-	 command_unreliable/3,
-	 command_unreliable/4,
-	 sync_command/3,
-	 sync_command/4,
-	 coverage/5,
-	 command_return_vnode/4,
-	 sync_spawn_command/3,
-	 make_request/3,
-	 make_coverage_request/4,
-	 all_nodes/1,
-	 reg_name/1]).
+         get_vnode_pid/2,
+         start_vnode/2,
+         command/3,
+         command/4,
+         command_unreliable/3,
+         command_unreliable/4,
+         sync_command/3,
+         sync_command/4,
+         coverage/5,
+         command_return_vnode/4,
+         sync_spawn_command/3,
+         make_request/3,
+         make_coverage_request/4,
+         all_nodes/1,
+         reg_name/1]).
 
 -export([init/1,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2,
-	 code_change/3]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -record(state, {idxtab, sup_name, vnode_mod}).
 
@@ -73,9 +73,9 @@ vmaster_to_vmod(VMaster) ->
 start_link(VNodeMod) ->
     RegName = reg_name(VNodeMod),
     gen_server:start_link({local, RegName},
-			  ?MODULE,
-			  [VNodeMod, RegName],
-			  []).
+                          ?MODULE,
+                          [VNodeMod, RegName],
+                          []).
 
 start_vnode(Index, VNodeMod) ->
     riak_core_vnode_manager:start_vnode(Index, VNodeMod).
@@ -93,12 +93,12 @@ command(PrefListOrCmd, Msg, Sender, VMaster) ->
     command2(PrefListOrCmd, Msg, Sender, VMaster, normal).
 
 command_unreliable(PrefListOrCmd, Msg, Sender,
-		   VMaster) ->
+                   VMaster) ->
     command2(PrefListOrCmd,
-	     Msg,
-	     Sender,
-	     VMaster,
-	     unreliable).
+             Msg,
+             Sender,
+             VMaster,
+             unreliable).
 
 %% Send the command to the preflist given with responses going to Sender
 command2([], _Msg, _Sender, _VMaster, _How) -> ok;
@@ -117,8 +117,8 @@ command2([{Index, Pid} | Rest], Msg, Sender, VMaster,
 command2([{Index, Node} | Rest], Msg, Sender, VMaster,
 	 How) ->
     proxy_cast({VMaster, Node},
-	       make_request(Msg, Sender, Index),
-	       How),
+               make_request(Msg, Sender, Index),
+               How),
     command2(Rest, Msg, Sender, VMaster, How);
 command2(DestTuple, Msg, Sender, VMaster, How)
     when is_tuple(DestTuple) ->
@@ -131,10 +131,10 @@ coverage(Msg, CoverageVNodes, Keyspaces,
 	 {Type, Ref, From}, VMaster)
     when is_list(CoverageVNodes) ->
     [proxy_cast({VMaster, Node},
-		make_coverage_request(Msg,
-				      Keyspaces,
-				      {Type, {Ref, {Index, Node}}, From},
-				      Index))
+                make_coverage_request(Msg,
+                                      Keyspaces,
+                                      {Type, {Ref, {Index, Node}}, From},
+                                      Index))
      || {Index, Node} <- CoverageVNodes];
 coverage(Msg, {Index, Node}, Keyspaces, Sender,
 	 VMaster) ->
@@ -148,9 +148,9 @@ command_return_vnode({Index, Node}, Msg, Sender,
     Req = make_request(Msg, Sender, Index),
     Mod = vmaster_to_vmod(VMaster),
     riak_core_vnode_proxy:command_return_vnode({Mod,
-						Index,
-						Node},
-					       Req).
+                                                Index,
+                                                Node},
+                                               Req).
 
 %% Send a synchronous command to an individual Index/Node combination.
 %% Will not return until the vnode has returned
@@ -162,13 +162,13 @@ sync_command({Index, Node}, Msg, VMaster, Timeout) ->
     %% the From for handle_call so that the {reply} return gets
     %% sent here.
     Request = make_request(Msg,
-			   {server, undefined, undefined},
-			   Index),
+                           {server, undefined, undefined},
+                           Index),
     case gen_server:call({VMaster, Node}, Request, Timeout)
-	of
-	{vnode_error, {Error, _Args}} -> error(Error);
-	{vnode_error, Error} -> error(Error);
-	Else -> Else
+        of
+        {vnode_error, {Error, _Args}} -> error(Error);
+        {vnode_error, Error} -> error(Error);
+        Else -> Else
     end.
 
 %% Send a synchronous spawned command to an individual Index/Node combination.
@@ -176,15 +176,15 @@ sync_command({Index, Node}, Msg, VMaster, Timeout) ->
 %% continue to handle requests.
 sync_spawn_command({Index, Node}, Msg, VMaster) ->
     Request = make_request(Msg,
-			   {server, undefined, undefined},
-			   Index),
+                           {server, undefined, undefined},
+                           Index),
     case gen_server:call({VMaster, Node},
-			 {spawn, Request},
-			 infinity)
-	of
-	{vnode_error, {Error, _Args}} -> error(Error);
-	{vnode_error, Error} -> error(Error);
-	Else -> Else
+                         {spawn, Request},
+                         infinity)
+        of
+        {vnode_error, {Error, _Args}} -> error(Error);
+        {vnode_error, Error} -> error(Error);
+        Else -> Else
     end.
 
 %% Make a request record - exported for use by legacy modules
@@ -243,10 +243,10 @@ send_an_event(Dest, Event, unreliable) ->
 
 handle_cast({wait_for_service, Service}, State) ->
     case Service of
-	undefined -> ok;
-	_ ->
-	    logger:debug("Waiting for service: ~p", [Service]),
-	    riak_core:wait_for_service(Service)
+        undefined -> ok;
+        _ ->
+            logger:debug("Waiting for service: ~p", [Service]),
+            riak_core:wait_for_service(Service)
     end,
     {noreply, State};
 handle_cast(Req = #riak_vnode_req_v1{index = Idx},
@@ -264,20 +264,20 @@ handle_call({return_vnode,
 	     Req = #riak_vnode_req_v1{index = Idx}},
 	    _From, State = #state{vnode_mod = Mod}) ->
     {ok, Pid} =
-	riak_core_vnode_proxy:command_return_vnode({Mod,
-						    Idx,
-						    node()},
-						   Req),
+        riak_core_vnode_proxy:command_return_vnode({Mod,
+                                                    Idx,
+                                                    node()},
+                                                   Req),
     {reply, {ok, Pid}, State};
 handle_call(Req = #riak_vnode_req_v1{index = Idx,
 				     sender = {server, undefined, undefined}},
 	    From, State = #state{vnode_mod = Mod}) ->
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
     riak_core_vnode:send_req(Proxy,
-			     Req#riak_vnode_req_v1{sender =
-						       {server,
-							undefined,
-							From}}),
+                             Req#riak_vnode_req_v1{sender =
+                                                       {server,
+                                                        undefined,
+                                                        From}}),
     {noreply, State};
 handle_call({spawn,
 	     Req = #riak_vnode_req_v1{index = Idx,
