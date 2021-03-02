@@ -95,13 +95,13 @@ maybe_shutdown(Ring) ->
 
 exit_ring_trans() ->
     riak_core_ring_manager:ring_trans(fun (Ring2, _) ->
-					      Ring3 =
-						  riak_core_ring:exit_member(node(),
-									     Ring2,
-									     node()),
-					      {new_ring, Ring3}
-				      end,
-				      []).
+                                              Ring3 =
+                                                  riak_core_ring:exit_member(node(),
+                                                                             Ring2,
+                                                                             node()),
+                                              {new_ring, Ring3}
+                                      end,
+                                      []).
 
 ready_to_exit([]) -> true;
 ready_to_exit([{_App, Module} | AppMods]) ->

@@ -105,20 +105,20 @@ service_up(Id, Pid) ->
 %% @doc {@link service_up/4} with default options.
 %% @see service_up/4
 -spec service_up(Id :: atom(), Pid :: pid(),
-		 MFA :: mfa()) -> ok.
+                 MFA :: mfa()) -> ok.
 
 service_up(Id, Pid, MFA) ->
     service_up(Id, Pid, MFA, []).
 
 -type hc_check_interval_opt() :: {check_interval,
-				  timeout()}.
+                                  timeout()}.
 
 -type
      hc_max_callback_fails_opt() :: {max_callback_failures,
-				     non_neg_integer()}.
+                                     non_neg_integer()}.
 
 -type hc_max_health_fails_opt() :: {max_health_failures,
-				    non_neg_integer()}.
+                                    non_neg_integer()}.
 
 -type health_opt() :: hc_check_interval_opt() |
                       hc_max_callback_fails_opt() |
@@ -144,10 +144,10 @@ service_up(Id, Pid, MFA) ->
 %% any other, using {@link service_down/1}.
 %% @see service_up/2
 -spec service_up(Id :: atom(), Pid :: pid(),
-		 Callback :: mfa(), Options :: health_opts()) -> ok.
+                 Callback :: mfa(), Options :: health_opts()) -> ok.
 
 service_up(Id, Pid, {Module, Function, Args},
-	   Options) ->
+           Options) ->
     gen_server:call(?MODULE,
                     {service_up,
                      Id,
@@ -228,11 +228,11 @@ init([]) ->
     ok = net_kernel:monitor_nodes(true),
     %% Setup ETS table to track node status
     (?MODULE) = ets:new(?MODULE,
-			[protected, {read_concurrency, true}, named_table]),
+                        [protected, {read_concurrency, true}, named_table]),
     {ok, schedule_broadcast(#state{})}.
 
 handle_call({set_bcast_mod, Module, Fn}, _From,
-	    State) ->
+            State) ->
     %% Call available for swapping out how broadcasts are generated
     {reply, ok, State#state{bcast_mod = {Module, Fn}}};
 handle_call(get_avsn, _From, State) ->
@@ -243,7 +243,7 @@ handle_call({service_up, Id, Pid}, _From, State) ->
     S3 = add_service(Id, Pid, S2),
     {reply, ok, S3};
 handle_call({service_up, Id, Pid, MFA, Options}, From,
-	    State) ->
+            State) ->
     %% update the active set of services if needed.
     {reply, _, State1} = handle_call({service_up, Id, Pid},
                                      From,
@@ -315,40 +315,40 @@ handle_call({node_status, Status}, _From, State) ->
     {reply, ok, update_avsn(S2)};
 handle_call(services, _From, State) ->
     Res = [Service
-	   || {{by_service, Service}, Nds}
-		  <- ets:tab2list(?MODULE),
-	      Nds /= []],
+           || {{by_service, Service}, Nds}
+                  <- ets:tab2list(?MODULE),
+              Nds /= []],
     {reply, lists:sort(Res), State};
 handle_call(suspend_healths, _From,
-	    State = #state{healths_enabled = false}) ->
+            State = #state{healths_enabled = false}) ->
     {reply, already_disabled, State};
 handle_call(suspend_healths, _From,
-	    State = #state{healths_enabled = true}) ->
+            State = #state{healths_enabled = true}) ->
     logger:info("suspending all health checks"),
     Healths = all_health_fsms(suspend,
                               State#state.health_checks),
     {reply,
      ok,
      update_avsn(State#state{health_checks = Healths,
-			     healths_enabled = false})};
+                             healths_enabled = false})};
 handle_call(resume_healths, _From,
-	    State = #state{healths_enabled = true}) ->
+            State = #state{healths_enabled = true}) ->
     {reply, already_enabled, State};
 handle_call(resume_healths, _From,
-	    State = #state{healths_enabled = false}) ->
+            State = #state{healths_enabled = false}) ->
     logger:info("resuming all health checks"),
     Healths = all_health_fsms(resume,
                               State#state.health_checks),
     {reply,
      ok,
      update_avsn(State#state{health_checks = Healths,
-			     healths_enabled = true})}.
+                             healths_enabled = true})}.
 
 handle_cast({ring_update, R}, State) ->
     %% Ring has changed; determine what peers are new to us
     %% and broadcast out current status to those peers.
     Peers0 =
-	ordsets:from_list(riak_core_ring:all_members(R)),
+        ordsets:from_list(riak_core_ring:all_members(R)),
     Peers = ordsets:del_element(node(), Peers0),
     S2 = peers_update(Peers, State),
     {noreply, update_avsn(S2)};
@@ -407,7 +407,7 @@ handle_info(broadcast, State) ->
 terminate(_Reason, State) ->
     %% Let our peers know that we are shutting down
     broadcast(State#state.peers,
-	      State#state{status = down}).
+              State#state{status = down}).
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
@@ -426,7 +426,7 @@ update_avsn(State) ->
 watch_for_ring_events() ->
     Self = self(),
     Fn = fun (R) -> gen_server:cast(Self, {ring_update, R})
-	 end,
+         end,
     riak_core_ring_events:add_sup_callback(Fn).
 
 delete_service_mref(Id) ->
@@ -456,7 +456,7 @@ schedule_broadcast(State) ->
             ok
     end,
     {ok, Interval} = application:get_env(riak_core,
-					 gossip_interval),
+                                         gossip_interval),
     Tref = erlang:send_after(Interval, self(), broadcast),
     State#state{bcast_tref = Tref}.
 
@@ -497,7 +497,7 @@ node_down(Node, State) ->
 node_delete(Node) ->
     Services = internal_get_services(Node),
     _ = [internal_delete(Node, Service)
-	 || Service <- Services],
+         || Service <- Services],
     ets:delete(?MODULE, Node),
     Services.
 
@@ -507,7 +507,7 @@ node_update(Node, Services) ->
     Now = riak_core_util:moment(),
     NewStatus = ordsets:from_list(Services),
     OldStatus =
-	ordsets:from_list(internal_get_services(Node)),
+        ordsets:from_list(internal_get_services(Node)),
     Added = ordsets:subtract(NewStatus, OldStatus),
     Deleted = ordsets:subtract(OldStatus, NewStatus),
     %% Update ets table with changes; make sure to touch unchanged
@@ -570,19 +570,19 @@ peers_update(NewPeers, State) ->
 internal_delete(Node, Service) ->
     Svcs = internal_get_services(Node),
     ets:insert(?MODULE,
-	       {{by_node, Node}, Svcs -- [Service]}),
+               {{by_node, Node}, Svcs -- [Service]}),
     Nds = internal_get_nodes(Service),
     ets:insert(?MODULE,
-	       {{by_service, Service}, Nds -- [Node]}).
+               {{by_service, Service}, Nds -- [Node]}).
 
 internal_insert(Node, Service) ->
     %% Remove Service & node before adding: avoid accidental duplicates
     Svcs = internal_get_services(Node) -- [Service],
     ets:insert(?MODULE,
-	       {{by_node, Node}, [Service | Svcs]}),
+               {{by_node, Node}, [Service | Svcs]}),
     Nds = internal_get_nodes(Service) -- [Node],
     ets:insert(?MODULE,
-	       {{by_service, Service}, [Node | Nds]}).
+               {{by_service, Service}, [Node | Nds]}).
 
 internal_get_services(Node) ->
     case ets:lookup(?MODULE, {by_node, Node}) of
@@ -599,7 +599,7 @@ internal_get_nodes(Service) ->
 add_service(ServiceId, Pid, State) ->
     %% Update the set of active services locally
     Services = ordsets:add_element(ServiceId,
-				   State#state.services),
+                                   State#state.services),
     S2 = State#state{services = Services},
     %% Remove any existing mrefs for this service
     delete_service_mref(ServiceId),
@@ -614,7 +614,7 @@ add_service(ServiceId, Pid, State) ->
 drop_service(ServiceId, State) ->
     %% Update the set of active services locally
     Services = ordsets:del_element(ServiceId,
-				   State#state.services),
+                                   State#state.services),
     S2 = State#state{services = Services},
     %% Remove any existing mrefs for this service
     delete_service_mref(ServiceId),
@@ -624,7 +624,7 @@ drop_service(ServiceId, State) ->
 
 handle_check_msg(_Msg, undefined, State) -> State;
 handle_check_msg(_Msg, _ServiceId,
-		 #state{status = down} = State) ->
+                 #state{status = down} = State) ->
     %% most likely a late message
     State;
 handle_check_msg(Msg, ServiceId, State) ->
@@ -637,9 +637,9 @@ handle_check_msg(Msg, ServiceId, State) ->
     end.
 
 handle_check_return({remove, _Check}, ServiceId,
-		    State) ->
+                    State) ->
     Healths = orddict:erase(ServiceId,
-			    State#state.health_checks),
+                            State#state.health_checks),
     State#state{health_checks = Healths};
 handle_check_return({ok, Check}, ServiceId, State) ->
     Healths = orddict:store(ServiceId,
@@ -693,7 +693,7 @@ health_fsm(Msg, Service,
 %% suspend state
 health_fsm(suspend, resume, Service, InCheck) ->
     #health_check{health_failures = N, check_interval = V} =
-	InCheck,
+        InCheck,
     Tref = next_health_tref(N, V, Service),
     OutCheck = InCheck#health_check{interval_tref = Tref},
     {ok, waiting, OutCheck};
@@ -711,7 +711,7 @@ health_fsm(checking, check_health, _Service, InCheck) ->
 health_fsm(checking, remove, _Service, InCheck) ->
     {remove, checking, InCheck};
 health_fsm(checking, {result, Pid, Cause}, Service,
-	   #health_check{checking_pid = Pid} = InCheck) ->
+           #health_check{checking_pid = Pid} = InCheck) ->
     %% handle result from checking pid
     #health_check{health_failures = HPFails,
                   max_health_failures = HPMaxFails} =
@@ -723,17 +723,17 @@ health_fsm(checking, {result, Pid, Cause}, Service,
                             InCheck#health_check.check_interval,
                             Service),
     OutCheck = InCheck#health_check{checking_pid =
-					undefined,
-				    health_failures = HPFails1,
-				    callback_failures = 0,
-				    interval_tref = Tref},
+                                        undefined,
+                                    health_failures = HPFails1,
+                                    callback_failures = 0,
+                                    interval_tref = Tref},
     {Reply, waiting, OutCheck};
 health_fsm(checking, {'EXIT', Pid, Cause}, Service,
-	   #health_check{checking_pid = Pid} = InCheck)
+           #health_check{checking_pid = Pid} = InCheck)
     when Cause =/= normal ->
     logger:error("health check process for ~p error'ed: "
-		 " ~p",
-		 [Service, Cause]),
+                 " ~p",
+                 [Service, Cause]),
     Fails = InCheck#health_check.callback_failures + 1,
     if Fails ==
            InCheck#health_check.max_callback_failures ->
@@ -745,15 +745,15 @@ health_fsm(checking, {'EXIT', Pid, Cause}, Service,
             InCheck#health_check{checking_pid = undefined,
                                  callback_failures = Fails}};
        Fails < InCheck#health_check.max_callback_failures ->
-	   #health_check{health_failures = N,
-			 check_interval = Inter} =
-	       InCheck,
-	   Tref = next_health_tref(N, Inter, Service),
-	   OutCheck = InCheck#health_check{checking_pid =
-					       undefined,
-					   callback_failures = Fails,
-					   interval_tref = Tref},
-	   {ok, waiting, OutCheck};
+           #health_check{health_failures = N,
+                         check_interval = Inter} =
+               InCheck,
+           Tref = next_health_tref(N, Inter, Service),
+           OutCheck = InCheck#health_check{checking_pid =
+                                               undefined,
+                                           callback_failures = Fails,
+                                           interval_tref = Tref},
+           {ok, waiting, OutCheck};
        true ->
            %% likely a late message, or a faker
            {ok,
@@ -784,7 +784,7 @@ health_fsm(waiting, remove, _Service, InCheck) ->
             ok
     end,
     OutCheck = InCheck#health_check{interval_tref =
-					undefined},
+                                        undefined},
     {remove, waiting, OutCheck};
 %% fallthrough handling
 health_fsm(StateName, _Msg, _Service, Health) ->
@@ -807,7 +807,7 @@ handle_fsm_exit(false, HPFails, __) ->
     {ok, HPFails + 1}.
 
 start_health_check(Service,
-		   #health_check{checking_pid = undefined} = CheckRec) ->
+                   #health_check{checking_pid = undefined} = CheckRec) ->
     {Mod, Func, Args} = CheckRec#health_check.callback,
     Pid = CheckRec#health_check.service_pid,
     case CheckRec#health_check.interval_tref of
@@ -831,13 +831,13 @@ start_health_check(Service,
                                       end),
     erlang:put(CheckingPid, Service),
     CheckRec#health_check{state = checking,
-			  checking_pid = CheckingPid,
-			  interval_tref = undefined};
+                          checking_pid = CheckingPid,
+                          interval_tref = undefined};
 start_health_check(_Service, Check) -> Check.
 
 health_check_result(CheckPid, Result) ->
     gen_server:cast(?MODULE,
-		    {health_check_result, CheckPid, Result}).
+                    {health_check_result, CheckPid, Result}).
 
 next_health_tref(_, infinity, _) -> undefined;
 next_health_tref(N, V, Service) ->

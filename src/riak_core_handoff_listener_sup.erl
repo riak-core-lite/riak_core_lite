@@ -51,11 +51,11 @@ start_link() ->
 %% @see riak_core_handoff_listener:start_link/0.
 %% @returns Parameters to start the supervised child.
 -spec init([]) -> {ok,
-		   {{one_for_one, 10, 10},
-		    [{riak_core_handoff_listener,
-		      {riak_core_handoff_listener, start_link, []}, permanent,
-		      brutal_kill, worker,
-		      [riak_core_handoff_listener]}, ...]}}.
+                   {{one_for_one, 10, 10},
+                    [{riak_core_handoff_listener,
+                      {riak_core_handoff_listener, start_link, []}, permanent,
+                      brutal_kill, worker,
+                      [riak_core_handoff_listener]}, ...]}}.
 
 init([]) ->
     {ok,

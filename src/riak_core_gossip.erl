@@ -65,7 +65,7 @@
 %% Distribute a ring to all members of that ring.
 distribute_ring(Ring) ->
     gen_server:cast({?MODULE, node()},
-		    {distribute_ring, Ring}).
+                    {distribute_ring, Ring}).
 
 %% send_ring/1 -
 %% Send the current node's ring to some other node.
@@ -77,7 +77,7 @@ send_ring(ToNode) -> send_ring(node(), ToNode).
 send_ring(Node, Node) -> ok;
 send_ring(FromNode, ToNode) ->
     gen_server:cast({?MODULE, FromNode},
-		    {send_ring_to, ToNode}).
+                    {send_ring_to, ToNode}).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE},
@@ -111,7 +111,7 @@ recursive_gossip(Ring, Node) ->
     Tree = riak_core_util:build_tree(2, Nodes, [cycles]),
     Children = orddict:fetch(Node, Tree),
     _ = [send_ring(node(), OtherNode)
-	 || OtherNode <- Children],
+         || OtherNode <- Children],
     ok.
 
 recursive_gossip(Ring) ->
@@ -145,16 +145,16 @@ handle_call(_, _From, State) -> {reply, ok, State}.
 
 %% @private
 handle_cast({send_ring_to, _Node},
-	    State = #state{gossip_tokens = 0}) ->
+            State = #state{gossip_tokens = 0}) ->
     %% Out of gossip tokens, ignore the send request
     {noreply, State};
 handle_cast({send_ring_to, Node}, State) ->
     {ok, RingOut} = riak_core_ring_manager:get_raw_ring(),
     riak_core_ring:check_tainted(RingOut,
-				 "Error: riak_core_gossip/send_ring_to "
-				 ":: Sending tainted ring over gossip"),
+                                 "Error: riak_core_gossip/send_ring_to "
+                                 ":: Sending tainted ring over gossip"),
     gen_server:cast({?MODULE, Node},
-		    {reconcile_ring, RingOut}),
+                    {reconcile_ring, RingOut}),
     Tokens = State#state.gossip_tokens - 1,
     {noreply, State#state{gossip_tokens = Tokens}};
 handle_cast({distribute_ring, Ring}, State) ->
@@ -172,7 +172,7 @@ handle_cast({reconcile_ring, OtherRing}, State) ->
     %% STATS
     % riak_core_stat:update(gossip_received),
     riak_core_ring_manager:ring_trans(fun reconcile/2,
-				      [OtherRing]),
+                                      [OtherRing]),
     {noreply, State};
 handle_cast(gossip_ring, State) ->
     % Gossip the ring to some random other node...
@@ -225,15 +225,15 @@ schedule_next_reset() ->
 %%noinspection ErlangUnboundVariable
 reconcile(Ring0, [OtherRing0]) ->
     {Ring, OtherRing} =
-	riak_core_ring:reconcile_names(Ring0, OtherRing0),
+        riak_core_ring:reconcile_names(Ring0, OtherRing0),
     Node = node(),
     OtherNode = riak_core_ring:owner_node(OtherRing),
     Members = riak_core_ring:reconcile_members(Ring,
-					       OtherRing),
+                                               OtherRing),
     WrongCluster = riak_core_ring:cluster_name(Ring) /=
                        riak_core_ring:cluster_name(OtherRing),
     PreStatus = riak_core_ring:member_status(Members,
-					     OtherNode),
+                                             OtherNode),
     IgnoreGossip = WrongCluster or (PreStatus =:= invalid)
                        or (PreStatus =:= down),
     case IgnoreGossip of
@@ -245,7 +245,7 @@ reconcile(Ring0, [OtherRing0]) ->
                                                         Ring)
     end,
     OtherStatus = riak_core_ring:member_status(Ring2,
-					       OtherNode),
+                                               OtherNode),
     case {WrongCluster, OtherStatus, Changed} of
         {true, _, _} ->
             %% TODO: Tell other node to stop gossiping to this node.
@@ -275,54 +275,54 @@ log_membership_changes(OldRing, NewRing) ->
     OldStatus = riak_core_ring:all_member_status(OldRing),
     NewStatus = riak_core_ring:all_member_status(NewRing),
     do_log_membership_changes(lists:sort(OldStatus),
-			      lists:sort(NewStatus)).
+                              lists:sort(NewStatus)).
 
 do_log_membership_changes([], []) -> ok;
 do_log_membership_changes([{Node, Status} | Old],
-			  [{Node, Status} | New]) ->
+                          [{Node, Status} | New]) ->
     %% No change
     do_log_membership_changes(Old, New);
 do_log_membership_changes([{Node, Status1} | Old],
-			  [{Node, Status2} | New]) ->
+                          [{Node, Status2} | New]) ->
     %% State changed, did not join or leave
     log_node_changed(Node, Status1, Status2),
     do_log_membership_changes(Old, New);
 do_log_membership_changes([{OldNode, _OldStatus} | _] =
-			      Old,
-			  [{NewNode, NewStatus} | New])
+                              Old,
+                          [{NewNode, NewStatus} | New])
     when NewNode < OldNode ->
     %% Node added
     log_node_added(NewNode, NewStatus),
     do_log_membership_changes(Old, New);
 do_log_membership_changes([{OldNode, OldStatus} | Old],
-			  [{NewNode, _NewStatus} | _] = New)
+                          [{NewNode, _NewStatus} | _] = New)
     when OldNode < NewNode ->
     %% Node removed
     log_node_removed(OldNode, OldStatus),
     do_log_membership_changes(Old, New);
 do_log_membership_changes([{OldNode, OldStatus} | Old],
-			  []) ->
+                          []) ->
     %% Trailing nodes were removed
     log_node_removed(OldNode, OldStatus),
     do_log_membership_changes(Old, []);
 do_log_membership_changes([],
-			  [{NewNode, NewStatus} | New]) ->
+                          [{NewNode, NewStatus} | New]) ->
     %% Trailing nodes were added
     log_node_added(NewNode, NewStatus),
     do_log_membership_changes([], New).
 
 log_node_changed(Node, Old, New) ->
     logger:info("'~s' changed from '~s' to '~s'~n",
-		[Node, Old, New]).
+                [Node, Old, New]).
 
 log_node_added(Node, New) ->
     logger:info("'~s' joined cluster with status '~s'~n",
-		[Node, New]).
+                [Node, New]).
 
 log_node_removed(Node, Old) ->
     logger:info("'~s' removed from cluster (previously: "
-		"'~s')~n",
-		[Node, Old]).
+                "'~s')~n",
+                [Node, Old]).
 
 remove_from_cluster(Ring, ExitingNode) ->
     remove_from_cluster(Ring,
@@ -374,7 +374,7 @@ attempt_simple_transfer(Seed, Ring, Owners,
                                 O /= ExitingNode]).
 
 attempt_simple_transfer(Seed, Ring, [{P, Exit} | Rest],
-			TargetN, Exit, Idx, Last) ->
+                        TargetN, Exit, Idx, Last) ->
     %% handoff
     case [N || {N, I} <- Last, Idx - I >= TargetN] of
         [] -> target_n_fail;
@@ -415,7 +415,7 @@ attempt_simple_transfer(Seed, Ring, [{P, Exit} | Rest],
             end
     end;
 attempt_simple_transfer(Seed, Ring, [{_, N} | Rest],
-			TargetN, Exit, Idx, Last) ->
+                        TargetN, Exit, Idx, Last) ->
     %% just keep track of seeing this node
     attempt_simple_transfer(Seed,
                             Ring,

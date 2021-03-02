@@ -52,7 +52,7 @@
 -type index() :: chash:index_as_int().
 
 -type pred_fun() :: fun(({index(),
-			  node()}) -> boolean()).
+                          node()}) -> boolean()).
 
 -type chash_key() :: index() | chash:index().
 
@@ -92,10 +92,10 @@ create({Size, Owners}) ->
     Nodes1 = [Node || {_, Node} <- Owners],
     Nodes2 = lists:usort(Nodes1),
     Nodes3 = lists:zip(Nodes2,
-		       lists:seq(1, length(Nodes2))),
+                       lists:seq(1, length(Nodes2))),
     Bin = create_bin(Owners, Nodes3, <<>>),
     #chashbin{size = Size, owners = Bin,
-	      nodes = list_to_tuple(Nodes2)}.
+              nodes = list_to_tuple(Nodes2)}.
 
 %% @doc Convert a `chashbin' back to a `chash'
 -spec to_chash(chashbin()) -> chash:chash().
@@ -115,17 +115,17 @@ to_list(#chashbin{owners = Bin, nodes = Nodes}) ->
 %% Convert a `chashbin' to a list of `{Index, Owner}' pairs for
 %% which `Pred({Index, Owner})' returns `true'
 -spec to_list_filter(pred_fun(),
-		     chashbin()) -> [{index(), node()}].
+                     chashbin()) -> [{index(), node()}].
 
 to_list_filter(Pred,
-	       #chashbin{owners = Bin, nodes = Nodes}) ->
+               #chashbin{owners = Bin, nodes = Nodes}) ->
     [{Idx, element(Id, Nodes)}
      || <<Idx:160/integer, Id:16/integer>> <= Bin,
-	Pred({Idx, element(Id, Nodes)})].
+        Pred({Idx, element(Id, Nodes)})].
 
 %% @doc Determine the ring index responsible for a given chash key
 -spec responsible_index(chash_key(),
-			chashbin()) -> index().
+                        chashbin()) -> index().
 
 responsible_index(<<HashKey:160/integer>>, CHBin) ->
     responsible_index(HashKey, CHBin);
@@ -135,7 +135,7 @@ responsible_index(HashKey, #chashbin{size = Size}) ->
 
 %% @doc Determine the ring position responsible for a given chash key
 -spec responsible_position(chash_key(),
-			   chashbin()) -> non_neg_integer().
+                           chashbin()) -> non_neg_integer().
 
 responsible_position(<<HashKey:160/integer>>, CHBin) ->
     responsible_position(HashKey, CHBin);
@@ -166,7 +166,7 @@ num_partitions(#chashbin{size = Size}) -> Size.
 %% @doc
 %% Return an iterator pointing to the index responsible for the given chash key
 -spec iterator(first | chash_key(),
-	       chashbin()) -> iterator().
+               chashbin()) -> iterator().
 
 iterator(first, CHBin) ->
     #iterator{pos = 0, start = 0, chbin = CHBin};
@@ -178,7 +178,7 @@ iterator(HashKey, CHBin) ->
 
 %% @doc Return iterator pointing to the given index
 -spec exact_iterator(Index :: index() | <<_:160>>,
-		     CHBin :: chashbin()) -> iterator().
+                     CHBin :: chashbin()) -> iterator().
 
 exact_iterator(<<Idx:160/integer>>, CHBin) ->
     exact_iterator(Idx, CHBin);
@@ -190,10 +190,10 @@ exact_iterator(Idx, CHBin) ->
 -spec itr_value(iterator()) -> {index(), node()}.
 
 itr_value(#iterator{pos = Pos,
-		    chbin = #chashbin{owners = Bin, nodes = Nodes}}) ->
+                    chbin = #chashbin{owners = Bin, nodes = Nodes}}) ->
     <<_:Pos/binary-unit:176, Idx:160/integer, Id:16/integer,
       _/binary>> =
-	Bin,
+        Bin,
     Owner = element(Id, Nodes),
     {Idx, Owner}.
 
@@ -201,7 +201,7 @@ itr_value(#iterator{pos = Pos,
 -spec itr_next(iterator()) -> iterator() | done.
 
 itr_next(Itr = #iterator{pos = Pos, start = Start,
-			 chbin = CHBin}) ->
+                         chbin = CHBin}) ->
     Pos2 = (Pos + 1) rem CHBin#chashbin.size,
     case Pos2 of
         Start -> done;
@@ -212,12 +212,12 @@ itr_next(Itr = #iterator{pos = Pos, start = Start,
 %% Advance the iterator `N' times, returning a list of the traversed
 %% `{Index, Owner}' pairs as well as the new iterator state
 -spec itr_pop(pos_integer(), iterator()) -> {[{index(),
-					       node()}],
-					     iterator()}.
+                                               node()}],
+                                             iterator()}.
 
 itr_pop(N, Itr = #iterator{pos = Pos, chbin = CHBin}) ->
     #chashbin{size = Size, owners = Bin, nodes = Nodes} =
-	CHBin,
+        CHBin,
     L = case Bin of
             <<_:Pos/binary-unit:176, Bin2:N/binary-unit:176,
               _/binary>> ->
@@ -241,7 +241,7 @@ itr_pop(N, Itr = #iterator{pos = Pos, chbin = CHBin}) ->
 
 %% @doc Advance the iterator while `Pred({Index, Owner})' returns `true'
 -spec itr_next_while(pred_fun(),
-		     iterator()) -> iterator().
+                     iterator()) -> iterator().
 
 itr_next_while(Pred, Itr) ->
     case Pred(itr_value(Itr)) of
@@ -256,7 +256,7 @@ itr_next_while(Pred, Itr) ->
 %% @private
 %% @doc Convert list of {Index, Owner} pairs into `chashbin' binary representation
 -spec create_bin([{index(), node()}],
-		 [{node(), pos_integer()}], binary()) -> owners_bin().
+                 [{node(), pos_integer()}], binary()) -> owners_bin().
 
 create_bin([], _, Bin) -> Bin;
 create_bin([{Idx, Owner} | Owners], Nodes, Bin) ->
@@ -267,7 +267,7 @@ create_bin([{Idx, Owner} | Owners], Nodes, Bin) ->
 %% @private
 %% @doc Convert ring index into ring position
 -spec index_position(Index :: index() | <<_:160>>,
-		     CHBin :: chashbin()) -> integer().
+                     CHBin :: chashbin()) -> integer().
 
 index_position(<<Idx:160/integer>>, CHBin) ->
     index_position(Idx, CHBin);

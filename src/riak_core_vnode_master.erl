@@ -103,19 +103,19 @@ command_unreliable(PrefListOrCmd, Msg, Sender,
 %% Send the command to the preflist given with responses going to Sender
 command2([], _Msg, _Sender, _VMaster, _How) -> ok;
 command2([{Index, Pid} | Rest], Msg, Sender, VMaster,
-	 How = normal)
+         How = normal)
     when is_pid(Pid) ->
     Request = make_request(Msg, Sender, Index),
     riak_core_vnode:send_req(Pid, Request),
     command2(Rest, Msg, Sender, VMaster, How);
 command2([{Index, Pid} | Rest], Msg, Sender, VMaster,
-	 How = unreliable)
+         How = unreliable)
     when is_pid(Pid) ->
     riak_core_send_msg:send_event_unreliable(Pid,
-					     make_request(Msg, Sender, Index)),
+                                             make_request(Msg, Sender, Index)),
     command2(Rest, Msg, Sender, VMaster, How);
 command2([{Index, Node} | Rest], Msg, Sender, VMaster,
-	 How) ->
+         How) ->
     proxy_cast({VMaster, Node},
                make_request(Msg, Sender, Index),
                How),
@@ -128,7 +128,7 @@ command2(DestTuple, Msg, Sender, VMaster, How)
 
 %% Send a command to a covering set of vnodes
 coverage(Msg, CoverageVNodes, Keyspaces,
-	 {Type, Ref, From}, VMaster)
+         {Type, Ref, From}, VMaster)
     when is_list(CoverageVNodes) ->
     [proxy_cast({VMaster, Node},
                 make_coverage_request(Msg,
@@ -137,14 +137,14 @@ coverage(Msg, CoverageVNodes, Keyspaces,
                                       Index))
      || {Index, Node} <- CoverageVNodes];
 coverage(Msg, {Index, Node}, Keyspaces, Sender,
-	 VMaster) ->
+         VMaster) ->
     proxy_cast({VMaster, Node},
-	       make_coverage_request(Msg, Keyspaces, Sender, Index)).
+               make_coverage_request(Msg, Keyspaces, Sender, Index)).
 
 %% Send the command to an individual Index/Node combination, but also
 %% return the pid for the vnode handling the request, as `{ok, VnodePid}'.
 command_return_vnode({Index, Node}, Msg, Sender,
-		     VMaster) ->
+                     VMaster) ->
     Req = make_request(Msg, Sender, Index),
     Mod = vmaster_to_vmod(VMaster),
     riak_core_vnode_proxy:command_return_vnode({Mod,
@@ -189,21 +189,21 @@ sync_spawn_command({Index, Node}, Msg, VMaster) ->
 
 %% Make a request record - exported for use by legacy modules
 -spec make_request(vnode_req(), sender(),
-		   partition()) -> riak_vnode_req_v1().
+                   partition()) -> riak_vnode_req_v1().
 
 make_request(Request, Sender, Index) ->
     #riak_vnode_req_v1{index = Index, sender = Sender,
-		       request = Request}.
+                       request = Request}.
 
 %% Make a request record - exported for use by legacy modules
 -spec make_coverage_request(vnode_req(), keyspaces(),
-			    sender(), partition()) -> riak_coverage_req_v1().
+                            sender(), partition()) -> riak_coverage_req_v1().
 
 make_coverage_request(Request, KeySpaces, Sender,
-		      Index) ->
+                      Index) ->
     #riak_coverage_req_v1{index = Index,
-			  keyspaces = KeySpaces, sender = Sender,
-			  request = Request}.
+                          keyspaces = KeySpaces, sender = Sender,
+                          request = Request}.
 
 %% Request a list of Pids for all vnodes
 %% @deprecated
@@ -224,13 +224,13 @@ proxy_cast({VMaster, Node}, Req, How) ->
     do_proxy_cast({VMaster, Node}, Req, How).
 
 do_proxy_cast({VMaster, Node},
-	      Req = #riak_vnode_req_v1{index = Idx}, How) ->
+              Req = #riak_vnode_req_v1{index = Idx}, How) ->
     Mod = vmaster_to_vmod(VMaster),
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx, Node),
     send_an_event(Proxy, Req, How),
     ok;
 do_proxy_cast({VMaster, Node},
-	      Req = #riak_coverage_req_v1{index = Idx}, How) ->
+              Req = #riak_coverage_req_v1{index = Idx}, How) ->
     Mod = vmaster_to_vmod(VMaster),
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx, Node),
     send_an_event(Proxy, Req, How),
@@ -250,19 +250,19 @@ handle_cast({wait_for_service, Service}, State) ->
     end,
     {noreply, State};
 handle_cast(Req = #riak_vnode_req_v1{index = Idx},
-	    State = #state{vnode_mod = Mod}) ->
+            State = #state{vnode_mod = Mod}) ->
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
     riak_core_vnode:send_req(Proxy, Req),
     {noreply, State};
 handle_cast(Req = #riak_coverage_req_v1{index = Idx},
-	    State = #state{vnode_mod = Mod}) ->
+            State = #state{vnode_mod = Mod}) ->
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
     riak_core_vnode:send_req(Proxy, Req),
     {noreply, State}.
 
 handle_call({return_vnode,
-	     Req = #riak_vnode_req_v1{index = Idx}},
-	    _From, State = #state{vnode_mod = Mod}) ->
+             Req = #riak_vnode_req_v1{index = Idx}},
+            _From, State = #state{vnode_mod = Mod}) ->
     {ok, Pid} =
         riak_core_vnode_proxy:command_return_vnode({Mod,
                                                     Idx,
@@ -270,8 +270,8 @@ handle_call({return_vnode,
                                                    Req),
     {reply, {ok, Pid}, State};
 handle_call(Req = #riak_vnode_req_v1{index = Idx,
-				     sender = {server, undefined, undefined}},
-	    From, State = #state{vnode_mod = Mod}) ->
+                                     sender = {server, undefined, undefined}},
+            From, State = #state{vnode_mod = Mod}) ->
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
     riak_core_vnode:send_req(Proxy,
                              Req#riak_vnode_req_v1{sender =
@@ -280,17 +280,17 @@ handle_call(Req = #riak_vnode_req_v1{index = Idx,
                                                         From}}),
     {noreply, State};
 handle_call({spawn,
-	     Req = #riak_vnode_req_v1{index = Idx,
-				      sender = {server, undefined, undefined}}},
-	    From, State = #state{vnode_mod = Mod}) ->
+             Req = #riak_vnode_req_v1{index = Idx,
+                                      sender = {server, undefined, undefined}}},
+            From, State = #state{vnode_mod = Mod}) ->
     Proxy = riak_core_vnode_proxy:reg_name(Mod, Idx),
     Sender = {server, undefined, From},
     spawn_link(fun () ->
-		       riak_core_vnode:send_all_proxy_req(Proxy,
-							  Req#riak_vnode_req_v1{sender
-										    =
-										    Sender})
-	       end),
+                       riak_core_vnode:send_all_proxy_req(Proxy,
+                                                          Req#riak_vnode_req_v1{sender
+                                                                                    =
+                                                                                    Sender})
+               end),
     {noreply, State}.
 
 handle_info(_Info, State) -> {noreply, State}.

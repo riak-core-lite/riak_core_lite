@@ -97,14 +97,14 @@
 %% @param VNode Process ID of the vnode owning the handoff.
 %% @returns `{ok, Pid}' where `Pid' is the process ID of the handoff sender.
 -spec start_link(TargetNode :: node(),
-		 Module :: module(),
-		 {Type :: ho_type(), Opts :: [{atom(), term()}]},
-		 VNode :: pid()) -> {ok, pid()}.
+                 Module :: module(),
+                 {Type :: ho_type(), Opts :: [{atom(), term()}]},
+                 VNode :: pid()) -> {ok, pid()}.
 
 start_link(TargetNode, Module, {Type, Opts}, Vnode) ->
     Pid = spawn_link(fun () ->
-			     start_fold(TargetNode, Module, {Type, Opts}, Vnode)
-		     end),
+                             start_fold(TargetNode, Module, {Type, Opts}, Vnode)
+                     end),
     {ok, Pid}.
 
 %%%===================================================================
@@ -126,19 +126,19 @@ start_link(TargetNode, Module, {Type, Opts}, Vnode) ->
 %% @param TargetPartition Index of the partition to hand off data to.
 %% @returns `ok'.
 -spec start_fold_(TargetNode :: node(),
-		  Module :: module(), Type :: ho_type(),
-		  Opts :: [{atom(), term()}], ParentPid :: pid(),
-		  SrcNode :: node(), SrcPartition :: index(),
-		  TargetPartition :: index()) -> ok.
+                  Module :: module(), Type :: ho_type(),
+                  Opts :: [{atom(), term()}], ParentPid :: pid(),
+                  SrcNode :: node(), SrcPartition :: index(),
+                  TargetPartition :: index()) -> ok.
 
 start_fold_(TargetNode, Module, Type, Opts, ParentPid,
-	    SrcNode, SrcPartition, TargetPartition) ->
+            SrcNode, SrcPartition, TargetPartition) ->
     %% Give workers one more chance to abort or get a lock or whatever.
     FoldOpts = maybe_call_handoff_started(Module,
-					  SrcPartition),
+                                          SrcPartition),
     Filter = get_filter(Opts),
     [_Name, Host] = string:tokens(atom_to_list(TargetNode),
-				  "@"),
+                                  "@"),
     {ok, Port} = get_handoff_port(TargetNode),
     TNHandoffIP = case get_handoff_ip(TargetNode) of
                       error -> Host;
@@ -162,7 +162,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
     %% print an error and keep going with our fingers crossed.
     TargetBin = term_to_binary(TargetNode),
     VerifyNodeMsg = <<(?PT_MSG_VERIFY_NODE):8,
-		      TargetBin/binary>>,
+                      TargetBin/binary>>,
     ok = gen_tcp:send(Socket, VerifyNodeMsg),
     case gen_tcp:recv(Socket, 0, RecvTimeout) of
         {ok, [?PT_MSG_VERIFY_NODE | _]} -> ok;
@@ -199,7 +199,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
         {error, closed} -> exit({shutdown, max_concurrency})
     end,
     RemoteSupportsBatching =
-	remote_supports_batching(TargetNode),
+        remote_supports_batching(TargetNode),
     logger:info("Starting ~p transfer of ~p from ~p ~p "
                 "to ~p ~p",
                 [Type,
@@ -212,7 +212,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
     ok = gen_tcp:send(Socket, M),
     StartFoldTime = os:timestamp(),
     Stats = #ho_stats{interval_end =
-			  future_now(get_status_interval())},
+                          future_now(get_status_interval())},
     UnsentAcc0 = get_notsent_acc0(Opts),
     UnsentFun = get_notsent_fun(Opts),
     Req = riak_core_util:make_fold_req(fun visit_item/3,
@@ -257,20 +257,20 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
                  end,
     %% Send any straggler entries remaining in the buffer:
     AccRecord = send_objects(AccRecord0#ho_acc.item_queue,
-			     AccRecord0),
+                             AccRecord0),
     if AccRecord == {error, vnode_shutdown} ->
            ?LOG_INFO("because the local vnode was shutdown", []),
            throw({be_quiet,
                   error,
                   local_vnode_shutdown_requested});
        true ->
-	   ok                     % If not #ho_acc, get badmatch below
+           ok                     % If not #ho_acc, get badmatch below
     end,
     #ho_acc{error = ErrStatus, module = Module,
-	    parent = ParentPid, total_objects = TotalObjects,
-	    total_bytes = TotalBytes, stats = FinalStats,
-	    acksync_timer = TRef, notsent_acc = NotSentAcc} =
-	AccRecord,
+            parent = ParentPid, total_objects = TotalObjects,
+            total_bytes = TotalBytes, stats = FinalStats,
+            acksync_timer = TRef, notsent_acc = NotSentAcc} =
+        AccRecord,
     _ = timer:cancel(TRef),
     case ErrStatus of
         ok ->
@@ -328,12 +328,12 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
 %% @returns `ok'.
 %% @see start_fold_/8.
 -spec start_fold(TargetNode :: node(),
-		 Module :: module(),
-		 {Type :: ho_type(), Opts :: [{atom(), term()}]},
-		 ParentPid :: pid()) -> ok.
+                 Module :: module(),
+                 {Type :: ho_type(), Opts :: [{atom(), term()}]},
+                 ParentPid :: pid()) -> ok.
 
 start_fold(TargetNode, Module, {Type, Opts},
-	   ParentPid) ->
+           ParentPid) ->
     SrcNode = node(),
     SrcPartition = get_src_partition(Opts),
     TargetPartition = get_target_partition(Opts),
@@ -375,7 +375,7 @@ start_fold(TargetNode, Module, {Type, Opts},
 %% @returns `{ok, TRef}' if the timer could be started, `{error, Reason}'
 %%          otherwise.
 -spec start_visit_item_timer() -> {ok, timer:tref()} |
-				  {error, term()}.
+                                  {error, term()}.
 
 start_visit_item_timer() ->
     Ival = case application:get_env(riak_core,
@@ -396,10 +396,10 @@ start_visit_item_timer() ->
 %% @returns Handoff accumulator after the operation.
 %% @see visit_item2/3.
 -spec visit_item(K :: term(), V :: term(),
-		 Acc0 :: ho_acc()) -> ho_acc().
+                 Acc0 :: ho_acc()) -> ho_acc().
 
 visit_item(K, V,
-	   Acc0 = #ho_acc{acksync_threshold = AccSyncThreshold}) ->
+           Acc0 = #ho_acc{acksync_threshold = AccSyncThreshold}) ->
     %% Eventually, a vnode worker proc will be doing this fold, but we don't
     %% know the pid of that proc ahead of time.  So we have to start the
     %% timer some time after the fold has started execution on that proc
@@ -427,21 +427,21 @@ visit_item(K, V,
 %% @param Acc Accumulator.
 %% @returns Accumulator after operation.
 -spec visit_item2(K :: term(), V :: term(),
-		  Acc :: ho_acc()) -> ho_acc().
+                  Acc :: ho_acc()) -> ho_acc().
 
 %% When a tcp error occurs, the ErrStatus argument is set to {error, Reason}.
 %% Since we can't abort the fold, this clause is just a no-op.
 visit_item2(_K, _V,
-	    Acc = #ho_acc{error = {error, _Reason}}) ->
+            Acc = #ho_acc{error = {error, _Reason}}) ->
     %% When a TCP error occurs, #ho_acc.error is set to {error, Reason}.
     throw(Acc);
 visit_item2(K, V,
-	    Acc = #ho_acc{ack = _AccSyncThreshold,
-			  acksync_threshold = _AccSyncThreshold}) ->
+            Acc = #ho_acc{ack = _AccSyncThreshold,
+                          acksync_threshold = _AccSyncThreshold}) ->
     #ho_acc{module = Module, socket = Sock,
-	    src_target = {SrcPartition, TargetPartition},
-	    stats = Stats} =
-	Acc,
+            src_target = {SrcPartition, TargetPartition},
+            stats = Stats} =
+        Acc,
     RecvTimeout = get_handoff_receive_timeout(),
     M = <<(?PT_MSG_OLDSYNC):8, "sync">>,
     NumBytes = byte_size(M),
@@ -466,12 +466,12 @@ visit_item2(K, V,
     end;
 visit_item2(K, V, Acc) ->
     #ho_acc{filter = Filter, module = Module,
-	    total_objects = TotalObjects,
-	    use_batching = UseBatching, item_queue = ItemQueue,
-	    item_queue_length = ItemQueueLength,
-	    item_queue_byte_size = ItemQueueByteSize,
-	    notsent_fun = NotSentFun, notsent_acc = NotSentAcc} =
-	Acc,
+            total_objects = TotalObjects,
+            use_batching = UseBatching, item_queue = ItemQueue,
+            item_queue_length = ItemQueueLength,
+            item_queue_byte_size = ItemQueueByteSize,
+            notsent_fun = NotSentFun, notsent_acc = NotSentAcc} =
+        Acc,
     case Filter(K) of
         true ->
             case Module:encode_handoff_item(K, V) of
@@ -543,10 +543,10 @@ visit_item2(K, V, Acc) ->
 %% @param Key Key of the item not sent.
 %% @returns New fold accumulator.
 -spec handle_not_sent_item(NotSentFun :: fun((term(),
-					      ho_acc()) -> ho_acc()) |
-					 undefined,
-			   Acc :: ho_acc(), Key :: term()) -> undefined |
-							      ho_acc().
+                                              ho_acc()) -> ho_acc()) |
+                                         undefined,
+                           Acc :: ho_acc(), Key :: term()) -> undefined |
+                                                              ho_acc().
 
 handle_not_sent_item(undefined, _, _) -> undefined;
 handle_not_sent_item(NotSentFun, Acc, Key)
@@ -560,17 +560,17 @@ handle_not_sent_item(NotSentFun, Acc, Key)
 %%        current handoff fold.
 %% @returns Handoff accumulator after the objects have been sent.
 -spec send_objects(ItemsReverseList :: [binary()],
-		   Acc :: ho_acc()) -> ho_acc().
+                   Acc :: ho_acc()) -> ho_acc().
 
 send_objects([], Acc) -> Acc;
 send_objects(ItemsReverseList, Acc) ->
     Items = lists:reverse(ItemsReverseList),
     #ho_acc{ack = Ack, module = Module, socket = Sock,
-	    src_target = {SrcPartition, TargetPartition},
-	    stats = Stats, total_objects = TotalObjects,
-	    total_bytes = TotalBytes,
-	    item_queue_length = NObjects} =
-	Acc,
+            src_target = {SrcPartition, TargetPartition},
+            stats = Stats, total_objects = TotalObjects,
+            total_bytes = TotalBytes,
+            item_queue_length = NObjects} =
+        Acc,
     ObjectList = term_to_binary(Items),
     M = <<(?PT_MSG_BATCH):8, ObjectList/binary>>,
     NumBytes = byte_size(M),
@@ -595,7 +595,7 @@ send_objects(ItemsReverseList, Acc) ->
 %% @param Node Node to get the handoff IP for.
 %% @returns `{ok, IP}' where `IP' is the IP address as a string, or `error'.
 -spec get_handoff_ip(Node :: node()) -> {ok, string()} |
-					error.
+                                        error.
 
 get_handoff_ip(Node) when is_atom(Node) ->
     case riak_core_util:safe_rpc(Node,
@@ -613,7 +613,7 @@ get_handoff_ip(Node) when is_atom(Node) ->
 %% @param Node Node to get the handoff port for.
 %% @returns `{ok, Port}' Where `Port' is the port number as an integer.
 -spec get_handoff_port(Node :: node()) -> {ok,
-					   integer()}.
+                                           integer()}.
 
 get_handoff_port(Node) when is_atom(Node) ->
     gen_server:call({riak_core_handoff_listener, Node},
@@ -634,7 +634,7 @@ get_handoff_receive_timeout() ->
 %% @doc Compute the time from the start time to now in seconds.
 %% @param StartFoldTime Timestamp of when the fold started.
 -spec end_fold_time(StartFoldTime ::
-			os:timestamp()) -> float().
+                        os:timestamp()) -> float().
 
 end_fold_time(StartFoldTime) ->
     EndFoldTime = os:timestamp(),
@@ -646,7 +646,7 @@ end_fold_time(StartFoldTime) ->
 %% @param S Number of seconds in the future.
 %% @returns Timestamp `S' seconds in the future.
 -spec future_now(S ::
-		     pos_integer()) -> erlang:timestamp().
+                     pos_integer()) -> erlang:timestamp().
 
 future_now(S) ->
     {Megas, Secs, Micros} = os:timestamp(),
@@ -666,11 +666,11 @@ is_elapsed(TS) -> os:timestamp() >= TS.
 %% @param NumBytes Number of bytes to add.
 %% @returns Updated stats.
 -spec incr_bytes(Stats :: ho_stats(),
-		 NumBytes :: non_neg_integer()) -> NewStats ::
-						       ho_stats().
+                 NumBytes :: non_neg_integer()) -> NewStats ::
+                                                       ho_stats().
 
 incr_bytes(Stats = #ho_stats{bytes = Bytes},
-	   NumBytes) ->
+           NumBytes) ->
     Stats#ho_stats{bytes = Bytes + NumBytes}.
 
 %% @private
@@ -687,7 +687,7 @@ incr_objs(Stats) -> incr_objs(Stats, 1).
 %% @param Number of objects to add.
 %% @returns Updated stats.
 -spec incr_objs(Stats :: ho_stats(),
-		NObjs :: non_neg_integer()) -> NewStats :: ho_stats().
+                NObjs :: non_neg_integer()) -> NewStats :: ho_stats().
 
 incr_objs(Stats = #ho_stats{objs = Objs}, NObjs) ->
     Stats#ho_stats{objs = Objs + NObjs}.
@@ -699,10 +699,10 @@ incr_objs(Stats = #ho_stats{objs = Objs}, NObjs) ->
 %% @param ModSrcTgt Tripel of module, source and target index.
 %% @param Stats Stats to send.
 -spec maybe_send_status(ModSrcTgt :: mod_src_tgt(),
-			Stats :: ho_stats()) -> NewStats :: ho_stats().
+                        Stats :: ho_stats()) -> NewStats :: ho_stats().
 
 maybe_send_status(ModSrcTgt,
-		  Stats = #ho_stats{interval_end = IntervalEnd}) ->
+                  Stats = #ho_stats{interval_end = IntervalEnd}) ->
     case is_elapsed(IntervalEnd) of
         true ->
             Stats2 = Stats#ho_stats{last_update = os:timestamp()},
@@ -726,7 +726,7 @@ get_status_interval() ->
 %% @doc Get the index of the source partition of the handoff from options.
 %% @param Opts Handoff options.
 -spec get_src_partition(Opts :: [{atom(),
-				  term()}]) -> index().
+                                  term()}]) -> index().
 
 get_src_partition(Opts) ->
     proplists:get_value(src_partition, Opts).
@@ -735,7 +735,7 @@ get_src_partition(Opts) ->
 %% @doc Get the index of the target partition of the handoff from options.
 %% @param Opts Handoff options.
 -spec get_target_partition(Opts :: [{atom(),
-				     term()}]) -> index().
+                                     term()}]) -> index().
 
 get_target_partition(Opts) ->
     proplists:get_value(target_partition, Opts).
@@ -744,7 +744,7 @@ get_target_partition(Opts) ->
 %% @doc Get the initial accumulator of items not sent.
 %% @param Opts Options to retrieve the accumulator from.
 -spec get_notsent_acc0(Opts :: [{atom(),
-				 term()}]) -> ho_acc().
+                                 term()}]) -> ho_acc().
 
 get_notsent_acc0(Opts) ->
     proplists:get_value(notsent_acc0, Opts).
@@ -753,7 +753,7 @@ get_notsent_acc0(Opts) ->
 %% @doc Get the function to handle items not sent.
 %% @param Opts Options to retrieve the function from.
 -spec get_notsent_fun(Opts :: [{atom(),
-				term()}]) -> function().
+                                term()}]) -> function().
 
 get_notsent_fun(Opts) ->
     case proplists:get_value(notsent_fun, Opts) of
@@ -765,7 +765,7 @@ get_notsent_fun(Opts) ->
 %% @doc Retrieve the filter predicate.
 %% @param Opts Options to retrieve the predicate from.
 -spec get_filter(Opts ::
-		     proplists:proplist()) -> predicate().
+                     proplists:proplist()) -> predicate().
 
 get_filter(Opts) ->
     case proplists:get_value(filter, Opts) of
@@ -778,7 +778,7 @@ get_filter(Opts) ->
 %%      otherwise fall back to the slower, object-at-a-time path.
 %% @param Node Node to check.
 -spec remote_supports_batching(Node ::
-				   node()) -> boolean().
+                                   node()) -> boolean().
 
 remote_supports_batching(Node) ->
     case catch rpc:call(Node,
@@ -809,8 +809,8 @@ remote_supports_batching(Node) ->
 %% @param SrcPartition Index of the source partition.
 %% @returns Options for the fold handoff.
 -spec maybe_call_handoff_started(Module :: module(),
-				 SrcPartition ::
-				     index()) -> proplists:proplist().
+                                 SrcPartition ::
+                                     index()) -> proplists:proplist().
 
 maybe_call_handoff_started(Module, SrcPartition) ->
     case lists:member({handoff_started, 2},

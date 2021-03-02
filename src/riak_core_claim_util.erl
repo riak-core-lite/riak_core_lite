@@ -57,10 +57,10 @@
          substitutions/2]).
 
 -record(load,
-	{node,    % Node name
-	 num_pri, % Number of primaries
-	 num_fb,  % Number of fallbacks
-	 norm_fb}). % Normalised fallbacks - ratio of how many there are
+        {node,    % Node name
+         num_pri, % Number of primaries
+         num_fb,  % Number of fallbacks
+         norm_fb}). % Normalised fallbacks - ratio of how many there are
 
 -record(failure,
         {down = [], % List of downed nodes
@@ -123,13 +123,13 @@ node_load(R, NVal, DownNodes) ->
     VL = vnode_load(R, NVal, DownNodes),
     TotFBs = lists:sum([NumFBs || {_N, _, NumFBs} <- VL]),
     [#load{node = N, num_pri = NumPris, num_fb = NumFBs,
-	   norm_fb = norm_fb(NumFBs, TotFBs)}
+           norm_fb = norm_fb(NumFBs, TotFBs)}
      || {N, NumPris, NumFBs} <- VL].
 
 vnode_load(R, NVal, DownNodes) ->
     UpNodes = riak_core_ring:all_members(R) -- DownNodes,
     Keys = [<<(I + 1):160/integer>>
-	    || {I, _Owner} <- riak_core_ring:all_owners(R)],
+            || {I, _Owner} <- riak_core_ring:all_owners(R)],
     %% NValParts = Nval * riak_core_ring:num_partitions(R),
     AllPLs = [riak_core_apl:get_apl_ann(Key,
                                         NVal,
@@ -164,18 +164,18 @@ print_analysis(LoadAnalysis) ->
 
 print_analysis(IoDev, LoadAnalysis) ->
     io:format(IoDev,
-	      " Min  Mean/  SD  10th  90th   Max  DownNodes/"
-	      "Worst\n",
-	      []),
+              " Min  Mean/  SD  10th  90th   Max  DownNodes/"
+              "Worst\n",
+              []),
     print_analysis1(IoDev, LoadAnalysis).
 
 %% @private
 print_analysis1(_IoDev, []) -> ok;
 print_analysis1(IoDev,
-		[#failure{down = Down, load = Load, fbmin = FBMin,
-			  fbmean = FBMean, fbstddev = FBStdDev, fb10 = FB10,
-			  fb90 = FB90, fbmax = FBMax}
-		 | Rest]) ->
+                [#failure{down = Down, load = Load, fbmin = FBMin,
+                          fbmean = FBMean, fbstddev = FBStdDev, fb10 = FB10,
+                          fb90 = FB90, fbmax = FBMax}
+                 | Rest]) ->
     %% Find the 3 worst FBmax
     Worst = [{N, NumFB}
              || #load{node = N, num_fb = NumFB}
@@ -306,10 +306,10 @@ adjacency_matrix_populate(Tid, M, [Node | Owners],
 %% @private Compute the distance from node to the next of M nodes
 adjacency_matrix_add_dist(_Tid, _Node, _M, [], _) -> ok;
 adjacency_matrix_add_dist(_Tid, _Node, [], _OwnersCycle,
-			  _) ->
+                          _) ->
     ok;
 adjacency_matrix_add_dist(Tid, Node, M,
-			  [OtherNode | OwnersCycle], Distance) ->
+                          [OtherNode | OwnersCycle], Distance) ->
     case lists:member(OtherNode, M) of
         true -> % haven't seen this node yet, add distance
             ets:insert(Tid, {{Node, OtherNode}, Distance}),
@@ -337,11 +337,11 @@ count_distances([]) -> [];
 count_distances(Ds) ->
     MaxD = lists:max(Ds),
     PosCounts = lists:foldl(fun (D, Acc) ->
-				    orddict:update_counter(D, 1, Acc)
-			    end,
-			    orddict:from_list([{D, 0}
-					       || D <- lists:seq(0, MaxD)]),
-			    Ds),
+                                    orddict:update_counter(D, 1, Acc)
+                            end,
+                            orddict:from_list([{D, 0}
+                                               || D <- lists:seq(0, MaxD)]),
+                            Ds),
     %% PosCounts orddict must be initialized to make sure no distances
     %% are missing in the list comprehension
     [Count || {_Pos, Count} <- PosCounts].
@@ -373,7 +373,7 @@ distances(_Node, _M, [], _, Distances) -> Distances;
 distances(_Node, [], _OwnersCycle, _, Distances) ->
     Distances;
 distances(Node, M, [OtherNode | OwnersCycle], Distance,
-	  Distances) ->
+          Distances) ->
     case lists:member(OtherNode, M) of
         true -> % haven't seen this node yet, add distance
             distances(Node,
@@ -396,7 +396,7 @@ score_am(AM, NVal) ->
 
 count(L, NVal) ->
     Acc0 = orddict:from_list([{D, 0}
-			      || D <- lists:seq(0, NVal - 1)]),
+                              || D <- lists:seq(0, NVal - 1)]),
     lists:foldl(fun (E, A) ->
                         orddict:update_counter(E, 1, A)
                 end,
@@ -517,7 +517,7 @@ next_pow2(X, R) -> next_pow2(X, R * 2).
 %% Take the AM scores and cap by TargetN and find the node that
 %% improves the RMS
 prepend_next_owner(M, [Node], Owners, DAM,
-		   _TN) -> % only one node, not a lot of decisions to make
+                   _TN) -> % only one node, not a lot of decisions to make
     prepend(M, Node, Owners, DAM);
 prepend_next_owner(M, Eligible, Owners, DAM, TN) ->
     {_BestScore, Owners2, DAM2} = lists:foldl(fun (Node,

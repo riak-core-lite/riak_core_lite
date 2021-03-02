@@ -68,7 +68,7 @@ start_link() -> gen_server:start_link(?MODULE, [], []).
 %% @param Socket Socket to listen to.
 %% @returns `ok'.
 -spec set_socket(Pid :: pid(),
-		 Socket :: inet:socket()) -> ok.
+                 Socket :: inet:socket()) -> ok.
 
 set_socket(Pid, Socket) ->
     gen_server:call(Pid, {set_socket, Socket}).
@@ -95,8 +95,8 @@ init([]) ->
 
 %% @doc Callback for {@link gen_server:call/3}.
 -spec handle_call(Msg :: {set_socket, inet:socket()},
-		  From :: {pid(), term()}, State :: state()) -> {reply,
-								 ok, state()}.
+                  From :: {pid(), term()}, State :: state()) -> {reply,
+                                                                 ok, state()}.
 
 handle_call({set_socket, Socket0}, _From, State) ->
     SockOpts = [{active, once}, {packet, 4}, {header, 1}],
@@ -107,23 +107,23 @@ handle_call({set_socket, Socket0}, _From, State) ->
 
 %% @doc Callback for {@link gen_server}. Handles tcp messages.
 -spec handle_info(Msg :: term(),
-		  State :: state()) -> {stop, normal, state()} |
-				       {noreply, state(), non_neg_integer()}.
+                  State :: state()) -> {stop, normal, state()} |
+                                       {noreply, state(), non_neg_integer()}.
 
 handle_info({tcp_closed, _Socket},
-	    State = #state{partition = Partition, count = Count,
-			   peer = Peer}) ->
+            State = #state{partition = Partition, count = Count,
+                           peer = Peer}) ->
     logger:info("Handoff receiver for partition ~p exited "
-		"after processing ~p objects from ~p",
-		[Partition, Count, Peer]),
+                "after processing ~p objects from ~p",
+                [Partition, Count, Peer]),
     {stop, normal, State};
 handle_info({tcp_error, _Socket, Reason},
-	    State = #state{partition = Partition, count = Count,
-			   peer = Peer}) ->
+            State = #state{partition = Partition, count = Count,
+                           peer = Peer}) ->
     logger:info("Handoff receiver for partition ~p exited "
-		"after processing ~p objects from ~p: "
-		"TCP error ~p",
-		[Partition, Count, Peer, Reason]),
+                "after processing ~p objects from ~p: "
+                "TCP error ~p",
+                [Partition, Count, Peer, Reason]),
     {stop, normal, State};
 handle_info({tcp, Socket, Data}, State) ->
     [MsgType | MsgData] = Data,
@@ -158,19 +158,19 @@ handle_info(timeout, State) ->
 %% @param State Current state.
 %% @returns The updated state after the message has been processed.
 -spec process_message(MsgType :: integer(),
-		      MsgData :: binary(), State :: state()) -> state().
+                      MsgData :: binary(), State :: state()) -> state().
 
 process_message(?PT_MSG_INIT, MsgData,
-		State = #state{vnode_mod = VNodeMod, peer = Peer}) ->
+                State = #state{vnode_mod = VNodeMod, peer = Peer}) ->
     <<Partition:160/integer>> = MsgData,
     logger:info("Receiving handoff data for partition "
-		"~p:~p from ~p",
-		[VNodeMod, Partition, Peer]),
+                "~p:~p from ~p",
+                [VNodeMod, Partition, Peer]),
     {ok, VNode} =
-	riak_core_vnode_master:get_vnode_pid(Partition,
-					     VNodeMod),
+        riak_core_vnode_master:get_vnode_pid(Partition,
+                                             VNodeMod),
     Data = [{mod_src_tgt, {VNodeMod, undefined, Partition}},
-	    {vnode_pid, VNode}],
+            {vnode_pid, VNode}],
     riak_core_handoff_manager:set_recv_data(self(), Data),
     State#state{partition = Partition, vnode = VNode};
 process_message(?PT_MSG_BATCH, MsgData, State) ->
@@ -197,17 +197,17 @@ process_message(?PT_MSG_OBJ, MsgData,
                    binary:part(MsgData, {0, min(size(MsgData), 128)})}})
     end;
 process_message(?PT_MSG_OLDSYNC, MsgData,
-		State = #state{sock = Socket}) ->
+                State = #state{sock = Socket}) ->
     gen_tcp:send(Socket, <<(?PT_MSG_OLDSYNC):8, "sync">>),
     <<VNodeModBin/binary>> = MsgData,
     VNodeMod = binary_to_atom(VNodeModBin, utf8),
     State#state{vnode_mod = VNodeMod};
 process_message(?PT_MSG_SYNC, _MsgData,
-		State = #state{sock = Socket}) ->
+                State = #state{sock = Socket}) ->
     gen_tcp:send(Socket, <<(?PT_MSG_SYNC):8, "sync">>),
     State;
 process_message(?PT_MSG_VERIFY_NODE, ExpectedName,
-		State = #state{sock = Socket, peer = Peer}) ->
+                State = #state{sock = Socket, peer = Peer}) ->
     case binary_to_term(ExpectedName) of
         _Node when _Node =:= node() ->
             gen_tcp:send(Socket, <<(?PT_MSG_VERIFY_NODE):8>>),
@@ -221,29 +221,29 @@ process_message(?PT_MSG_VERIFY_NODE, ExpectedName,
 process_message(?PT_MSG_CONFIGURE, MsgData, State) ->
     ConfProps = binary_to_term(MsgData),
     State#state{vnode_mod =
-		    proplists:get_value(vnode_mod, ConfProps),
-		partition = proplists:get_value(partition, ConfProps)};
+                    proplists:get_value(vnode_mod, ConfProps),
+                partition = proplists:get_value(partition, ConfProps)};
 process_message(_, _MsgData,
-		State = #state{sock = Socket}) ->
+                State = #state{sock = Socket}) ->
     gen_tcp:send(Socket,
-		 <<(?PT_MSG_UNKNOWN):8, "unknown_msg">>),
+                 <<(?PT_MSG_UNKNOWN):8, "unknown_msg">>),
     State.
 
 %% @doc Callback for {@link gen_server:cast/2}. Not implemented.
 -spec handle_cast(Msg :: term(),
-		  State :: state()) -> {noreply, state()}.
+                  State :: state()) -> {noreply, state()}.
 
 handle_cast(_Msg, State) -> {noreply, State}.
 
 %% @doc Callback for {@link gen_server:stop/1}. Not implemented.
 -spec terminate(Reason :: term(),
-		State :: state()) -> ok.
+                State :: state()) -> ok.
 
 terminate(_Reason, _State) -> ok.
 
 %% @doc Callback for {@link gen_server}. Not implemented.
 -spec code_change(OldVsn :: term() | {down, term()},
-		  State :: state(), Extra :: term()) -> {ok, state()}.
+                  State :: state(), Extra :: term()) -> {ok, state()}.
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
@@ -253,8 +253,8 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% @param Module Module creating the peername.
 %% @returns Tuple containing the IP address as a string and port as an integer.
 -spec safe_peername(Skt :: inet:socket(),
-		    Module :: module()) -> {string(), integer()} |
-					   {unknown, unknown}.
+                    Module :: module()) -> {string(), integer()} |
+                                           {unknown, unknown}.
 
 safe_peername(Skt, Module) ->
     case Module:peername(Skt) of

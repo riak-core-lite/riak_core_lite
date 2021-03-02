@@ -54,21 +54,21 @@ start_link() ->
 %% @see riak_core_handoff_sender:start_link/0.
 %% @returns Parameters to start the supervised children.
 -spec init([]) -> {ok,
-		   {{one_for_all, 10, 10},
-		    [{riak_core_handoff_receiver_sup |
-		      riak_core_handoff_sender_sup |
-		      riak_core_handoff_listener_sup |
-		      riak_core_handoff_manager,
-		      {riak_core_handoff_receiver_sup |
-		       riak_core_handoff_sender_sup |
-		       riak_core_handoff_listener_sup |
-		       riak_core_handoff_manager,
-		       start_link, []},
-		      permanent, brutal_kill, supervisor | worker,
-		      [riak_core_handoff_receiver_sup |
-		       riak_core_handoff_sender_sup |
-		       riak_core_handoff_listener_sup |
-		       riak_core_handoff_manager]}]}}.
+                   {{one_for_all, 10, 10},
+                    [{riak_core_handoff_receiver_sup |
+                      riak_core_handoff_sender_sup |
+                      riak_core_handoff_listener_sup |
+                      riak_core_handoff_manager,
+                      {riak_core_handoff_receiver_sup |
+                       riak_core_handoff_sender_sup |
+                       riak_core_handoff_listener_sup |
+                       riak_core_handoff_manager,
+                       start_link, []},
+                      permanent, brutal_kill, supervisor | worker,
+                      [riak_core_handoff_receiver_sup |
+                       riak_core_handoff_sender_sup |
+                       riak_core_handoff_listener_sup |
+                       riak_core_handoff_manager]}]}}.
 
 init([]) ->
     {ok,

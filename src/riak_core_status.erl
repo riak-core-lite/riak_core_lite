@@ -43,8 +43,8 @@ ringready() ->
     end.
 
 -spec transfers() -> {[atom()],
-		      [{waiting_to_handoff, atom(), integer()} |
-		       {stopped, atom(), integer()}]}.
+                      [{waiting_to_handoff, atom(), integer()} |
+                       {stopped, atom(), integer()}]}.
 
 transfers() ->
     {Down, Rings} = get_rings(),
@@ -64,7 +64,7 @@ transfers() ->
 
 %% @doc Produce status for all active transfers in the cluster.
 -spec all_active_transfers() -> {Xfers :: list(),
-				 Down :: list()}.
+                                 Down :: list()}.
 
 all_active_transfers() ->
     {Xfers, Down} =
@@ -156,8 +156,8 @@ get_rings() ->
                                         [],
                                         30000),
     Rings =
-	orddict:from_list([{riak_core_ring:owner_node(R), R}
-			   || {ok, R} <- RawRings]),
+        orddict:from_list([{riak_core_ring:owner_node(R), R}
+                           || {ok, R} <- RawRings]),
     {lists:sort(Down), Rings}.
 
 %% Produce a hash of the 'chash' portion of the ring
@@ -197,7 +197,7 @@ active_partitions(Node) ->
 partitions(Node, Ring) ->
     Owners = riak_core_ring:all_owners(Ring),
     Owned = ordsets:from_list(owned_partitions(Owners,
-					       Node)),
+                                               Node)),
     Active = active_partitions(Node),
     Stopped = ordsets:subtract(Owned, Active),
     Secondary = ordsets:subtract(Active, Owned),

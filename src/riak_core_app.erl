@@ -38,7 +38,7 @@
 %% @param StartArgs ignored.
 %% Returns `{ok, Pid}' if the start was succesful, otherwise `{error, Reason}'.
 -spec start(StartType :: application:start_type(),
-	    StartArgs :: term()) -> {ok, pid()} | {error, term()}.
+            StartArgs :: term()) -> {ok, pid()} | {error, term()}.
 
 start(_StartType, _StartArgs) ->
     ok = validate_ring_state_directory_exists(),
@@ -61,7 +61,7 @@ stop(_State) ->
 validate_ring_state_directory_exists() ->
     riak_core_util:start_app_deps(riak_core),
     {ok, RingStateDir} = application:get_env(riak_core,
-					     ring_state_dir),
+                                             ring_state_dir),
     case filelib:ensure_dir(filename:join(RingStateDir,
                                           "dummy"))
         of
@@ -79,7 +79,7 @@ validate_ring_state_directory_exists() ->
 %%          otherwise.
 %% @see riak_core_sup:init/1.
 -spec start_riak_core_sup() -> {ok, pid()} |
-			       {error, term()}.
+                               {error, term()}.
 
 start_riak_core_sup() ->
     %% Spin up the supervisor; prune ring files as necessary
@@ -101,5 +101,5 @@ register_applications() -> ok.
 
 add_ring_event_handler() ->
     ok =
-	riak_core_ring_events:add_guarded_handler(riak_core_ring_handler,
-						  []).
+        riak_core_ring_events:add_guarded_handler(riak_core_ring_handler,
+                                                  []).

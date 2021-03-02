@@ -106,10 +106,10 @@ init([]) ->
 %%          `{error, max_concurrency}' if no more concurrent handoffs can be
 %%          added.
 -spec add_outbound(HOType :: ho_type(),
-		   Module :: module(), Idx :: index(), Node :: node(),
-		   VnodePid :: pid(), Opts :: [term()]) -> {ok, pid()} |
-							   {error,
-							    max_concurrency}.
+                   Module :: module(), Idx :: index(), Node :: node(),
+                   VnodePid :: pid(), Opts :: [term()]) -> {ok, pid()} |
+                                                           {error,
+                                                            max_concurrency}.
 
 add_outbound(HOType, Module, Idx, Node, VnodePid,
              Opts) ->
@@ -133,13 +133,13 @@ add_outbound(HOType, Module, Idx, Node, VnodePid,
 %%          `{error, max_concurrency}' if no more concurrent handoffs can be
 %%          added.
 -spec add_outbound(HOType :: ho_type(),
-		   Module :: module(), SrcIdx :: index(),
-		   TargetIdx :: index(), Node :: node(), VnodePid :: pid(),
-		   Opts :: [{atom(), term()}]) -> {ok, pid()} |
-						  {error, max_concurrency}.
+                   Module :: module(), SrcIdx :: index(),
+                   TargetIdx :: index(), Node :: node(), VnodePid :: pid(),
+                   Opts :: [{atom(), term()}]) -> {ok, pid()} |
+                                                  {error, max_concurrency}.
 
 add_outbound(HOType, Module, SrcIdx, TargetIdx, Node,
-	     VnodePid, Opts) ->
+             VnodePid, Opts) ->
     case application:get_env(riak_core,
                              disable_outbound_handoff)
         of
@@ -161,7 +161,7 @@ add_outbound(HOType, Module, SrcIdx, TargetIdx, Node,
 %% @return `{ok, Receiver}' if the receiver could be started,
 %%          `{error, max_concurrency}' if no additional handoffs can be handled.
 -spec add_inbound() -> {ok, pid()} |
-		       {error, max_concurrency}.
+                       {error, max_concurrency}.
 
 add_inbound() ->
     case application:get_env(riak_core,
@@ -178,8 +178,8 @@ add_inbound() ->
 %% @param FilterModFun Module and function name of a filter function to use.
 %% @returns `ok'.
 -spec xfer(PartitionOwner :: {index(), node()},
-	   ModPartitions :: mod_partition(),
-	   FilterModFun :: {module(), atom()}) -> ok.
+           ModPartitions :: mod_partition(),
+           FilterModFun :: {module(), atom()}) -> ok.
 
 xfer({SrcPartition, SrcOwner},
      {Module, TargetPartition}, FilterModFun) ->
@@ -198,7 +198,7 @@ xfer({SrcPartition, SrcOwner},
 %% @param Data Data to associate with the receiver.
 %% @returns `ok'.
 -spec set_recv_data(Recv :: pid(),
-		    Data :: proplists:proplist()) -> ok.
+                    Data :: proplists:proplist()) -> ok.
 
 set_recv_data(Recv, Data) ->
     gen_server:call(?MODULE,
@@ -216,7 +216,7 @@ status() -> status(none).
 %%        part of the status. If `none' is given, nothing is filtered out.
 %% @returns The filtered list of handoff status.
 -spec status(Filter :: none |
-		       {term(), term()}) -> [handoff_status()].
+                       {term(), term()}) -> [handoff_status()].
 
 status(Filter) ->
     gen_server:call(?MODULE, {status, Filter}, infinity).
@@ -227,11 +227,11 @@ status(Filter) ->
 %% @param Stats Handoff stats.
 %% @returns `ok'.
 -spec status_update(ModSrcTgt :: mod_src_tgt(),
-		    Stats :: ho_stats()) -> ok.
+                    Stats :: ho_stats()) -> ok.
 
 status_update(ModSrcTgt, Stats) ->
     gen_server:cast(?MODULE,
-		    {status_update, ModSrcTgt, Stats}).
+                    {status_update, ModSrcTgt, Stats}).
 
 %% @doc Set a new limit of concurrent handoffs. If the limit is less then the
 %%      current number of concurrent handoffs, some are discarded.
@@ -256,11 +256,11 @@ get_concurrency() ->
 %% @param Reason Term giving a reason for the termination.
 %% @returns `ok'.
 -spec kill_xfer(SrcNode :: node(),
-		ModSrcTarget :: mod_src_tgt(), Reason :: any()) -> ok.
+                ModSrcTarget :: mod_src_tgt(), Reason :: any()) -> ok.
 
 kill_xfer(SrcNode, ModSrcTarget, Reason) ->
     gen_server:cast({?MODULE, SrcNode},
-		    {kill_xfer, ModSrcTarget, Reason}).
+                    {kill_xfer, ModSrcTarget, Reason}).
 
 %% @doc Kill all handoffs.
 %% @returns `ok'.
@@ -272,7 +272,7 @@ kill_handoffs() -> set_concurrency(0).
 %% @param Direction Determines if `inbound' or `outbound' handoffs are killed.
 %% @returns `ok'.
 -spec kill_handoffs_in_direction(inbound |
-				 outbound) -> ok.
+                                 outbound) -> ok.
 
 kill_handoffs_in_direction(Direction) ->
     gen_server:call(?MODULE,
@@ -284,28 +284,28 @@ kill_handoffs_in_direction(Direction) ->
 %% @param Index Index to add the exception for.
 %% @returns `ok'.
 -spec add_exclusion(Module :: module(),
-		    Index :: index()) -> ok.
+                    Index :: index()) -> ok.
 
 add_exclusion(Module, Index) ->
     gen_server:cast(?MODULE,
-		    {add_exclusion, {Module, Index}}).
+                    {add_exclusion, {Module, Index}}).
 
 %% @doc Remove a handoff exclusion for the given module and index.
 %% @param Module MOdule identifying the exclusion.
 %% @param Index INdex identifying the exclusion.
 %% @returns `ok'.
 -spec remove_exclusion(Module :: module(),
-		       Index :: index()) -> ok.
+                       Index :: index()) -> ok.
 
 remove_exclusion(Module, Index) ->
     gen_server:cast(?MODULE,
-		    {del_exclusion, {Module, Index}}).
+                    {del_exclusion, {Module, Index}}).
 
 %% @doc Get all indices for which an exclusion on a module exists.
 %% @param Module Module to get exclusions for.
 %% @returns List of indices.
 -spec get_exclusions(Module :: module()) -> {ok,
-					     [index()]}.
+                                             [index()]}.
 
 get_exclusions(Module) ->
     gen_server:call(?MODULE,
@@ -332,9 +332,9 @@ get_exclusions(Module) ->
                                                                  state()}.
 
 handle_call({get_exclusions, Module}, _From,
-	    State = #state{excl = Excl}) ->
+            State = #state{excl = Excl}) ->
     Reply = [I
-	     || {M, I} <- sets:to_list(Excl), M =:= Module],
+             || {M, I} <- sets:to_list(Excl), M =:= Module],
     {reply, {ok, Reply}, State};
 handle_call({add_outbound,
              Type,
@@ -363,7 +363,7 @@ handle_call({add_outbound,
         Error -> {reply, Error, State}
     end;
 handle_call({add_inbound}, _From,
-	    State = #state{handoffs = HS}) ->
+            State = #state{handoffs = HS}) ->
     case receive_handoff() of
         {ok,
          Handoff = #handoff_status{transport_pid = Receiver}} ->
@@ -395,7 +395,7 @@ handle_call({set_recv_data, Recv, Data}, _From,
             {reply, ok, State#state{handoffs = HS2}}
     end;
 handle_call({xfer_status, Xfer}, _From,
-	    State = #state{handoffs = HS}) ->
+            State = #state{handoffs = HS}) ->
     TP = Xfer#handoff_status.transport_pid,
     case lists:keyfind(TP,
                        #handoff_status.transport_pid,
@@ -405,9 +405,9 @@ handle_call({xfer_status, Xfer}, _From,
         _ -> {reply, in_progress, State}
     end;
 handle_call({status, Filter}, _From,
-	    State = #state{handoffs = HS}) ->
+            State = #state{handoffs = HS}) ->
     Status = lists:filter(filter(Filter),
-			  [build_status(HO) || HO <- HS]),
+                          [build_status(HO) || HO <- HS]),
     {reply, Status, State};
 handle_call({set_concurrency, Limit}, _From,
             State = #state{handoffs = HS}) ->
@@ -430,28 +430,28 @@ handle_call(get_concurrency, _From, State) ->
     Concurrency = get_concurrency_limit(),
     {reply, Concurrency, State};
 handle_call({kill_in_direction, Direction}, _From,
-	    State = #state{handoffs = HS}) ->
+            State = #state{handoffs = HS}) ->
     %% TODO (atb): Refactor this to comply with max_concurrency logspam PR's exit codes
     %% NB. As-is this handles worker termination the same way as set_concurrency;
     %%     no state update is performed here, we let the worker DOWNs mark them
     %%     as dead rather than trimming here.
     Kill = [H
-	    || H = #handoff_status{direction = D} <- HS,
-	       D =:= Direction],
+            || H = #handoff_status{direction = D} <- HS,
+               D =:= Direction],
     _ = [erlang:exit(Pid, max_concurrency)
-	 || #handoff_status{transport_pid = Pid} <- Kill],
+         || #handoff_status{transport_pid = Pid} <- Kill],
     {reply, ok, State}.
 
 %% @doc Callback for {@link gen_server:cast/2}.
 -spec handle_cast(Msg :: term(), state()) -> {noreply,
-					      state()}.
+                                              state()}.
 
 handle_cast({del_exclusion, {Mod, Idx}},
-	    State = #state{excl = Excl}) ->
+            State = #state{excl = Excl}) ->
     Excl2 = sets:del_element({Mod, Idx}, Excl),
     {noreply, State#state{excl = Excl2}};
 handle_cast({add_exclusion, {Mod, Idx}},
-	    State = #state{excl = Excl}) ->
+            State = #state{excl = Excl}) ->
     %% Note: This function used to trigger a ring event after adding an
     %% exclusion to ensure that an exiting node would eventually shutdown
     %% after all vnodes had finished handoff. This behavior is now handled
@@ -459,7 +459,7 @@ handle_cast({add_exclusion, {Mod, Idx}},
     Excl2 = sets:add_element({Mod, Idx}, Excl),
     {noreply, State#state{excl = Excl2}};
 handle_cast({status_update, ModSrcTgt, StatsUpdate},
-	    State = #state{handoffs = HS}) ->
+            State = #state{handoffs = HS}) ->
     case lists:keyfind(ModSrcTgt,
                        #handoff_status.mod_src_tgt,
                        HS)
@@ -512,8 +512,8 @@ handle_cast({kill_xfer, ModSrcTarget, Reason}, State) ->
 %%      a call or cast.
 %% @returns `{noreply, State}'.
 -spec handle_info({'DOWN', reference(), process, pid(),
-		   term()},
-		  state()) -> {noreply, state()}.
+                   term()},
+                  state()) -> {noreply, state()}.
 
 handle_info({'DOWN', Ref, process, _Pid, Reason},
             State = #state{handoffs = HS}) ->
@@ -591,13 +591,13 @@ handle_info({'DOWN', Ref, process, _Pid, Reason},
 
 %% @doc Callback for {@link gen_server:stop/1}. Not implemented.
 -spec terminate(Reason :: term(),
-		State :: state()) -> ok.
+                State :: state()) -> ok.
 
 terminate(_Reason, _State) -> ok.
 
 %% @doc Callback for {@link gen_server}. Not implemented.
 -spec code_change(OldVsn :: term(), State :: state(),
-		  Extra :: term()) -> {ok, state()}.
+                  Extra :: term()) -> {ok, state()}.
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
@@ -610,14 +610,14 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% @param HO Handoff status record.
 %% @returns `{status_v2, StatusEntries}'.
 -spec build_status(HO ::
-		       handoff_status()) -> {status_v2, [{atom(), term()}]}.
+                       handoff_status()) -> {status_v2, [{atom(), term()}]}.
 
 build_status(HO) ->
     #handoff_status{mod_src_tgt = {Mod, SrcP, TargetP},
-		    src_node = SrcNode, target_node = TargetNode,
-		    direction = Dir, status = Status, timestamp = StartTS,
-		    transport_pid = TPid, type = Type} =
-	HO,
+                    src_node = SrcNode, target_node = TargetNode,
+                    direction = Dir, status = Status, timestamp = StartTS,
+                    transport_pid = TPid, type = Type} =
+        HO,
     {status_v2,
      [{mod, Mod},
       {src_partition, SrcP},
@@ -636,11 +636,11 @@ build_status(HO) ->
 %% @param HO Handoff status.
 %% @returns List of statistics or `no_stats'.
 -spec calc_stats(HO :: handoff_status()) -> [{atom(),
-					      term()}] |
-					    no_stats.
+                                              term()}] |
+                                            no_stats.
 
 calc_stats(#handoff_status{stats = Stats,
-			   timestamp = StartTS, size = Size}) ->
+                           timestamp = StartTS, size = Size}) ->
     case dict:find(last_update, Stats) of
         error -> no_stats;
         {ok, LastUpdate} ->
@@ -663,10 +663,10 @@ calc_stats(#handoff_status{stats = Stats,
 %% @private
 %% @doc Get actual size from a size entry.
 -spec get_size(Size :: {function(), dynamic} |
-		       {non_neg_integer(), bytes | objects}) -> {integer(),
-								 bytes |
-								 objects} |
-								undefined.
+                       {non_neg_integer(), bytes | objects}) -> {integer(),
+                                                                 bytes |
+                                                                 objects} |
+                                                                undefined.
 
 get_size({F, dynamic}) -> F();
 get_size(S) -> S.
@@ -674,10 +674,10 @@ get_size(S) -> S.
 %% @private
 %% @doc Calculate percentage of completed handoffs?
 -spec calc_pct_done(Objs :: integer(),
-		    Bytes :: integer(),
-		    Size :: undefined |
-			    {integer(), objects | bytes}) -> float() |
-							     undefined.
+                    Bytes :: integer(),
+                    Size :: undefined |
+                            {integer(), objects | bytes}) -> float() |
+                                                             undefined.
 
 calc_pct_done(Objs, _, {Size, objects}) -> Objs / Size;
 calc_pct_done(_, Bytes, {Size, bytes}) -> Bytes / Size;
@@ -686,7 +686,7 @@ calc_pct_done(_, _, undefined) -> undefined.
 %% @private
 %% @doc Create a filter function from a key value pair.
 -spec filter(Filter :: none | {}) -> fun(({status_v2,
-					   handoff_status()}) -> boolean()).
+                                           handoff_status()}) -> boolean()).
 
 filter(none) -> fun (_) -> true end;
 filter({Key, Value} = _Filter) ->
@@ -705,9 +705,9 @@ filter({Key, Value} = _Filter) ->
 %% @param Target Target index.
 %% @returns Filter function.
 -spec resize_transfer_filter(Ring ::
-				 riak_core_ring:riak_core_ring(),
-			     Module :: module(), Src :: index(),
-			     Target :: index()) -> fun((term()) -> boolean()).
+                                 riak_core_ring:riak_core_ring(),
+                             Module :: module(), Src :: index(),
+                             Target :: index()) -> fun((term()) -> boolean()).
 
 resize_transfer_filter(Ring, Module, Src, Target) ->
     fun (K) ->
@@ -725,10 +725,10 @@ resize_transfer_filter(Ring, Module, Src, Target) ->
 %% @param Src Source index of the handoffs.
 %% @returns Function filtering for unsent indices.
 -spec resize_transfer_notsent_fun(Ring ::
-				      riak_core_ring:riak_core_ring(),
-				  Module :: module(),
-				  Src :: index()) -> fun((term(),
-							  [index()]) -> boolean()).
+                                      riak_core_ring:riak_core_ring(),
+                                  Module :: module(),
+                                  Src :: index()) -> fun((term(),
+                                                          [index()]) -> boolean()).
 
 resize_transfer_notsent_fun(Ring, Module, Src) ->
     Shrinking = riak_core_ring:num_partitions(Ring) >
@@ -752,15 +752,15 @@ resize_transfer_notsent_fun(Ring, Module, Src) ->
     end.
 
 -spec record_seen_index(Ring ::
-			    riak_core_ring:riak_core_ring(),
-			Shrinking :: boolean(),
-			NValMap :: [{term(), integer()}], DefaultN :: integer(),
-			Module :: module(), Src :: index(), Key :: term(),
-			Seen ::
-			    ordsets:ordset(index())) -> ordsets:ordset(index()).
+                            riak_core_ring:riak_core_ring(),
+                        Shrinking :: boolean(),
+                        NValMap :: [{term(), integer()}], DefaultN :: integer(),
+                        Module :: module(), Src :: index(), Key :: term(),
+                        Seen ::
+                            ordsets:ordset(index())) -> ordsets:ordset(index()).
 
 record_seen_index(Ring, Shrinking, NValMap, DefaultN,
-		  Module, Src, Key, Seen) ->
+                  Module, Src, Key, Seen) ->
     {Bucket, Hashed} = Module:object_info(Key),
     CheckNVal = case Shrinking of
                     false -> undefined;
@@ -791,11 +791,11 @@ get_concurrency_limit() ->
 
 handoff_concurrency_limit_reached() ->
     Receivers =
-	supervisor:count_children(riak_core_handoff_receiver_sup),
+        supervisor:count_children(riak_core_handoff_receiver_sup),
     Senders =
-	supervisor:count_children(riak_core_handoff_sender_sup),
+        supervisor:count_children(riak_core_handoff_sender_sup),
     ActiveReceivers = proplists:get_value(active,
-					  Receivers),
+                                          Receivers),
     ActiveSenders = proplists:get_value(active, Senders),
     get_concurrency_limit() =<
         ActiveReceivers + ActiveSenders.
@@ -803,11 +803,11 @@ handoff_concurrency_limit_reached() ->
 %% @private
 %% @doc Like {@link send_handoff/8} without filters or an origin node.
 -spec send_handoff(HOType :: ho_type(),
-		   ModSourceTarget :: {module(), index(), index()},
-		   Node :: node(), Pid :: pid(), HS :: list(),
-		   Opts :: [{atom(), term()}]) -> {ok, handoff_status()} |
-						  {error, max_concurrency} |
-						  {false, handoff_status()}.
+                   ModSourceTarget :: {module(), index(), index()},
+                   Node :: node(), Pid :: pid(), HS :: list(),
+                   Opts :: [{atom(), term()}]) -> {ok, handoff_status()} |
+                                                  {error, max_concurrency} |
+                                                  {false, handoff_status()}.
 
 send_handoff(HOType, ModSrcTarget, Node, Pid, HS,
              Opts) ->
@@ -839,20 +839,20 @@ send_handoff(HOType, ModSrcTarget, Node, Pid, HS,
 %%          `{false, CurrentHandoff}' if the handoff should not happen,
 %%          `{error, max_concurrency}' if the concurrency limit is reached.
 -spec send_handoff(HOType :: ho_type(),
-		   MST :: {Mod :: module(), Src :: index(),
-			   Target :: index()},
-		   Node :: node(), Vnode :: pid(), HS :: list(),
-		   FilterTuple :: {Filter :: predicate() | none,
-				   FilterModFun :: {module(), atom()} | none},
-		   Origin :: node(), Opts :: [{atom(), term()}]) -> {ok,
-								     handoff_status()} |
-								    {error,
-								     max_concurrency} |
-								    {false,
-								     handoff_status()}.
+                   MST :: {Mod :: module(), Src :: index(),
+                           Target :: index()},
+                   Node :: node(), Vnode :: pid(), HS :: list(),
+                   FilterTuple :: {Filter :: predicate() | none,
+                                   FilterModFun :: {module(), atom()} | none},
+                   Origin :: node(), Opts :: [{atom(), term()}]) -> {ok,
+                                                                     handoff_status()} |
+                                                                    {error,
+                                                                     max_concurrency} |
+                                                                    {false,
+                                                                     handoff_status()}.
 
 send_handoff(HOType, {Mod, Src, Target}, Node, Vnode,
-	     HS, {Filter, FilterModFun}, Origin, Opts) ->
+             HS, {Filter, FilterModFun}, Origin, Opts) ->
     case handoff_concurrency_limit_reached() of
         true -> {error, max_concurrency};
         false ->
@@ -932,7 +932,7 @@ send_handoff(HOType, {Mod, Src, Target}, Node, Vnode,
 %% @returns `{ok, Status}' if the handoff receiver could be started,
 %%          `{error, max_concurrency}' if the concurrency limit is reached.
 -spec receive_handoff() -> {ok, handoff_status()} |
-			   {error, max_concurrency}.
+                           {error, max_concurrency}.
 
 receive_handoff() ->
     case handoff_concurrency_limit_reached() of
@@ -958,13 +958,13 @@ receive_handoff() ->
 %% @param Stats Stats dictionary to update.
 %% @returns Updated stats dictionary.
 -spec update_stats(StatsUpdate :: ho_stats(),
-		   Stats :: dict:dict(term(), term())) -> dict:dict(term(),
-								    term()).
+                   Stats :: dict:dict(term(), term())) -> dict:dict(term(),
+                                                                    term()).
 
 update_stats(StatsUpdate, Stats) ->
     #ho_stats{last_update = LU, objs = Objs,
-	      bytes = Bytes} =
-	StatsUpdate,
+              bytes = Bytes} =
+        StatsUpdate,
     Stats2 = dict:update_counter(objs, Objs, Stats),
     Stats3 = dict:update_counter(bytes, Bytes, Stats2),
     dict:store(last_update, LU, Stats3).
@@ -974,10 +974,10 @@ update_stats(StatsUpdate, Stats) ->
 %%      is positive and for dynamic size the function is a function.
 %% @returns Validated size or `undefined'.
 -spec validate_size(Size :: {function(), dynamic} |
-			    {integer(), bytes | objects}) -> function() |
-							     {integer(),
-							      bytes | objects} |
-							     undefined.
+                            {integer(), bytes | objects}) -> function() |
+                                                             {integer(),
+                                                              bytes | objects} |
+                                                             undefined.
 
 validate_size(Size = {N, U})
     when is_number(N) andalso
@@ -998,7 +998,7 @@ validate_size(_) -> undefined.
 %% @param HS Handoff status to remove the transfer from.
 %% @returns Handoff status with the transfer removed.
 -spec kill_xfer_i(ModSrcTarget :: mod_src_tgt(),
-		  Reason :: term(), HS :: [tuple()]) -> [tuple()].
+                  Reason :: term(), HS :: [tuple()]) -> [tuple()].
 
 kill_xfer_i(ModSrcTarget, Reason, HS) ->
     case lists:keytake(ModSrcTarget,
@@ -1059,7 +1059,7 @@ handoff_change_enabled_setting(EnOrDis, Direction) ->
 %% @doc Enable handoffs in the given direction.
 %% @param Direction Enable inbound or outbound handoffs.
 -spec handoff_enable(Direction :: inbound |
-				  outbound) -> ok.
+                                  outbound) -> ok.
 
 handoff_enable(inbound) ->
     application:set_env(riak_core,
@@ -1075,7 +1075,7 @@ handoff_enable(outbound) ->
 %% @param Direction Disable inbound or outbound handoffs.
 %% @returns `ok'.
 -spec handoff_disable(Direction :: inbound |
-				   outbound) -> ok.
+                                   outbound) -> ok.
 
 handoff_disable(inbound) ->
     application:set_env(riak_core,
@@ -1099,15 +1099,15 @@ handoff_test_() ->
      {setup,
       %% called when the tests start and complete...
       fun () ->
-	      {ok, ManPid} = start_link(),
-	      {ok, RSupPid} =
-		  riak_core_handoff_receiver_sup:start_link(),
-	      {ok, SSupPid} =
-		  riak_core_handoff_sender_sup:start_link(),
-	      [ManPid, RSupPid, SSupPid]
+              {ok, ManPid} = start_link(),
+              {ok, RSupPid} =
+                  riak_core_handoff_receiver_sup:start_link(),
+              {ok, SSupPid} =
+                  riak_core_handoff_sender_sup:start_link(),
+              [ManPid, RSupPid, SSupPid]
       end,
       fun (PidList) ->
-	      lists:foreach(fun (Pid) -> exit(Pid, kill) end, PidList)
+              lists:foreach(fun (Pid) -> exit(Pid, kill) end, PidList)
       end,
       %% actual list of test
       [?_test((simple_handoff())),

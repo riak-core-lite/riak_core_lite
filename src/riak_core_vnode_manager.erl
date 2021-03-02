@@ -89,10 +89,10 @@
 -include("riak_core_vnode.hrl").
 
 -define(XFER_EQ(A, ModSrcTgt),
-	A#xfer_status.mod_src_target == ModSrcTgt).
+        A#xfer_status.mod_src_target == ModSrcTgt).
 
 -define(XFER_COMPLETE(X),
-	X#xfer_status.status == complete).
+        X#xfer_status.status == complete).
 
 -define(DEFAULT_OWNERSHIP_TRIGGER, 8).
 
@@ -120,10 +120,10 @@ all_vnodes_status() ->
 %% @doc Repair the given `ModPartition' pair for `Service' using the
 %%      given `FilterModFun' to filter keys.
 -spec repair(atom(), {module(), partition()},
-	     {module(), atom()}) -> {ok,
-				     Pairs :: [{partition(), node()}]} |
-				    {down, Down :: [{partition(), node()}]} |
-				    ownership_change_in_progress.
+             {module(), atom()}) -> {ok,
+                                     Pairs :: [{partition(), node()}]} |
+                                    {down, Down :: [{partition(), node()}]} |
+                                    ownership_change_in_progress.
 
 repair(Service, {_Module, Partition} = ModPartition,
        FilterModFun) ->
@@ -136,7 +136,7 @@ repair(Service, {_Module, Partition} = ModPartition,
 
 %% @doc Get the status of the repair process for a given `ModPartition'.
 -spec repair_status(mod_partition()) -> in_progress |
-					not_found.
+                                        not_found.
 
 repair_status({_Module, Partition} = ModPartition) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
@@ -175,15 +175,15 @@ unregister_vnode(Index, VNodeMod) ->
 
 unregister_vnode(Index, Pid, VNodeMod) ->
     gen_server:cast(?MODULE,
-		    {unregister, Index, VNodeMod, Pid}).
+                    {unregister, Index, VNodeMod, Pid}).
 
 start_vnode(Index, VNodeMod) ->
     gen_server:cast(?MODULE,
-		    {Index, VNodeMod, start_vnode}).
+                    {Index, VNodeMod, start_vnode}).
 
 vnode_event(Module, Idx, Pid, Event) ->
     gen_server:cast(?MODULE,
-		    {vnode_event, Module, Idx, Pid, Event}).
+                    {vnode_event, Module, Idx, Pid, Event}).
 
 get_tab() ->
     gen_server:call(?MODULE, get_tab, infinity).
@@ -232,22 +232,22 @@ all_index_pid(VNodeMod) ->
 
 get_all_index_pid(Module, Default) ->
     try [list_to_tuple(L)
-	 || L
-		<- ets:match(?ETS,
-			     {idxrec, '_', '$1', Module, '$2', '_'})]
+         || L
+                <- ets:match(?ETS,
+                             {idxrec, '_', '$1', Module, '$2', '_'})]
     catch
         _:_ -> Default
     end.
 
 get_all_vnodes() ->
     Modules = [Module
-	       || {_App, Module} <- riak_core:vnode_modules()],
+               || {_App, Module} <- riak_core:vnode_modules()],
     get_all_vnodes(Modules).
 
 get_all_vnodes(Modules) when is_list(Modules) ->
     lists:flatmap(fun (Module) -> get_all_vnodes(Module)
-		  end,
-		  Modules);
+                  end,
+                  Modules);
 get_all_vnodes(Mod) ->
     IdxPids = get_all_index_pid(Mod, []),
     [{Mod, Idx, Pid} || {Idx, Pid} <- IdxPids].
@@ -259,12 +259,12 @@ get_all_vnodes(Mod) ->
 %% @private
 init(_State) ->
     {ok, Ring, CHBin} =
-	riak_core_ring_manager:get_raw_ring_chashbin(),
+        riak_core_ring_manager:get_raw_ring_chashbin(),
     Mods = [Mod || {_, Mod} <- riak_core:vnode_modules()],
     State = #state{forwarding = dict:new(),
-		   handoff = dict:new(), known_modules = [],
-		   never_started = [], vnode_start_tokens = 0,
-		   repairs = []},
+                   handoff = dict:new(), known_modules = [],
+                   never_started = [], vnode_start_tokens = 0,
+                   repairs = []},
     State2 = find_vnodes(State),
     AllVNodes = get_all_vnodes(Mods),
     State3 = update_forwarding(AllVNodes,
@@ -281,11 +281,11 @@ find_vnodes(State) ->
     %% to rebuild our ETS table for routing messages to the appropriate
     %% vnode.
     VnodePids = [Pid
-		 || {_, Pid, worker, _}
-			<- supervisor:which_children(riak_core_vnode_sup),
-		    is_pid(Pid) andalso is_process_alive(Pid)],
+                 || {_, Pid, worker, _}
+                        <- supervisor:which_children(riak_core_vnode_sup),
+                    is_pid(Pid) andalso is_process_alive(Pid)],
     IdxTable = ets:new(?ETS,
-		       [{keypos, 2}, named_table, protected]),
+                       [{keypos, 2}, named_table, protected]),
     %% If the vnode manager is being restarted, scan the existing
     %% vnode children and work out which module and index they are
     %% responsible for.  During startup it is possible that these
@@ -300,14 +300,14 @@ find_vnodes(State) ->
     %% Populate the ETS table with processes running this VNodeMod (filtered
     %% in the list comprehension)
     F = fun (Pid, Idx, Module) ->
-		Mref = erlang:monitor(process, Pid),
-		#idxrec{key = {Idx, Module}, idx = Idx, mod = Module,
-			pid = Pid, monref = Mref}
-	end,
+                Mref = erlang:monitor(process, Pid),
+                #idxrec{key = {Idx, Module}, idx = Idx, mod = Module,
+                        pid = Pid, monref = Mref}
+        end,
     IdxRecs = [F(Pid, Idx, Mod)
-	       || {Pid, {Mod, Idx}} <- PidIdxs],
+               || {Pid, {Mod, Idx}} <- PidIdxs],
     MonRecs = [#monrec{monref = Mref, key = Key}
-	       || #idxrec{key = Key, monref = Mref} <- IdxRecs],
+               || #idxrec{key = Key, monref = Mref} <- IdxRecs],
     true = ets:insert_new(IdxTable, IdxRecs ++ MonRecs),
     State#state{idxtab = IdxTable}.
 
@@ -325,7 +325,7 @@ handle_call({all_index_pid, Mod}, _From, State) ->
     Reply = get_all_index_pid(Mod, []),
     {reply, Reply, State};
 handle_call({Partition, Mod, get_vnode}, _From,
-	    State) ->
+            State) ->
     Pid = get_vnode(Partition, Mod, State),
     {reply, {ok, Pid}, State};
 handle_call(get_tab, _From, State) ->
@@ -349,12 +349,12 @@ handle_call({repair,
             {reply, {ok, Pairs}, State}
     end;
 handle_call(all_handoffs, _From,
-	    State = #state{repairs = Repairs, handoff = HO}) ->
+            State = #state{repairs = Repairs, handoff = HO}) ->
     Handoffs = dict:to_list(HO) ++
                    transform_repair_records(Repairs),
     {reply, Handoffs, State};
 handle_call({repair_status, ModPartition}, _From,
-	    State) ->
+            State) ->
     Repairs = State#state.repairs,
     case get_repair(ModPartition, Repairs) of
         none -> {reply, not_found, State};
@@ -430,7 +430,7 @@ transform_repair_records(Repairs) ->
                             Repairs)).
 
 maybe_create_repair(Partition, Service, ModPartition,
-		    FilterModFun, Mod, Repairs, State) ->
+                    FilterModFun, Mod, Repairs, State) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     case riak_core_ring:pending_changes(Ring) of
         [] ->
@@ -451,7 +451,7 @@ maybe_create_repair(Partition, Service, ModPartition,
     end.
 
 create_repair(Pairs, ModPartition, FilterModFun, Mod,
-	      Partition, Repairs, State) ->
+              Partition, Repairs, State) ->
     {MOP, _} = MinusOne = get_minus_one(Pairs),
     {POP, _} = PlusOne = get_plus_one(Pairs),
     riak_core_handoff_manager:xfer(MinusOne,
@@ -461,12 +461,12 @@ create_repair(Pairs, ModPartition, FilterModFun, Mod,
                                    ModPartition,
                                    FilterModFun),
     MOXStatus = #xfer_status{status = pending,
-			     mod_src_target = {Mod, MOP, Partition}},
+                             mod_src_target = {Mod, MOP, Partition}},
     POXStatus = #xfer_status{status = pending,
-			     mod_src_target = {Mod, POP, Partition}},
+                             mod_src_target = {Mod, POP, Partition}},
     Repair = #repair{mod_partition = ModPartition,
-		     filter_mod_fun = FilterModFun, pairs = Pairs,
-		     minus_one_xfer = MOXStatus, plus_one_xfer = POXStatus},
+                     filter_mod_fun = FilterModFun, pairs = Pairs,
+                     minus_one_xfer = MOXStatus, plus_one_xfer = POXStatus},
     Repairs2 = Repairs ++ [Repair],
     State2 = State#state{repairs = Repairs2},
     logger:debug("add repair ~p", [ModPartition]),
@@ -477,27 +477,27 @@ handle_cast({Partition, Mod, start_vnode}, State) ->
     _ = get_vnode(Partition, Mod, State),
     {noreply, State};
 handle_cast({unregister, Index, Mod, Pid},
-	    #state{idxtab = T} = State) ->
+            #state{idxtab = T} = State) ->
     %% Update forwarding state to ensure vnode is not restarted in
     %% incorrect forwarding state if next request arrives before next
     %% ring event.
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     State2 = update_forwarding({Mod, Index}, Ring, State),
     ets:match_delete(T,
-		     {idxrec, {Index, Mod}, Index, Mod, Pid, '_'}),
+                     {idxrec, {Index, Mod}, Index, Mod, Pid, '_'}),
     _ = unregister_vnode_stats(Mod, Index),
     riak_core_vnode_proxy:unregister_vnode(Mod, Index, Pid),
     {noreply, State2};
 handle_cast({vnode_event, Mod, Idx, Pid, Event},
-	    State) ->
+            State) ->
     handle_vnode_event(Event, Mod, Idx, Pid, State);
 handle_cast(force_handoffs, State) ->
     AllVNodes = get_all_vnodes(),
     {ok, Ring, CHBin} =
-	riak_core_ring_manager:get_raw_ring_chashbin(),
+        riak_core_ring_manager:get_raw_ring_chashbin(),
     State2 = update_handoff(AllVNodes, Ring, CHBin, State),
     _ = [maybe_trigger_handoff(Mod, Idx, Pid, State2)
-	 || {Mod, Idx, Pid} <- AllVNodes],
+         || {Mod, Idx, Pid} <- AllVNodes],
     {noreply, State2};
 handle_cast(maybe_start_vnodes, State) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
@@ -513,7 +513,7 @@ handle_info(management_tick, State0) ->
     schedule_management_timer(),
     RingID = riak_core_ring_manager:get_ring_id(),
     {ok, Ring, CHBin} =
-	riak_core_ring_manager:get_raw_ring_chashbin(),
+        riak_core_ring_manager:get_raw_ring_chashbin(),
     State = maybe_ring_changed(RingID, Ring, CHBin, State0),
     Mods = [Mod || {_, Mod} <- riak_core:vnode_modules()],
     AllVNodes = get_all_vnodes(Mods),
@@ -532,7 +532,7 @@ handle_info(management_tick, State0) ->
                      State2#state{repairs = []}
              end,
     State4 = State3#state{vnode_start_tokens =
-			      ?DEFAULT_VNODE_ROLLING_START},
+                              ?DEFAULT_VNODE_ROLLING_START},
     State5 = maybe_start_vnodes(Ring, State4),
     Repairs2 = check_repairs(State4#state.repairs),
     {noreply, State5#state{repairs = Repairs2}};
@@ -545,12 +545,12 @@ handle_vnode_event(inactive, Mod, Idx, Pid, State) ->
     maybe_trigger_handoff(Mod, Idx, Pid, State),
     {noreply, State};
 handle_vnode_event(handoff_complete, Mod, Idx, Pid,
-		   State) ->
+                   State) ->
     NewHO = dict:erase({Mod, Idx}, State#state.handoff),
     riak_core_vnode:cast_finish_handoff(Pid),
     {noreply, State#state{handoff = NewHO}};
 handle_vnode_event(handoff_error, Mod, Idx, Pid,
-		   State) ->
+                   State) ->
     NewHO = dict:erase({Mod, Idx}, State#state.handoff),
     riak_core_vnode:cancel_handoff(Pid),
     {noreply, State#state{handoff = NewHO}}.
@@ -566,7 +566,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% ===================================================================
 
 maybe_ring_changed(RingID, Ring, CHBin,
-		   State = #state{last_ring_id = LastID}) ->
+                   State = #state{last_ring_id = LastID}) ->
     case RingID of
         LastID ->
             maybe_ensure_vnodes_started(Ring),
@@ -623,22 +623,22 @@ schedule_management_timer() ->
                       management_tick).
 
 trigger_ownership_handoff(Transfers, Mods, Ring,
-			  State) ->
+                          State) ->
     IsResizing = riak_core_ring:is_resizing(Ring),
     Throttle = limit_ownership_handoff(Transfers,
-				       IsResizing),
+                                       IsResizing),
     Awaiting = [{Mod, Idx}
-		|| {Idx, Node, _, CMods, S} <- Throttle, Mod <- Mods,
-		   S =:= awaiting, Node =:= node(),
-		   not lists:member(Mod, CMods)],
+                || {Idx, Node, _, CMods, S} <- Throttle, Mod <- Mods,
+                   S =:= awaiting, Node =:= node(),
+                   not lists:member(Mod, CMods)],
     _ = [maybe_trigger_handoff(Mod, Idx, State)
-	 || {Mod, Idx} <- Awaiting],
+         || {Mod, Idx} <- Awaiting],
     ok.
 
 limit_ownership_handoff(Transfers, IsResizing) ->
     Limit = application:get_env(riak_core,
-				forced_ownership_handoff,
-				?DEFAULT_OWNERSHIP_TRIGGER),
+                                forced_ownership_handoff,
+                                ?DEFAULT_OWNERSHIP_TRIGGER),
     limit_ownership_handoff(Limit, Transfers, IsResizing).
 
 limit_ownership_handoff(Limit, Transfers, false) ->
@@ -648,8 +648,8 @@ limit_ownership_handoff(Limit, Transfers, true) ->
     %% since they remain in the list until all are complete. then
     %% treat transfers as normal
     Filtered = [Transfer
-		|| {_, _, _, _, Status} = Transfer <- Transfers,
-		   Status =:= awaiting],
+                || {_, _, _, _, Status} = Transfer <- Transfers,
+                   Status =:= awaiting],
     limit_ownership_handoff(Limit, Filtered, false).
 
 %% @private
@@ -687,7 +687,7 @@ get_vnode(IdxList, Module, State) ->
                end
                || Idx <- IdxList],
     {NotStarted, Started} =
-	lists:partition(fun erlang:is_integer/1, Initial),
+        lists:partition(fun erlang:is_integer/1, Initial),
     StartFun = fun (Idx) ->
                        ForwardTo = get_forward(Module, Idx, State),
                        logger:debug("Will start VNode for partition ~p",
@@ -744,7 +744,7 @@ check_forward(Ring, Mod, Index) ->
     end.
 
 check_forward_precomputed(Completed, Mod, Index, Node,
-			  Ring) ->
+                          Ring) ->
     case dict:find({Mod, Index}, Completed) of
         {ok, '$resize'} ->
             Complete =
@@ -760,10 +760,10 @@ check_forward_precomputed(Completed, Mod, Index, Node,
 compute_forwarding(Mods, Ring) ->
     Node = node(),
     CL = [{{Mod, Idx}, NextOwner}
-	  || Mod <- Mods,
-	     {Idx, Owner, NextOwner}
-		 <- riak_core_ring:completed_next_owners(Mod, Ring),
-	     Owner =:= Node],
+          || Mod <- Mods,
+             {Idx, Owner, NextOwner}
+                 <- riak_core_ring:completed_next_owners(Mod, Ring),
+             Owner =:= Node],
     Completed = dict:from_list(CL),
     Forwarding = [check_forward_precomputed(Completed,
                                             Mod,
@@ -775,15 +775,15 @@ compute_forwarding(Mods, Ring) ->
     dict:from_list(Forwarding).
 
 update_forwarding(AllVNodes, Mods, Ring,
-		  State = #state{forwarding = Forwarding}) ->
+                  State = #state{forwarding = Forwarding}) ->
     NewForwarding = compute_forwarding(Mods, Ring),
     %% Inform vnodes that have changed forwarding status
     VNodes = dict:from_list([{{Mod, Idx}, Pid}
-			     || {Mod, Idx, Pid} <- AllVNodes]),
+                             || {Mod, Idx, Pid} <- AllVNodes]),
     Diff = dict:filter(fun (K, V) ->
-			       dict:find(K, Forwarding) /= {ok, V}
-		       end,
-		       NewForwarding),
+                               dict:find(K, Forwarding) /= {ok, V}
+                       end,
+                       NewForwarding),
     dict:fold(fun ({Mod, Idx}, ForwardTo, _) ->
                       change_forward(VNodes, Mod, Idx, ForwardTo),
                       ok
@@ -793,7 +793,7 @@ update_forwarding(AllVNodes, Mods, Ring,
     State#state{forwarding = NewForwarding}.
 
 update_forwarding({Mod, Idx}, Ring,
-		  State = #state{forwarding = Forwarding}) ->
+                  State = #state{forwarding = Forwarding}) ->
     {_, ForwardTo} = check_forward(Ring, Mod, Idx),
     NewForwarding = dict:store({Mod, Idx},
                                ForwardTo,
@@ -839,7 +839,7 @@ update_handoff(AllVNodes, Ring, CHBin, State) ->
 
 should_handoff(Ring, _CHBin, Mod, Idx) ->
     {_, NextOwner, _} = riak_core_ring:next_owner(Ring,
-						  Idx),
+                                                  Idx),
     Type = riak_core_ring:vnode_type(Ring, Idx),
     Ready = riak_core_ring:ring_ready(Ring),
     IsResizing = riak_core_ring:is_resizing(Ring),
@@ -866,7 +866,7 @@ should_handoff(Ring, _CHBin, Mod, Idx) ->
     end.
 
 determine_handoff_target(Type, NextOwner, RingReady,
-			 IsResize) ->
+                         IsResize) ->
     Me = node(),
     determine_handoff_target(Type,
                              NextOwner,
@@ -881,7 +881,7 @@ determine_handoff_target(primary, undefined, _, _, _) ->
     %% No ring change indicated for this partition
     undefined;
 determine_handoff_target(primary, NextOwner, true, _,
-			 _) ->
+                         _) ->
     %% Primary, ring is ready, go. This may be a node or a `$resize'
     %% action
     NextOwner;
@@ -889,23 +889,23 @@ determine_handoff_target(primary, _, false, _, _) ->
     %% Ring isn't ready, no matter what, don't do a primary handoff
     undefined;
 determine_handoff_target({fallback, _Target},
-			 '$delete' = Action, _, _, _) ->
+                         '$delete' = Action, _, _, _) ->
     %% partitions moved during resize and scheduled for deletion, indexes
     %% that exist in both the original and resized ring that were moved appear
     %% as fallbacks.
     Action;
 determine_handoff_target(resized_primary,
-			 '$delete' = Action, _, _, _) ->
+                         '$delete' = Action, _, _, _) ->
     %% partitions that no longer exist after the ring has been resized (shrunk)
     %% scheduled for deletion
     Action;
 determine_handoff_target(resized_primary, _, _, false,
-			 _) ->
+                         _) ->
     %% partitions that would have existed in a ring whose expansion was aborted
     %% and are still running need to be cleaned up after and shutdown
     '$delete';
 determine_handoff_target({fallback, For}, undefined, _,
-			 _, _) ->
+                         _, _) ->
     %% Fallback vnode target is primary (hinted handoff).  `For' can
     %% technically be a `$resize' action but unclear it ever would be
     For;
@@ -926,7 +926,7 @@ maybe_trigger_handoff(Mod, Idx, State) ->
     maybe_trigger_handoff(Mod, Idx, Pid, State).
 
 maybe_trigger_handoff(Mod, Idx, Pid,
-		      _State = #state{handoff = HO}) ->
+                      _State = #state{handoff = HO}) ->
     case dict:find({Mod, Idx}, HO) of
         {ok, {resize, _Direction, '$resize'}} ->
             {ok, Ring} = riak_core_ring_manager:get_my_ring(),
@@ -949,12 +949,12 @@ maybe_trigger_handoff(Mod, Idx, Pid,
     end.
 
 get_all_vnodes_status(#state{forwarding = Forwarding,
-			     handoff = HO}) ->
+                             handoff = HO}) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
     Owners = riak_core_ring:all_owners(Ring),
     VNodes = get_all_vnodes(),
     Mods = [Mod
-	    || {_App, Mod} <- riak_core:vnode_modules()],
+            || {_App, Mod} <- riak_core:vnode_modules()],
     ThisNode = node(),
     Types = [case Owner of
                  ThisNode -> {{Mod, Idx}, {type, primary}};
@@ -963,20 +963,20 @@ get_all_vnodes_status(#state{forwarding = Forwarding,
              || {Idx, Owner} <- Owners, Mod <- Mods],
     Types2 = lists:keysort(1, Types),
     Pids = [{{Mod, Idx}, {pid, Pid}}
-	    || {Mod, Idx, Pid} <- VNodes],
+            || {Mod, Idx, Pid} <- VNodes],
     Pids2 = lists:keysort(1, Pids),
     Forwarding1 = lists:sort(dict:to_list(Forwarding)),
     Forwarding2 = [{MI, {forwarding, Node}}
-		   || {MI, Node} <- Forwarding1, Node /= undefined],
+                   || {MI, Node} <- Forwarding1, Node /= undefined],
     Handoff1 = lists:sort(dict:to_list(HO)),
     Handoff2 = [{MI, {should_handoff, Node}}
-		|| {MI, {_Type, _Direction, Node}} <- Handoff1],
+                || {MI, {_Type, _Direction, Node}} <- Handoff1],
     MergeFn = fun (_, V1, V2)
-		      when is_list(V1) and is_list(V2) ->
-		      V1 ++ V2;
-		  (_, V1, V2) when is_list(V1) -> V1 ++ [V2];
-		  (_, V1, V2) -> [V1, V2]
-	      end,
+                      when is_list(V1) and is_list(V2) ->
+                      V1 ++ V2;
+                  (_, V1, V2) when is_list(V1) -> V1 ++ [V2];
+                  (_, V1, V2) -> [V1, V2]
+              end,
     Status = lists:foldl(fun (B, A) ->
                                  orddict:merge(MergeFn, A, B)
                          end,
@@ -985,10 +985,10 @@ get_all_vnodes_status(#state{forwarding = Forwarding,
     Status.
 
 update_never_started(Ring,
-		     State = #state{known_modules = KnownMods}) ->
+                     State = #state{known_modules = KnownMods}) ->
     UnknownMods = [Mod
-		   || {_App, Mod} <- riak_core:vnode_modules(),
-		      not lists:member(Mod, KnownMods)],
+                   || {_App, Mod} <- riak_core:vnode_modules(),
+                      not lists:member(Mod, KnownMods)],
     case UnknownMods of
         [] -> State;
         _ ->
@@ -1005,14 +1005,14 @@ update_never_started(Mod, Indices, State) ->
     IdxPids = get_all_index_pid(Mod, []),
     AlreadyStarted = [Idx || {Idx, _Pid} <- IdxPids],
     NeverStarted =
-	ordsets:subtract(ordsets:from_list(Indices),
-			 ordsets:from_list(AlreadyStarted)),
+        ordsets:subtract(ordsets:from_list(Indices),
+                         ordsets:from_list(AlreadyStarted)),
     NeverStarted2 = [{Idx, Mod} || Idx <- NeverStarted],
     NeverStarted3 = NeverStarted2 ++
                         State#state.never_started,
     KnownModules = [Mod | State#state.known_modules],
     State#state{known_modules = KnownModules,
-		never_started = NeverStarted3}.
+                never_started = NeverStarted3}.
 
 maybe_start_vnodes(Ring, State) ->
     State2 = update_never_started(Ring, State),
@@ -1020,8 +1020,8 @@ maybe_start_vnodes(Ring, State) ->
     State3.
 
 maybe_start_vnodes(State = #state{vnode_start_tokens =
-				      Tokens,
-				  never_started = NeverStarted}) ->
+                                      Tokens,
+                                  never_started = NeverStarted}) ->
     case {Tokens, NeverStarted} of
         {0, _} -> State;
         {_, []} -> State;
@@ -1056,7 +1056,7 @@ check_repairs(Repairs) ->
 
 %% TODO: get all this repair, xfer status and Src business figured out.
 -spec maybe_retry(repair(), tuple(),
-		  xfer_status()) -> Xfer2 :: xfer_status().
+                  xfer_status()) -> Xfer2 :: xfer_status().
 
 maybe_retry(R, {SrcPartition, _} = Src, Xfer) ->
     case Xfer#xfer_status.status of
@@ -1075,13 +1075,13 @@ maybe_retry(R, {SrcPartition, _} = Src, Xfer) ->
 %%
 %% @doc Verify that all nodes are up involved in the repair.
 -spec check_up([{non_neg_integer(), node()}],
-	       [node()]) -> true |
-			    {false, Down :: [{non_neg_integer(), node()}]}.
+               [node()]) -> true |
+                            {false, Down :: [{non_neg_integer(), node()}]}.
 
 check_up(Pairs, UpNodes) ->
     Down = [Pair
-	    || {_Partition, Owner} = Pair <- Pairs,
-	       not lists:member(Owner, UpNodes)],
+            || {_Partition, Owner} = Pair <- Pairs,
+               not lists:member(Owner, UpNodes)],
     case Down of
         [] -> true;
         _ -> {false, Down}
@@ -1092,14 +1092,14 @@ check_up(Pairs, UpNodes) ->
 %% @doc Get the three `{Partition, Owner}' pairs involved in a repair
 %%      operation for the given `Ring' and `Partition'.
 -spec repair_pairs(riak_core_ring:riak_core_ring(),
-		   non_neg_integer()) -> [{Partition :: non_neg_integer(),
-					   Owner :: node()}].
+                   non_neg_integer()) -> [{Partition :: non_neg_integer(),
+                                           Owner :: node()}].
 
 repair_pairs(Ring, Partition) ->
     Owner = riak_core_ring:index_owner(Ring, Partition),
     CH = riak_core_ring:chash(Ring),
     [_, Before] =
-	chash:predecessors(<<Partition:160/integer>>, CH, 2),
+        chash:predecessors(<<Partition:160/integer>>, CH, 2),
     [After] = chash:successors(<<Partition:160/integer>>,
                                CH,
                                1),
@@ -1110,7 +1110,7 @@ repair_pairs(Ring, Partition) ->
 %% @doc Get the corresponding repair entry in `Repairs', if one
 %%      exists, for the given `ModPartition'.
 -spec get_repair(mod_partition(),
-		 repairs()) -> repair() | none.
+                 repairs()) -> repair() | none.
 
 get_repair(ModPartition, Repairs) ->
     case lists:keyfind(ModPartition,
@@ -1147,7 +1147,7 @@ replace_repair(Repair, Repairs) ->
 %% @doc Get the `{Partition, Owner}' pair that comes before the
 %%      partition under repair.
 -spec get_minus_one([{index(), node()}]) -> {index(),
-					     node()}.
+                                             node()}.
 
 get_minus_one([MinusOne, _, _]) -> MinusOne.
 
@@ -1156,7 +1156,7 @@ get_minus_one([MinusOne, _, _]) -> MinusOne.
 %% @doc Get the `{Partition, Owner}' pair that comes after the
 %%      partition under repair.
 -spec get_plus_one([{index(), node()}]) -> {index(),
-					    node()}.
+                                            node()}.
 
 get_plus_one([_, _, PlusOne]) -> PlusOne.
 

@@ -33,7 +33,7 @@
 start_vnode(Mod, Index, ForwardTo)
     when is_integer(Index) ->
     supervisor:start_child(?MODULE,
-			   [Mod, Index, ForwardTo]).
+                           [Mod, Index, ForwardTo]).
 
 start_link() ->
     %% This simple_one_for_one supervisor can do a controlled shutdown.

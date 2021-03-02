@@ -61,7 +61,7 @@ reg_name(Module, Index) ->
     ModBin = atom_to_binary(Module, latin1),
     IdxBin = list_to_binary(integer_to_list(Index)),
     AllBin = <<$p, $r, $o, $x, $y, $_, ModBin/binary, $_,
-	       IdxBin/binary>>,
+               IdxBin/binary>>,
     binary_to_atom(AllBin, latin1).
 
 reg_name(Mod, Index, Node) ->
@@ -77,14 +77,14 @@ init([Parent, RegName, Module, Index]) ->
     erlang:register(RegName, self()),
     proc_lib:init_ack(Parent, {ok, self()}),
     Interval = application:get_env(riak_core,
-				   vnode_check_interval,
-				   ?DEFAULT_CHECK_INTERVAL),
+                                   vnode_check_interval,
+                                   ?DEFAULT_CHECK_INTERVAL),
     RequestInterval = application:get_env(riak_core,
-					  vnode_check_request_interval,
-					  Interval div 2),
+                                          vnode_check_request_interval,
+                                          Interval div 2),
     Threshold = application:get_env(riak_core,
-				    vnode_overload_threshold,
-				    ?DEFAULT_OVERLOAD_THRESHOLD),
+                                    vnode_overload_threshold,
+                                    ?DEFAULT_OVERLOAD_THRESHOLD),
     SafeInterval = case Threshold == undefined orelse
                             Interval < Threshold
                        of
@@ -106,18 +106,18 @@ init([Parent, RegName, Module, Index]) ->
                                   SafeInterval div 2
                           end,
     State = #state{mod = Module, index = Index,
-		   check_mailbox = 0, check_counter = 0,
-		   check_threshold = Threshold,
-		   check_interval = SafeInterval,
-		   check_request_interval = SafeRequestInterval},
+                   check_mailbox = 0, check_counter = 0,
+                   check_threshold = Threshold,
+                   check_interval = SafeInterval,
+                   check_request_interval = SafeRequestInterval},
     loop(Parent, State).
 
 unregister_vnode(Mod, Index, Pid) ->
     cast(reg_name(Mod, Index), {unregister_vnode, Pid}).
 
 -spec command_return_vnode({atom(), non_neg_integer(),
-			    atom()},
-			   term()) -> {ok, pid()} | {error, term()}.
+                            atom()},
+                           term()) -> {ok, pid()} | {error, term()}.
 
 command_return_vnode({Mod, Index, Node}, Req) ->
     call(reg_name(Mod, Index, Node), {return_vnode, Req}).
@@ -203,8 +203,8 @@ handle_cast({unregister_vnode, Pid}, State) ->
     NewState = forget_vnode(State),
     {noreply, NewState};
 handle_cast({vnode_proxy_pong, Ref, Msgs},
-	    State = #state{check_request = RequestState,
-			   check_mailbox = Mailbox}) ->
+            State = #state{check_request = RequestState,
+                           check_mailbox = Mailbox}) ->
     NewState = case Ref of
                    RequestState ->
                        State#state{check_mailbox = Mailbox - Msgs,
@@ -217,16 +217,16 @@ handle_cast(_Msg, State) -> {noreply, State}.
 
 %% @private
 handle_proxy(Msg,
-	     State = #state{check_threshold = undefined}) ->
+             State = #state{check_threshold = undefined}) ->
     {Pid, NewState} = get_vnode_pid(State),
     Pid ! Msg,
     {noreply, NewState};
 handle_proxy(Msg,
-	     State = #state{check_counter = Counter,
-			    check_mailbox = Mailbox, check_interval = Interval,
-			    check_request_interval = RequestInterval,
-			    check_request = RequestState,
-			    check_threshold = Threshold}) ->
+             State = #state{check_counter = Counter,
+                            check_mailbox = Mailbox, check_interval = Interval,
+                            check_request_interval = RequestInterval,
+                            check_request = RequestState,
+                            check_threshold = Threshold}) ->
     %%
     %% NOTE: This function is intentionally written as it is for performance
     %%       reasons -- the vnode proxy is on the critical path of Riak and
@@ -292,69 +292,69 @@ handle_proxy(Msg,
     end,
     {noreply,
      State2#state{check_counter = Counter3,
-		  check_mailbox = Mailbox3,
-		  check_request = RequestState2}}.
+                  check_mailbox = Mailbox3,
+                  check_request = RequestState2}}.
 
 handle_overload(Msg,
-		#state{mod = Module, index = Index}) ->
+                #state{mod = Module, index = Index}) ->
     %% STATS
     %riak_core_stat:update(dropped_vnode_requests),
     case Msg of
-	%for gen_fsm
-	{'$gen_event', %send_event
-	 #riak_vnode_req_v1{sender = Sender,
-			    request = Request}} ->
-	    catch Module:handle_overload_command(Request,
-						 Sender,
-						 Index);
-	{'$gen_all_state_event', %send_all_state_event
-	 #riak_vnode_req_v1{sender = Sender,
-			    request = Request}} ->
-	    catch Module:handle_overload_command(Request,
-						 Sender,
-						 Index);
-	{'$gen_event', %send_event
-	 #riak_coverage_req_v1{sender = Sender,
-			       request = Request}} ->
-	    catch Module:handle_overload_command(Request,
-						 Sender,
-						 Index);
-	%for gen_statem
-	{'$gen_cast',
-	 #riak_vnode_req_v1{sender = Sender,
-			    request = Request}} ->
-	    catch Module:handle_overload_command(Request,
-						 Sender,
-						 Index);
-	{'$gen_call',
-	 #riak_vnode_req_v1{sender = Sender,
-			    request = Request}} ->
-	    catch Module:handle_overload_command(Request,
-						 Sender,
-						 Index);
-	{'$gen_cast',
-	 #riak_coverage_req_v1{sender = Sender,
-			       request = Request}} ->
-	    catch Module:handle_overload_command(Request,
-						 Sender,
-						 Index);
-	_ -> catch Module:handle_overload_info(Msg, Index)
+        %for gen_fsm
+        {'$gen_event', %send_event
+         #riak_vnode_req_v1{sender = Sender,
+                            request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        {'$gen_all_state_event', %send_all_state_event
+         #riak_vnode_req_v1{sender = Sender,
+                            request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        {'$gen_event', %send_event
+         #riak_coverage_req_v1{sender = Sender,
+                               request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        %for gen_statem
+        {'$gen_cast',
+         #riak_vnode_req_v1{sender = Sender,
+                            request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        {'$gen_call',
+         #riak_vnode_req_v1{sender = Sender,
+                            request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        {'$gen_cast',
+         #riak_coverage_req_v1{sender = Sender,
+                               request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        _ -> catch Module:handle_overload_info(Msg, Index)
     end.
 
 %% @private
 forget_vnode(State) ->
     State#state{vnode_pid = undefined,
-		vnode_mref = undefined, check_mailbox = 0,
-		check_counter = 0, check_request = undefined}.
+                vnode_mref = undefined, check_mailbox = 0,
+                check_counter = 0, check_request = undefined}.
 
 %% @private
 get_vnode_pid(State = #state{mod = Module,
-			     index = Index, vnode_pid = undefined}) ->
+                             index = Index, vnode_pid = undefined}) ->
     {ok, Pid} = riak_core_vnode_manager:get_vnode_pid(Index,
-						      Module),
+                                                      Module),
     Mref = erlang:monitor(process, Pid),
     NewState = State#state{vnode_pid = Pid,
-			   vnode_mref = Mref},
+                           vnode_mref = Mref},
     {Pid, NewState};
 get_vnode_pid(State = #state{vnode_pid = Pid}) ->
     {Pid, State}.
@@ -444,10 +444,10 @@ overload_test_() ->
               {VnodePid, ProxyPid}
       end,
       fun ({VnodePid, ProxyPid}) ->
-	      unlink(VnodePid),
-	      unlink(ProxyPid),
-	      exit(VnodePid, kill),
-	      exit(ProxyPid, kill)
+              unlink(VnodePid),
+              unlink(ProxyPid),
+              exit(VnodePid, kill),
+              exit(ProxyPid, kill)
       end,
       [fun ({_VnodePid, ProxyPid}) ->
                {"should not discard in normal operation",

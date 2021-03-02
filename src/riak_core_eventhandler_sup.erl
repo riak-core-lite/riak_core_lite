@@ -38,7 +38,7 @@ start_guarded_handler(HandlerMod, Handler, Args) ->
                           undefined).
 
 start_guarded_handler(HandlerMod, Handler, Args,
-		      ExitFun) ->
+                      ExitFun) ->
     case supervisor:start_child(?MODULE,
                                 handler_spec(HandlerMod,
                                              Handler,

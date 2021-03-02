@@ -73,7 +73,7 @@
 -type squeue() :: {queue, [any()], [any()]}.
 
 -type pqueue() :: squeue() |
-		  {pqueue, [{priority(), squeue()}]}.
+                  {pqueue, [{priority(), squeue()}]}.
 
 %%----------------------------------------------------------------------------
 
@@ -87,9 +87,9 @@ is_queue({queue, R, F}) when is_list(R), is_list(F) ->
     true;
 is_queue({pqueue, Queues}) when is_list(Queues) ->
     lists:all(fun ({P, Q}) ->
-		      is_integer(P) andalso is_queue(Q)
-	      end,
-	      Queues);
+                      is_integer(P) andalso is_queue(Q)
+              end,
+              Queues);
 is_queue(_) -> false.
 
 -spec is_empty(pqueue()) -> boolean().
@@ -137,7 +137,7 @@ in(X, Priority, {pqueue, Queues}) ->
      end}.
 
 -spec out(pqueue()) -> {empty | {value, any()},
-			pqueue()}.
+                        pqueue()}.
 
 out({queue, [], []} = Q) -> {empty, Q};
 out({queue, [V], []}) -> {{value, V}, {queue, [], []}};
@@ -162,8 +162,8 @@ out({pqueue, [{P, Q} | Queues]}) ->
     {R, NewQ}.
 
 -spec out(priority(), pqueue()) -> {empty |
-				    {value, any()},
-				    pqueue()}.
+                                    {value, any()},
+                                    pqueue()}.
 
 out(_Priority, {queue, [], []} = Q) -> {empty, Q};
 out(Priority, {queue, _, _} = Q) when Priority =< 0 ->
@@ -175,8 +175,8 @@ out(Priority, {pqueue, [{P, _Q} | _Queues]} = Q)
 out(_Priority, {pqueue, [_ | _]} = Q) -> {empty, Q}.
 
 -spec pout(pqueue()) -> {empty |
-			 {value, any(), priority()},
-			 pqueue()}.
+                         {value, any(), priority()},
+                         pqueue()}.
 
 pout({queue, [], []} = Q) -> {empty, Q};
 pout({queue, _, _} = Q) ->
@@ -203,7 +203,7 @@ join({queue, AIn, AOut}, {queue, BIn, BOut}) ->
     {queue, BIn, AOut ++ lists:reverse(AIn, BOut)};
 join(A = {queue, _, _}, {pqueue, BPQ}) ->
     {Pre, Post} = lists:splitwith(fun ({P, _}) -> P < 0 end,
-				  BPQ),
+                                  BPQ),
     Post1 = case Post of
                 [] -> [{0, A}];
                 [{0, ZeroQueue} | Rest] ->
@@ -213,7 +213,7 @@ join(A = {queue, _, _}, {pqueue, BPQ}) ->
     {pqueue, Pre ++ Post1};
 join({pqueue, APQ}, B = {queue, _, _}) ->
     {Pre, Post} = lists:splitwith(fun ({P, _}) -> P < 0 end,
-				  APQ),
+                                  APQ),
     Post1 = case Post of
                 [] -> [{0, B}];
                 [{0, ZeroQueue} | Rest] ->
@@ -267,13 +267,13 @@ simple_case(Order) ->
     ?assertEqual(false, ((?MODULE):is_empty(Queue4))),
     ?assertEqual(3, ((?MODULE):len(Queue4))),
     ?assertMatch({{value, high}, _},
-		 ((?MODULE):out(Queue4))),
+                 ((?MODULE):out(Queue4))),
     {{value, high}, Queue5} = (?MODULE):out(Queue4),
     ?assertMatch({{value, mid}, _},
-		 ((?MODULE):out(Queue5))),
+                 ((?MODULE):out(Queue5))),
     {{value, mid}, Queue6} = (?MODULE):out(Queue5),
     ?assertMatch({{value, low}, _},
-		 ((?MODULE):out(Queue6))),
+                 ((?MODULE):out(Queue6))),
     {{value, low}, Queue7} = (?MODULE):out(Queue6),
     ?assertEqual(0, ((?MODULE):len(Queue7))),
     ?assertEqual(true, ((?MODULE):is_queue(Queue2))),

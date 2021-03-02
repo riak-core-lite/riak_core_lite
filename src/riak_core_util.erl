@@ -143,7 +143,7 @@ compare_dates(A, B) when is_list(B) ->
 
 rfc1123_to_now(String) when is_list(String) ->
     GSec =
-	calendar:datetime_to_gregorian_seconds(httpd_util:convert_request_date(String)),
+        calendar:datetime_to_gregorian_seconds(httpd_util:convert_request_date(String)),
     ESec = GSec - (?SEC_TO_EPOCH),
     Sec = ESec rem 1000000,
     MSec = ESec div 1000000,
@@ -154,7 +154,7 @@ rfc1123_to_now(String) when is_list(String) ->
 %%      to the new directory.
 make_tmp_dir() ->
     TmpId = io_lib:format("riptemp.~p",
-			  [erlang:phash2({rand:uniform(), self()})]),
+                          [erlang:phash2({rand:uniform(), self()})]),
     TempDir = filename:join("/tmp", TmpId),
     case filelib:is_dir(TempDir) of
         true -> make_tmp_dir();
@@ -168,7 +168,7 @@ make_tmp_dir() ->
 %% slightly: If `FN' cannot be opened, will not error with a
 %% `badmatch', as before, but will instead return `{error, Reason}'
 -spec replace_file(string(), iodata()) -> ok |
-					  {error, term()}.
+                                          {error, term()}.
 
 replace_file(FN, Data) ->
     TmpFN = FN ++ ".tmp",
@@ -207,7 +207,7 @@ read_file(FD, Acc) ->
 integer_to_list(I, 10) -> erlang:integer_to_list(I);
 integer_to_list(I, Base)
     when is_integer(I), is_integer(Base), Base >= 2,
-	 Base =< 1 + $Z - $A + 10 + 1 + $z - $a ->
+         Base =< 1 + $Z - $A + 10 + 1 + $z - $a ->
     if I < 0 -> [$- | integer_to_list(-I, Base, [])];
        true -> integer_to_list(I, Base, [])
     end;
@@ -219,9 +219,9 @@ integer_to_list(I0, Base, R0) ->
     D = I0 rem Base,
     I1 = I0 div Base,
     R1 = if D >= 36 -> [D - 36 + $a | R0];
-	    D >= 10 -> [D - 10 + $A | R0];
-	    true -> [D + $0 | R0]
-	 end,
+            D >= 10 -> [D - 10 + $A | R0];
+            true -> [D + $0 | R0]
+         end,
     if I1 =:= 0 -> R1;
        true -> integer_to_list(I1, Base, R1)
     end.
@@ -236,7 +236,7 @@ md5(Bin) -> crypto:hash(md5, Bin).
 
 unique_id_62() ->
     Rand = sha(term_to_binary({make_ref(),
-			       os:timestamp()})),
+                               os:timestamp()})),
     <<I:160/integer>> = Rand,
     integer_to_list(I, 62).
 
@@ -247,8 +247,8 @@ unique_id_62() ->
 %%      Module.  Return is a list of the results of code:purge/1
 %%      and code:load_file/1 on each node.
 -spec reload_all(Module :: atom()) -> [{boolean(),
-					{module, Module :: atom()} |
-					{error, term()}}].
+                                        {module, Module :: atom()} |
+                                        {error, term()}}].
 
 reload_all(Module) ->
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
@@ -336,7 +336,7 @@ ensure_started(App) ->
 %% @doc Applies `Pred' to each element in `List', and returns a count of how many
 %% applications returned `true'.
 -spec count(fun((term()) -> boolean()),
-	    [term()]) -> non_neg_integer().
+            [term()]) -> non_neg_integer().
 
 count(Pred, List) ->
     FoldFun = fun (E, A) ->
@@ -367,7 +367,7 @@ multi_keydelete(KeysToDelete, TupleList) ->
 %% first element compares equal to any key in `KeysToDelete' is deleted, if
 %% there is such a tuple.
 -spec multi_keydelete([atom()], non_neg_integer(),
-		      [tuple()]) -> [tuple()].
+                      [tuple()]) -> [tuple()].
 
 multi_keydelete(KeysToDelete, N, TupleList) ->
     lists:foldl(fun (Key, Acc) ->
@@ -379,7 +379,7 @@ multi_keydelete(KeysToDelete, N, TupleList) ->
 %% @doc Function composition: returns a function that is the composition of
 %% `F' and `G'.
 -spec compose(F :: fun((B) -> C),
-	      G :: fun((A) -> B)) -> fun((A) -> C).
+              G :: fun((A) -> B)) -> fun((A) -> C).
 
 compose(F, G)
     when is_function(F, 1), is_function(G, 1) ->
@@ -400,7 +400,7 @@ compose(Funs) when is_list(Funs) ->
 %% @doc Invoke function `F' over each element of list `L' in parallel,
 %%      returning the results in the same order as the input list.
 -spec pmap(F, L1) -> L2 when F :: fun((A) -> B),
-			     L1 :: [A], L2 :: [B].
+                             L1 :: [A], L2 :: [B].
 
 pmap(F, L) ->
     Parent = self(),
@@ -426,19 +426,19 @@ pmap(F, L) ->
 %% @doc Parallel map with a cap on the number of concurrent worker processes.
 %% Note: Worker processes are linked to the parent, so a crash propagates.
 -spec pmap(Fun :: function(), List :: list(),
-	   MaxP :: integer()) -> list().
+           MaxP :: integer()) -> list().
 
 pmap(Fun, List, MaxP) when MaxP < 1 ->
     pmap(Fun, List, 1);
 pmap(Fun, List, MaxP)
     when is_function(Fun), is_list(List),
-	 is_integer(MaxP) ->
+         is_integer(MaxP) ->
     Mapper = self(),
     #pmap_acc{pending = Pending, done = Done} =
-	lists:foldl(fun pmap_worker/2,
-		    #pmap_acc{mapper = Mapper, fn = Fun,
-			      max_concurrent = MaxP},
-		    List),
+        lists:foldl(fun pmap_worker/2,
+                    #pmap_acc{mapper = Mapper, fn = Fun,
+                              max_concurrent = MaxP},
+                    List),
     All = pmap_collect_rest(Pending, Done),
     % Restore input order
     Sorted = lists:keysort(1, All),
@@ -447,24 +447,24 @@ pmap(Fun, List, MaxP)
 %% @doc Fold function for {@link pmap/3} that spawns up to a max number of
 %% workers to execute the mapping function over the input list.
 pmap_worker(X,
-	    Acc = #pmap_acc{n_pending = NP, pending = Pending,
-			    n_done = ND, max_concurrent = MaxP, mapper = Mapper,
-			    fn = Fn})
+            Acc = #pmap_acc{n_pending = NP, pending = Pending,
+                            n_done = ND, max_concurrent = MaxP, mapper = Mapper,
+                            fn = Fn})
     when NP < MaxP ->
     Worker = spawn_link(fun () ->
-				R = Fn(X),
-				Mapper ! {pmap_result, self(), {NP + ND, R}}
-			end),
+                                R = Fn(X),
+                                Mapper ! {pmap_result, self(), {NP + ND, R}}
+                        end),
     Acc#pmap_acc{n_pending = NP + 1,
-		 pending = sets:add_element(Worker, Pending)};
+                 pending = sets:add_element(Worker, Pending)};
 pmap_worker(X,
-	    Acc = #pmap_acc{n_pending = NP, pending = Pending,
-			    n_done = ND, done = Done, max_concurrent = MaxP})
+            Acc = #pmap_acc{n_pending = NP, pending = Pending,
+                            n_done = ND, done = Done, max_concurrent = MaxP})
     when NP == MaxP ->
     {Result, NewPending} = pmap_collect_one(Pending),
     pmap_worker(X,
-		Acc#pmap_acc{n_pending = NP - 1, pending = NewPending,
-			     n_done = ND + 1, done = [Result | Done]}).
+                Acc#pmap_acc{n_pending = NP - 1, pending = NewPending,
+                             n_done = ND + 1, done = [Result | Done]}).
 
 %% @doc Waits for one pending pmap task to finish
 pmap_collect_one(Pending) ->
@@ -491,9 +491,9 @@ pmap_collect_rest(Pending, Done) ->
 %%      the sense that it won't crash the calling process if the rex
 %%      process is down.
 -spec safe_rpc(Node :: node(), Module :: atom(),
-	       Function :: atom(), Args :: [any()]) -> {badrpc,
-							any()} |
-						       any().
+               Function :: atom(), Args :: [any()]) -> {badrpc,
+                                                        any()} |
+                                                       any().
 
 safe_rpc(Node, Module, Function, Args) ->
     try rpc:call(Node, Module, Function, Args) of
@@ -508,8 +508,8 @@ safe_rpc(Node, Module, Function, Args) ->
 %%      the sense that it won't crash the calling process if the rex
 %%      process is down.
 -spec safe_rpc(Node :: node(), Module :: atom(),
-	       Function :: atom(), Args :: [any()],
-	       Timeout :: timeout()) -> {badrpc, any()} | any().
+               Function :: atom(), Args :: [any()],
+               Timeout :: timeout()) -> {badrpc, any()} | any().
 
 safe_rpc(Node, Module, Function, Args, Timeout) ->
     try rpc:call(Node, Module, Function, Args, Timeout) of
@@ -544,7 +544,7 @@ rpc_every_member_ann(Module, Function, Args, Timeout) ->
 %% @doc Perform an RPC call to a list of nodes in parallel, returning the
 %%      results in the same order as the input list.
 -spec multi_rpc([node()], module(), atom(),
-		[any()]) -> [any()].
+                [any()]) -> [any()].
 
 multi_rpc(Nodes, Mod, Fun, Args) ->
     multi_rpc(Nodes, Mod, Fun, Args, infinity).
@@ -552,19 +552,19 @@ multi_rpc(Nodes, Mod, Fun, Args) ->
 %% @doc Perform an RPC call to a list of nodes in parallel, returning the
 %%      results in the same order as the input list.
 -spec multi_rpc([node()], module(), atom(), [any()],
-		timeout()) -> [any()].
+                timeout()) -> [any()].
 
 multi_rpc(Nodes, Mod, Fun, Args, Timeout) ->
     pmap(fun (Node) ->
-		 safe_rpc(Node, Mod, Fun, Args, Timeout)
-	 end,
-	 Nodes).
+                 safe_rpc(Node, Mod, Fun, Args, Timeout)
+         end,
+         Nodes).
 
 %% @doc Perform an RPC call to a list of nodes in parallel, returning the
 %%      results in the same order as the input list. Each result is tagged
 %%      with the corresponding node name.
 -spec multi_rpc_ann([node()], module(), atom(),
-		    [any()]) -> [{node(), any()}].
+                    [any()]) -> [{node(), any()}].
 
 multi_rpc_ann(Nodes, Mod, Fun, Args) ->
     multi_rpc_ann(Nodes, Mod, Fun, Args, infinity).
@@ -573,7 +573,7 @@ multi_rpc_ann(Nodes, Mod, Fun, Args) ->
 %%      results in the same order as the input list. Each result is tagged
 %%      with the corresponding node name.
 -spec multi_rpc_ann([node()], module(), atom(), [any()],
-		    timeout()) -> [{node(), any()}].
+                    timeout()) -> [{node(), any()}].
 
 multi_rpc_ann(Nodes, Mod, Fun, Args, Timeout) ->
     Results = multi_rpc(Nodes, Mod, Fun, Args, Timeout),
@@ -585,8 +585,8 @@ multi_rpc_ann(Nodes, Mod, Fun, Args, Timeout) ->
 %%      the same order as the input list, and each result is tagged with the
 %%      corresponding node name.
 -spec multicall_ann([node()], module(), atom(),
-		    [any()]) -> {Results :: [{node(), any()}],
-				 Down :: [node()]}.
+                    [any()]) -> {Results :: [{node(), any()}],
+                                 Down :: [node()]}.
 
 multicall_ann(Nodes, Mod, Fun, Args) ->
     multicall_ann(Nodes, Mod, Fun, Args, infinity).
@@ -597,16 +597,16 @@ multicall_ann(Nodes, Mod, Fun, Args) ->
 %%      the same order as the input list, and each result is tagged with the
 %%      corresponding node name.
 -spec multicall_ann([node()], module(), atom(), [any()],
-		    timeout()) -> {Results :: [{node(), any()}],
-				   Down :: [node()]}.
+                    timeout()) -> {Results :: [{node(), any()}],
+                                   Down :: [node()]}.
 
 multicall_ann(Nodes, Mod, Fun, Args, Timeout) ->
     L = multi_rpc_ann(Nodes, Mod, Fun, Args, Timeout),
     {Results, DownAnn} = lists:partition(fun ({_,
-					       Result}) ->
-						 Result /= {badrpc, nodedown}
-					 end,
-					 L),
+                                               Result}) ->
+                                                 Result /= {badrpc, nodedown}
+                                         end,
+                                         L),
     {Down, _} = lists:unzip(DownAnn),
     {Results, Down}.
 
@@ -618,7 +618,7 @@ multicall_ann(Nodes, Mod, Fun, Args, Timeout) ->
 %%      have children by giving them backedges to other elements.
 
 -spec build_tree(N :: integer(), Nodes :: [term()],
-		 Opts :: [term()]) -> orddict:orddict().
+                 Opts :: [term()]) -> orddict:orddict().
 
 build_tree(N, Nodes, Opts) ->
     case lists:member(cycles, Opts) of
@@ -654,9 +654,9 @@ orddict_delta(A, B) ->
                            A2,
                            B2),
     Diff = orddict:filter(fun (_, {_Same, _Same}) -> false;
-			      (_, _) -> true
-			  end,
-			  Merged),
+                              (_, _) -> true
+                          end,
+                          Merged),
     Diff.
 
 shuffle(L) ->
@@ -686,7 +686,7 @@ format_ip_and_port(Ip, Port) when is_list(Ip) ->
     lists:flatten(io_lib:format("~s:~p", [Ip, Port]));
 format_ip_and_port(Ip, Port) when is_tuple(Ip) ->
     lists:flatten(io_lib:format("~s:~p",
-				[inet_parse:ntoa(Ip), Port])).
+                                [inet_parse:ntoa(Ip), Port])).
 
 peername(Socket, Module) ->
     case Module:peername(Socket) of
@@ -708,11 +708,11 @@ sockname(Socket, Module) ->
 %%      supported record version.
 
 make_fold_req(#riak_core_fold_req_v1{foldfun = FoldFun,
-				     acc0 = Acc0}) ->
+                                     acc0 = Acc0}) ->
     make_fold_req(FoldFun, Acc0, false, []);
 make_fold_req(#riak_core_fold_req_v2{foldfun = FoldFun,
-				     acc0 = Acc0, forwardable = Forwardable,
-				     opts = Opts}) ->
+                                     acc0 = Acc0, forwardable = Forwardable,
+                                     opts = Opts}) ->
     make_fold_req(FoldFun, Acc0, Forwardable, Opts).
 
 make_fold_req(FoldFun, Acc0) ->
@@ -725,8 +725,8 @@ make_fold_req(FoldFun, Acc0, Forwardable, Opts) ->
 %%      regardless of cluster support
 
 make_newest_fold_req(#riak_core_fold_req_v1{foldfun =
-						FoldFun,
-					    acc0 = Acc0}) ->
+                                                FoldFun,
+                                            acc0 = Acc0}) ->
     make_fold_reqv(v2, FoldFun, Acc0, false, []);
 make_newest_fold_req(#riak_core_fold_req_v2{} = F) -> F.
 
@@ -751,7 +751,7 @@ make_fold_reqv(_, FoldFun, Acc0, Forwardable, Opts)
              (Forwardable == true orelse Forwardable == false)
                  andalso is_list(Opts) ->
     #riak_core_fold_req_v2{foldfun = FoldFun, acc0 = Acc0,
-			   forwardable = Forwardable, opts = Opts}.
+                           forwardable = Forwardable, opts = Opts}.
 
 %% @private - used with proxy_spawn
 proxy(Parent, Fun) ->
@@ -764,7 +764,7 @@ proxy(Parent, Fun) ->
     end.
 
 -spec enable_job_class(atom(), atom()) -> ok |
-					  {error, term()}.
+                                          {error, term()}.
 
 %% @doc Enables the specified Application/Operation job class.
 %% This is the public API for use via RPC.
@@ -778,7 +778,7 @@ enable_job_class(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
 
 -spec disable_job_class(atom(), atom()) -> ok |
-					   {error, term()}.
+                                           {error, term()}.
 
 %% @doc Disables the specified Application/Operation job class.
 %% This is the public API for use via RPC.
@@ -792,7 +792,7 @@ disable_job_class(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
 
 -spec job_class_enabled(atom(), atom()) -> boolean() |
-					   {error, term()}.
+                                           {error, term()}.
 
 %% @doc Reports whether the specified Application/Operation job class is enabled.
 %% This is the public API for use via RPC.
@@ -804,7 +804,7 @@ job_class_enabled(Application, Operation) ->
     {error, {badarg, {Application, Operation}}}.
 
 -spec enable_job_class(Class :: term()) -> ok |
-					   {error, term()}.
+                                           {error, term()}.
 
 %% @doc Internal API to enable the specified job class.
 %% WARNING:
@@ -831,7 +831,7 @@ enable_job_class(Class) ->
     end.
 
 -spec disable_job_class(Class :: term()) -> ok |
-					    {error, term()}.
+                                            {error, term()}.
 
 %% @doc Internal API to disable the specified job class.
 %% WARNING:
@@ -882,7 +882,7 @@ job_class_enabled(Class) ->
     end.
 
 -spec job_class_disabled_message(ReturnType :: atom(),
-				 Class :: term()) -> binary() | string().
+                                 Class :: term()) -> binary() | string().
 
 %% @doc The error message to be returned to a client for a disabled job class.
 %% WARNING:
@@ -890,16 +890,16 @@ job_class_enabled(Class) ->
 %%   when the Jobs API is live.
 job_class_disabled_message(binary, Class) ->
     erlang:list_to_binary(job_class_disabled_message(text,
-						     Class));
+                                                     Class));
 job_class_disabled_message(text, Class) ->
     lists:flatten(io_lib:format("Operation '~p' is not enabled",
-				[Class])).
+                                [Class])).
 
 -spec report_job_request_disposition(Accepted ::
-					 boolean(),
-				     Class :: term(), Mod :: module(),
-				     Func :: atom(), Line :: pos_integer(),
-				     Client :: term()) -> ok | {error, term()}.
+                                         boolean(),
+                                     Class :: term(), Mod :: module(),
+                                     Func :: atom(), Line :: pos_integer(),
+                                     Client :: term()) -> ok | {error, term()}.
 
 %% @doc Report/record the disposition of an async job request.
 %%
@@ -919,17 +919,17 @@ job_class_disabled_message(text, Class) ->
 %%    request was received.
 %%
 report_job_request_disposition(true, Class, Mod, Func,
-			       Line, Client) ->
+                               Line, Client) ->
     logger:debug("Request '~p' accepted from ~p",
-		 [Class, Client],
-		 #{pid => erlang:self(), module => Mod, function => Func,
-		   line => Line});
+                 [Class, Client],
+                 #{pid => erlang:self(), module => Mod, function => Func,
+                   line => Line});
 report_job_request_disposition(false, Class, Mod, Func,
-			       Line, Client) ->
+                               Line, Client) ->
     logger:warning("Request '~p' disabled from ~p",
-		   [Class, Client],
-		   #{pid => erlang:self(), module => Mod, function => Func,
-		     line => Line}).
+                   [Class, Client],
+                   #{pid => erlang:self(), module => Mod, function => Func,
+                     line => Line}).
 
 %% ===================================================================
 %% Preflist utility functions
@@ -958,7 +958,7 @@ moment_test() ->
 
 clientid_uniqueness_test() ->
     ClientIds = [mkclientid(somenode@somehost)
-		 || _I <- lists:seq(0, 10000)],
+                 || _I <- lists:seq(0, 10000)],
     length(ClientIds) =:=
         length(sets:to_list(sets:from_list(ClientIds))).
 
@@ -1058,26 +1058,26 @@ compose_test_() ->
                                      Double,
                                      Square]),
     CompatibleTypes = compose(Increment,
-			      fun (X) when is_list(X) -> list_to_integer(X)
-			      end),
+                              fun (X) when is_list(X) -> list_to_integer(X)
+                              end),
     IncompatibleTypes = compose(Increment,
-				fun (X) when is_binary(X) -> binary_to_list(X)
-				end),
+                                fun (X) when is_binary(X) -> binary_to_list(X)
+                                end),
     [?_assertEqual("DLROW OLLEH",
-		   (StripReverseUpper("Hello world!"))),
+                   (StripReverseUpper("Hello world!"))),
      ?_assertEqual((Increment(Double(Square(3)))),
-		   (SquareDoubleIncrement(3))),
+                   (SquareDoubleIncrement(3))),
      ?_assertMatch(4, (CompatibleTypes("3"))),
      ?_assertError(function_clause,
-		   (IncompatibleTypes(<<"42">>))),
+                   (IncompatibleTypes(<<"42">>))),
      ?_assertError(function_clause,
-		   (compose(fun (X, Y) -> {X, Y} end, fun (X) -> X end)))].
+                   (compose(fun (X, Y) -> {X, Y} end, fun (X) -> X end)))].
 
 pmap_test_() ->
     Fgood = fun (X) -> 2 * X end,
     Fbad = fun (3) -> throw(die_on_3);
-	       (X) -> Fgood(X)
-	   end,
+               (X) -> Fgood(X)
+           end,
     Lin = [1, 2, 3, 4],
     Lout = [2, 4, 6, 8],
     {setup,
@@ -1125,9 +1125,9 @@ bounded_pmap_test_() ->
             end,
     {setup,
      fun () ->
-	     Pid = spawn_link(?MODULE, counter_loop, [0]),
-	     monitor(process, Pid),
-	     Pid
+             Pid = spawn_link(?MODULE, counter_loop, [0]),
+             monitor(process, Pid),
+             Pid
      end,
      fun (Pid) ->
              Pid ! exit,

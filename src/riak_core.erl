@@ -38,7 +38,7 @@
 -export([stat_mods/0, stat_prefix/0]).
 
 -export([add_guarded_event_handler/3,
-	 add_guarded_event_handler/4]).
+         add_guarded_event_handler/4]).
 
 -export([delete_guarded_event_handler/3]).
 
@@ -155,13 +155,13 @@ join(_, Node, Auto) -> join(node(), Node, false, Auto).
 %%      node is reachable.
 %% @param Rejoin Boolean to mark if this is a rejoin.
 -spec join(JoiningNode :: node(), JoinedNode :: node(),
-	   Rejoin :: boolean(), Auto :: boolean()) -> ok |
-						      {error,
-						       not_reachable |
-						       unable_to_get_join_ring |
-						       node_still_starting |
-						       not_single_node |
-						       different_ring_sizes}.
+           Rejoin :: boolean(), Auto :: boolean()) -> ok |
+                                                      {error,
+                                                       not_reachable |
+                                                       unable_to_get_join_ring |
+                                                       node_still_starting |
+                                                       not_single_node |
+                                                       different_ring_sizes}.
 
 join(_, Node, Rejoin, Auto) ->
     case net_adm:ping(Node) of
@@ -175,8 +175,8 @@ join(_, Node, Rejoin, Auto) ->
 %% @returns The remote ring or `badrpc, rpc_process_down' if the rpc fails.
 %% @see riak_core_util:safe_rpc/4.
 -spec get_other_ring(Node :: node()) -> {ok,
-					 riak_core_ring:riak_core_ring()} |
-					{badrpc, rpc_process_down}.
+                                         riak_core_ring:riak_core_ring()} |
+                                        {badrpc, rpc_process_down}.
 
 get_other_ring(Node) ->
     riak_core_util:safe_rpc(Node,
@@ -192,13 +192,13 @@ get_other_ring(Node) ->
 %%        ownership.
 %% @returns `ok' on successful join, `{error, Reason}' otherwise.
 -spec standard_join(Node :: node(), Rejoin :: boolean(),
-		    Auto :: boolean()) -> ok |
-					  {error,
-					   not_reachable |
-					   unable_to_get_join_ring |
-					   node_still_starting |
-					   not_single_node |
-					   different_ring_sizes}.
+                    Auto :: boolean()) -> ok |
+                                          {error,
+                                           not_reachable |
+                                           unable_to_get_join_ring |
+                                           node_still_starting |
+                                           not_single_node |
+                                           different_ring_sizes}.
 
 standard_join(Node, Rejoin, Auto) when is_atom(Node) ->
     case net_adm:ping(Node) of
@@ -217,7 +217,7 @@ standard_join(Node, Rejoin, Auto) when is_atom(Node) ->
 %% applications have finished starting to avoid ring status race
 %% conditions.
 -spec init_complete(Status :: {init:internal_status(),
-			       term()}) -> boolean().
+                               term()}) -> boolean().
 
 init_complete({started, _}) -> true;
 init_complete(_) -> false.
@@ -227,12 +227,12 @@ init_complete(_) -> false.
 %%      parameter.
 %% @param Ring Ring retrieved from the remote node.
 -spec standard_join(Node :: node(),
-		    Ring :: riak_core_ring:riak_core_ring(),
-		    Rejoin :: boolean(), Auto :: boolean()) -> ok |
-							       {error,
-								node_still_starting |
-								not_single_node |
-								different_ring_sizes}.
+                    Ring :: riak_core_ring:riak_core_ring(),
+                    Rejoin :: boolean(), Auto :: boolean()) -> ok |
+                                                               {error,
+                                                                node_still_starting |
+                                                                not_single_node |
+                                                                different_ring_sizes}.
 
 standard_join(Node, Ring, Rejoin, Auto) ->
     {ok, MyRing} = riak_core_ring_manager:get_raw_ring(),
@@ -266,8 +266,8 @@ standard_join(Node, Ring, Rejoin, Auto) ->
 %% @param Ring Ring the node is joining.
 %% @returns The updated ring.
 -spec maybe_auto_join(Auto :: boolean(), Node :: node(),
-		      Ring ::
-			  riak_core_ring:riak_core_ring()) -> riak_core_ring:riak_core_ring().
+                      Ring ::
+                          riak_core_ring:riak_core_ring()) -> riak_core_ring:riak_core_ring().
 
 maybe_auto_join(false, _Node, Ring) -> Ring;
 maybe_auto_join(true, Node, Ring) ->
@@ -282,7 +282,7 @@ maybe_auto_join(true, Node, Ring) ->
 %% @param Node Node to be removed.
 %% @returns `ok' if the removal was successful or `{error, Reason}' otherwise.
 -spec remove(Node :: node()) -> ok |
-				{error, not_member | only_member}.
+                                {error, not_member | only_member}.
 
 remove(Node) ->
     {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
@@ -303,23 +303,23 @@ remove(Node) ->
 
 standard_remove(Node) ->
     riak_core_ring_manager:ring_trans(fun (Ring2, _) ->
-					      Ring3 =
-						  riak_core_ring:remove_member(node(),
-									       Ring2,
-									       Node),
-					      Ring4 =
-						  riak_core_ring:ring_changed(node(),
-									      Ring3),
-					      {new_ring, Ring4}
-				      end,
-				      []),
+                                              Ring3 =
+                                                  riak_core_ring:remove_member(node(),
+                                                                               Ring2,
+                                                                               Node),
+                                              Ring4 =
+                                                  riak_core_ring:ring_changed(node(),
+                                                                              Ring3),
+                                              {new_ring, Ring4}
+                                      end,
+                                      []),
     ok.
 
 %% @doc Mark a downed node as downed on the ring.
 %% @param Node Node that is down.
 %% @returns `ok' if the transition was successful, `{error, Reason}' otherwise.
 -spec down(Node :: node()) -> ok |
-			      {error, is_up | not_member | only_member}.
+                              {error, is_up | not_member | only_member}.
 
 down(Node) ->
     {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
@@ -350,7 +350,7 @@ down(Node) ->
 %% @doc Leave the cluster with the local node.
 %% @returns `ok' if the leave was successful, `{error, Reason}' otherwise.
 -spec leave() -> ok |
-		 {error, not_member | only_member | already_leaving}.
+                 {error, not_member | only_member | already_leaving}.
 
 leave() ->
     Node = node(),
@@ -372,13 +372,13 @@ leave() ->
 
 standard_leave(Node) ->
     riak_core_ring_manager:ring_trans(fun (Ring2, _) ->
-					      Ring3 =
-						  riak_core_ring:leave_member(Node,
-									      Ring2,
-									      Node),
-					      {new_ring, Ring3}
-				      end,
-				      []),
+                                              Ring3 =
+                                                  riak_core_ring:leave_member(Node,
+                                                                              Ring2,
+                                                                              Node),
+                                              {new_ring, Ring3}
+                                      end,
+                                      []),
     ok.
 
 %% @doc Cause all partitions owned by ExitingNode to be taken over
@@ -386,8 +386,8 @@ standard_leave(Node) ->
 %% @param ExitingNode Exiting node.
 %% @returns `ok' if the removal was successful or `{error, Reason}' otherwise.
 -spec remove_from_cluster(ExitingNode :: atom()) -> ok |
-						    {error,
-						     not_member | only_member}.
+                                                    {error,
+                                                     not_member | only_member}.
 
 remove_from_cluster(ExitingNode)
     when is_atom(ExitingNode) ->
@@ -436,7 +436,7 @@ health_check(App) ->
 %% @doc Get the application name if not supplied, first by get_application
 %% then by searching by module name.
 -spec get_app(App :: atom(),
-	      Module :: module()) -> atom().
+              Module :: module()) -> atom().
 
 get_app(undefined, Module) ->
     {ok, App} = case application:get_application(self()) of
@@ -464,10 +464,10 @@ register(_App, []) ->
     %% to ensure the new fixups are run against
     %% the ring.
     {ok, _R} = riak_core_ring_manager:ring_trans(fun (R,
-						      _A) ->
-							 {new_ring, R}
-						 end,
-						 undefined),
+                                                      _A) ->
+                                                         {new_ring, R}
+                                                 end,
+                                                 undefined),
     riak_core_ring_events:force_sync_update(),
     ok;
 register(App, [{vnode_module, VNodeMod} | T]) ->
@@ -487,7 +487,7 @@ register(App, [{health_check, HealthMFA} | T]) ->
 %% @param Type Role of the module.
 %% @returns `ok'.
 -spec register_mod(App :: atom(), Module :: module(),
-		   Type :: atom()) -> ok.
+                   Type :: atom()) -> ok.
 
 register_mod(App, Module, Type) when is_atom(Type) ->
     case Type of
@@ -509,7 +509,7 @@ register_mod(App, Module, Type) when is_atom(Type) ->
 %% @param Type Type of the metadata.
 %% @returns `ok'.
 -spec register_metadata(App :: atom(), Value :: term(),
-			Type :: atom()) -> ok.
+                        Type :: atom()) -> ok.
 
 register_metadata(App, Value, Type) ->
     case application:get_env(riak_core, Type) of
@@ -528,9 +528,9 @@ register_metadata(App, Value, Type) ->
 %% @returns `ok' if the adding was successful, `{error, Reason}' otherwise.
 %% @see add_guarded_event_handler/4.
 -spec add_guarded_event_handler(HandlerMod :: module(),
-				Handler :: module() | {module(), term()},
-				Args :: [term()]) -> ok |
-						     {error, Reason :: term()}.
+                                Handler :: module() | {module(), term()},
+                                Args :: [term()]) -> ok |
+                                                     {error, Reason :: term()}.
 
 add_guarded_event_handler(HandlerMod, Handler, Args) ->
     add_guarded_event_handler(HandlerMod,
@@ -549,16 +549,16 @@ add_guarded_event_handler(HandlerMod, Handler, Args) ->
 %% @param ExitFun
 %% @returns `ok' if the adding was successful, `{error, Reason}' otherwise.
 -spec add_guarded_event_handler(HandlerMod :: module(),
-				Handler :: module() | {module(), term()},
-				Args :: [term()],
-				ExitFun :: fun((module() | {module(), term()},
-						term()) -> any()) |
-					   undefined) -> ok |
-							 {error,
-							  Reason :: term()}.
+                                Handler :: module() | {module(), term()},
+                                Args :: [term()],
+                                ExitFun :: fun((module() | {module(), term()},
+                                                term()) -> any()) |
+                                           undefined) -> ok |
+                                                         {error,
+                                                          Reason :: term()}.
 
 add_guarded_event_handler(HandlerMod, Handler, Args,
-			  ExitFun) ->
+                          ExitFun) ->
     riak_core_eventhandler_sup:start_guarded_handler(HandlerMod,
                                                      Handler,
                                                      Args,
@@ -574,12 +574,12 @@ add_guarded_event_handler(HandlerMod, Handler, Args,
 %%      {error,module_not_found}. If the callback function fails with Reason,
 %%      the function returns {'EXIT',Reason}.
 -spec delete_guarded_event_handler(HandlerMod ::
-				       module(),
-				   Handler :: module() | {module(), term()},
-				   Args :: term()) -> term().
+                                       module(),
+                                   Handler :: module() | {module(), term()},
+                                   Args :: term()) -> term().
 
 delete_guarded_event_handler(HandlerMod, Handler,
-			     Args) ->
+                             Args) ->
     riak_core_eventhandler_sup:stop_guarded_handler(HandlerMod,
                                                     Handler,
                                                     Args).
@@ -600,7 +600,7 @@ app_for_module(Mod) ->
 %% @param Mod Name of module to search for.
 %% @returns `{ok, App}' when the app is found, `{ok, undefined}' otherwise.
 -spec app_for_module(Apps :: [atom()],
-		     Mod :: module()) -> {ok, atom()}.
+                     Mod :: module()) -> {ok, atom()}.
 
 app_for_module([], _Mod) -> {ok, undefined};
 app_for_module([{App, _, _} | T], Mod) ->
@@ -622,7 +622,7 @@ wait_for_application(App) ->
 %% @private
 %% @doc Helper for {@link wait_for_application/1}.
 -spec wait_for_application(App :: atom(),
-			   Elapsed :: integer()) -> ok.
+                           Elapsed :: integer()) -> ok.
 
 wait_for_application(App, Elapsed) ->
     case lists:keymember(App,
@@ -663,7 +663,7 @@ wait_for_service(Service) ->
 %% @private
 %% @doc Helper for {@link wait_for_service/1}.
 -spec wait_for_service(Service :: atom(),
-		       Elapsed :: integer()) -> ok.
+                       Elapsed :: integer()) -> ok.
 
 wait_for_service(Service, Elapsed) ->
     case lists:member(Service,

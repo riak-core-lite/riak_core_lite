@@ -92,40 +92,40 @@ sock_opts() ->
 
 %% @doc Callback for {@link gen_nb_server:call/3}.
 -spec handle_call(Msg :: handoff_ip | handoff_port,
-		  From :: {pid(), term()}, State :: state()) -> {reply,
-								 {ok,
-								  string() |
-								  integer()},
-								 state()}.
+                  From :: {pid(), term()}, State :: state()) -> {reply,
+                                                                 {ok,
+                                                                  string() |
+                                                                  integer()},
+                                                                 state()}.
 
 handle_call(handoff_ip, _From,
-	    State = #state{ipaddr = I}) ->
+            State = #state{ipaddr = I}) ->
     {reply, {ok, I}, State};
 handle_call(handoff_port, _From,
-	    State = #state{portnum = P}) ->
+            State = #state{portnum = P}) ->
     {reply, {ok, P}, State}.
 
 %% @doc Callback for {@link gen_nb_server:cast/2}. Not implemented.
 -spec handle_cast(Msg :: term(),
-		  State :: state()) -> {noreply, state()}.
+                  State :: state()) -> {noreply, state()}.
 
 handle_cast(_Msg, State) -> {noreply, State}.
 
 %% @doc Callback for {@link gen_nb_server}. Not implemented.
 -spec handle_info(Info :: term(),
-		  State :: state()) -> {noreply, state()}.
+                  State :: state()) -> {noreply, state()}.
 
 handle_info(_Info, State) -> {noreply, State}.
 
 %% @doc Callback for {@link gen_nb_serer}. Not implemented.
 -spec terminate(Reason :: term(),
-		State :: state()) -> ok.
+                State :: state()) -> ok.
 
 terminate(_Reason, _State) -> ok.
 
 %% @doc Callback for {@link gen_nb_server}. Not implemented.
 -spec code_change(OldVsn :: term(), State :: state(),
-		  Extra :: term()) -> {ok, state()}.
+                  Extra :: term()) -> {ok, state()}.
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
@@ -135,7 +135,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %% @param State Current state.
 %% @return `{ok, State}'.
 -spec new_connection(Socket :: inet:socket(),
-		     State :: state()) -> {ok, state()}.
+                     State :: state()) -> {ok, state()}.
 
 new_connection(Socket, State) ->
     case riak_core_handoff_manager:add_inbound() of

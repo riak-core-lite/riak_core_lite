@@ -42,65 +42,65 @@
 -type state() :: #state{}.
 
 -callback init(InitArgs :: list()) -> {ok,
-				       State :: term()} |
-				      {error, Reason :: term()}.
+                                       State :: term()} |
+                                      {error, Reason :: term()}.
 
 -callback handle_call(Msg :: term(),
-		      From :: {pid(), term()}, State :: term()) -> {reply,
-								    Reply ::
-									term(),
-								    State ::
-									term()} |
-								   {reply,
-								    Reply ::
-									term(),
-								    State ::
-									term(),
-								    number() |
-								    hibernate} |
-								   {noreply,
-								    State ::
-									term()} |
-								   {noreply,
-								    State ::
-									term(),
-								    number() |
-								    hibernate} |
-								   {stop,
-								    Reason ::
-									term(),
-								    State ::
-									term()}.
+                      From :: {pid(), term()}, State :: term()) -> {reply,
+                                                                    Reply ::
+                                                                        term(),
+                                                                    State ::
+                                                                        term()} |
+                                                                   {reply,
+                                                                    Reply ::
+                                                                        term(),
+                                                                    State ::
+                                                                        term(),
+                                                                    number() |
+                                                                    hibernate} |
+                                                                   {noreply,
+                                                                    State ::
+                                                                        term()} |
+                                                                   {noreply,
+                                                                    State ::
+                                                                        term(),
+                                                                    number() |
+                                                                    hibernate} |
+                                                                   {stop,
+                                                                    Reason ::
+                                                                        term(),
+                                                                    State ::
+                                                                        term()}.
 
 -callback handle_cast(Msg :: term(),
-		      State :: term()) -> {noreply, State :: term()} |
-					  {noreply, State :: term(),
-					   number() | hibernate} |
-					  {stop, Reason :: term(),
-					   State :: term()}.
+                      State :: term()) -> {noreply, State :: term()} |
+                                          {noreply, State :: term(),
+                                           number() | hibernate} |
+                                          {stop, Reason :: term(),
+                                           State :: term()}.
 
 -callback handle_info(Msg :: term(),
-		      State :: term()) -> {noreply, State :: term()} |
-					  {noreply, State :: term(),
-					   number() | hibernate} |
-					  {stop, Reason :: term(),
-					   State :: term()}.
+                      State :: term()) -> {noreply, State :: term()} |
+                                          {noreply, State :: term(),
+                                           number() | hibernate} |
+                                          {stop, Reason :: term(),
+                                           State :: term()}.
 
 -callback terminate(Reason :: term(),
-		    State :: term()) -> ok.
+                    State :: term()) -> ok.
 
 -callback sock_opts() -> [gen_tcp:listen_option()].
 
 -callback new_connection(inet:socket(),
-			 State :: term()) -> {ok, NewState :: term()} |
-					     {stop, Reason :: term(),
-					      NewState :: term()}.
+                         State :: term()) -> {ok, NewState :: term()} |
+                                             {stop, Reason :: term(),
+                                              NewState :: term()}.
 
 %% @doc Start server listening on `IpAddr:Port'.
 -spec start_link(Module :: atom(), IpAddr :: string(),
-		 Port :: integer(), INitParams :: [any()]) -> {ok,
-							       pid()} |
-							      {error, any()}.
+                 Port :: integer(), INitParams :: [any()]) -> {ok,
+                                                               pid()} |
+                                                              {error, any()}.
 
 start_link(Module, IpAddr, Port, InitParams) ->
     gen_server:start_link(?MODULE,
@@ -125,8 +125,8 @@ init([Module, IpAddr, Port, InitParams]) ->
 
 %% @hidden
 handle_call(Request, From,
-	    #state{cb = Module, server_state = ServerState} =
-		State) ->
+            #state{cb = Module, server_state = ServerState} =
+                State) ->
     case Module:handle_call(Request, From, ServerState) of
         {reply, Reply, NewServerState} ->
             {reply,
@@ -165,8 +165,8 @@ handle_call(Request, From,
                                       {stop, _, _}.
 
 handle_cast(Msg,
-	    #state{cb = Module, server_state = ServerState} =
-		State) ->
+            #state{cb = Module, server_state = ServerState} =
+                State) ->
     case Module:handle_cast(Msg, ServerState) of
         {noreply, NewServerState} ->
             {noreply, State#state{server_state = NewServerState}};
@@ -199,8 +199,8 @@ handle_info({inet_async,
              State#state{server_state = NewServerState}}
     end;
 handle_info(Info,
-	    #state{cb = Module, server_state = ServerState} =
-		State) ->
+            #state{cb = Module, server_state = ServerState} =
+                State) ->
     case Module:handle_info(Info, ServerState) of
         {noreply, NewServerState} ->
             {noreply, State#state{server_state = NewServerState}};
@@ -217,8 +217,8 @@ handle_info(Info,
 
 %% @hidden
 terminate(Reason,
-	  #state{cb = Module, sock = Sock,
-		 server_state = ServerState}) ->
+          #state{cb = Module, sock = Sock,
+                 server_state = ServerState}) ->
     gen_tcp:close(Sock),
     Module:terminate(Reason, ServerState),
     ok.

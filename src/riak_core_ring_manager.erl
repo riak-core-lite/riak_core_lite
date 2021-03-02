@@ -97,7 +97,7 @@
 -endif.
 
 -record(state,
-	{mode, raw_ring, ring_changed_time, inactivity_timer}).
+        {mode, raw_ring, ring_changed_time, inactivity_timer}).
 
 -export([setup_ets/1,
          cleanup_ets/1,
@@ -134,8 +134,8 @@ start_link(test) ->
                           []).
 
 -spec get_my_ring() -> {ok,
-			riak_core_ring:riak_core_ring()} |
-		       {error, any()}.
+                        riak_core_ring:riak_core_ring()} |
+                       {error, any()}.
 
 get_my_ring() ->
     Ring = case persistent_term:get(?RING_KEY, undefined) of
@@ -156,15 +156,15 @@ get_my_ring() ->
 
 get_raw_ring() ->
     try Ring = ets:lookup_element(?ETS, raw_ring, 2),
-	{ok, Ring}
+        {ok, Ring}
     catch
         _:_ -> gen_server:call(?MODULE, get_raw_ring, infinity)
     end.
 
 get_raw_ring_chashbin() ->
     try Ring = ets:lookup_element(?ETS, raw_ring, 2),
-	{ok, CHBin} = get_chash_bin(),
-	{ok, Ring, CHBin}
+        {ok, CHBin} = get_chash_bin(),
+        {ok, Ring, CHBin}
     catch
         _:_ ->
             gen_server:call(?MODULE,
@@ -178,7 +178,7 @@ refresh_my_ring() ->
 
 refresh_ring(Node, ClusterName) ->
     gen_server:cast({?MODULE, Node},
-		    {refresh_my_ring, ClusterName}).
+                    {refresh_my_ring, ClusterName}).
 
 %% @spec set_my_ring(riak_core_ring:riak_core_ring()) -> ok
 set_my_ring(Ring) ->
@@ -246,7 +246,7 @@ do_write_ringfile(Ring) ->
 do_write_ringfile(Ring, FN) ->
     ok = filelib:ensure_dir(FN),
     try ok = riak_core_util:replace_file(FN,
-					 term_to_binary(Ring))
+                                         term_to_binary(Ring))
     catch
         _:Err ->
             logger:error("Unable to write ring to \"~s\" - ~p\n",
@@ -376,10 +376,10 @@ reload_ring(live) ->
     end.
 
 handle_call(get_raw_ring, _From,
-	    #state{raw_ring = Ring} = State) ->
+            #state{raw_ring = Ring} = State) ->
     {reply, {ok, Ring}, State};
 handle_call(get_raw_ring_chashbin, _From,
-	    #state{raw_ring = Ring} = State) ->
+            #state{raw_ring = Ring} = State) ->
     {ok, CHBin} = get_chash_bin(),
     {reply, {ok, Ring, CHBin}, State};
 handle_call({set_my_ring, Ring}, _From, State) ->
@@ -396,7 +396,7 @@ handle_call(refresh_my_ring, _From, State) ->
     riak_core:stop("node removal completed, exiting."),
     {reply, ok, State2};
 handle_call({ring_trans, Fun, Args}, _From,
-	    State = #state{raw_ring = Ring}) ->
+            State = #state{raw_ring = Ring}) ->
     case catch Fun(Ring, Args) of
         {new_ring, NewRing} ->
             State2 = prune_write_notify_ring(NewRing, State),
@@ -418,7 +418,7 @@ handle_call({ring_trans, Fun, Args}, _From,
             {reply, not_changed, State}
     end;
 handle_call({set_cluster_name, Name}, _From,
-	    State = #state{raw_ring = Ring}) ->
+            State = #state{raw_ring = Ring}) ->
     NewRing = riak_core_ring:set_cluster_name(Ring, Name),
     State2 = prune_write_notify_ring(NewRing, State),
     {reply, ok, State2};
@@ -501,12 +501,12 @@ set_ring(Ring, State) ->
     set_ring_global(Ring),
     Now = os:timestamp(),
     State2 = State#state{raw_ring = Ring,
-			 ring_changed_time = Now},
+                         ring_changed_time = Now},
     State3 = maybe_set_timer(?PROMOTE_TIMEOUT, State2),
     State3.
 
 maybe_set_timer(Duration,
-		State = #state{inactivity_timer = undefined}) ->
+                State = #state{inactivity_timer = undefined}) ->
     set_timer(Duration, State);
 maybe_set_timer(_Duration, State) -> State.
 
@@ -525,10 +525,10 @@ setup_ets(Mode) ->
                  test -> public
              end,
     (?ETS) = ets:new(?ETS,
-		     [named_table, Access, {read_concurrency, true}]),
+                     [named_table, Access, {read_concurrency, true}]),
     Id = reset_ring_id(),
     ets:insert(?ETS,
-	       [{changes, 0}, {promoted, 0}, {id, Id}]),
+               [{changes, 0}, {promoted, 0}, {id, Id}]),
     ok.
 
 cleanup_ets(test) -> ets:delete(?ETS).
@@ -553,7 +553,7 @@ set_ring_global(Ring) ->
     %% relied upon for any non-local ring operations.
     TaintedRing = riak_core_ring:set_tainted(Ring),
     CHBin =
-	chashbin:create(riak_core_ring:chash(TaintedRing)),
+        chashbin:create(riak_core_ring:chash(TaintedRing)),
     {Epoch, Id} = ets:lookup_element(?ETS, id, 2),
     Actions = [{ring, TaintedRing},
                {raw_ring, Ring},
@@ -578,7 +578,7 @@ prune_write_notify_ring(Ring, State) ->
 
 prune_write_ring(Ring, State) ->
     riak_core_ring:check_tainted(Ring,
-				 "Error: Persisting tainted ring"),
+                                 "Error: Persisting tainted ring"),
     ok = riak_core_ring_manager:prune_ringfiles(),
     _ = do_write_ringfile(Ring),
     State2 = set_ring(Ring, State),
@@ -586,7 +586,7 @@ prune_write_ring(Ring, State) ->
 
 is_stable_ring(#state{ring_changed_time = Then}) ->
     DeltaUS = erlang:max(0,
-			 timer:now_diff(os:timestamp(), Then)),
+                         timer:now_diff(os:timestamp(), Then)),
     DeltaMS = DeltaUS div 1000,
     IsStable = DeltaMS >= (?PROMOTE_TIMEOUT),
     {IsStable, DeltaMS}.
@@ -623,9 +623,9 @@ prune_list_test() ->
                [2011, 2, 28, 16, 32, 16],
                [2011, 2, 28, 16, 32, 36]],
     PrunedList1 = [[2011, 2, 28, 16, 30, 27],
-		   [2011, 2, 28, 16, 32, 16]],
+                   [2011, 2, 28, 16, 32, 16]],
     PrunedList2 = [[2011, 2, 28, 16, 31, 16],
-		   [2011, 2, 28, 16, 32, 36]],
+                   [2011, 2, 28, 16, 32, 36]],
     ?assertEqual(PrunedList1, (prune_list(TSList1))),
     ?assertEqual(PrunedList2, (prune_list(TSList2))).
 
@@ -636,8 +636,8 @@ set_ring_global_test() ->
     set_ring_global(Ring),
     promote_ring(),
     ?assert((riak_core_ring:nearly_equal(Ring,
-					 persistent_term:get(?RING_KEY,
-							     undefined)))),
+                                         persistent_term:get(?RING_KEY,
+                                                             undefined)))),
     cleanup_ets(test).
 
 set_my_ring_test() ->
@@ -727,13 +727,13 @@ is_stable_ring_test() ->
     Within = {A, B - TimeoutSecs div 2, C},
     Outside = {A, B - (TimeoutSecs + 1), C},
     ?assertMatch({true, _},
-		 (is_stable_ring(#state{ring_changed_time =
-					    {0, 0, 0}}))),
+                 (is_stable_ring(#state{ring_changed_time =
+                                            {0, 0, 0}}))),
     ?assertMatch({true, _},
-		 (is_stable_ring(#state{ring_changed_time = Outside}))),
+                 (is_stable_ring(#state{ring_changed_time = Outside}))),
     ?assertMatch({false, _},
-		 (is_stable_ring(#state{ring_changed_time = Within}))),
+                 (is_stable_ring(#state{ring_changed_time = Within}))),
     ?assertMatch({false, _},
-		 (is_stable_ring(#state{ring_changed_time = Now}))).
+                 (is_stable_ring(#state{ring_changed_time = Now}))).
 
 -endif.
