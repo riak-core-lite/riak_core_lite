@@ -49,7 +49,7 @@ jobs:
     - name: Checkout rclref
       uses: actions/checkout@v2
       with:
-        repository: clone https://github.com/wattlebirdaz/rclref.git
+        repository: wattlebirdaz/rclref
         path: ~/rclref
   
     - name: Cache build
