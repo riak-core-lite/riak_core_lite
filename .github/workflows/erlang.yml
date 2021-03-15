@@ -53,10 +53,9 @@ jobs:
         path: ./rclref
   
     - name: Cache build
-      uses: actions/cache@v1
+      uses: actions/checkout@v2
       with:
         path: ./rclref/_checkouts/riak_core/*
-        key: ${{ runner.OS }}-build-test
 
     - name: Checkout riak
       run: |
