@@ -53,7 +53,7 @@ jobs:
     -name: Checkout riak
       uses: actions/checkout@v2
       with:
-        path: ./riak_core
+        path: ./riak_core/
 
     - name: Checkout riak
       run: |
