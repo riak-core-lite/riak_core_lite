@@ -51,10 +51,11 @@ jobs:
       with:
         repository: wattlebirdaz/rclref
         path: ./rclref
+
     -name: Checkout riak  
       uses: actions/checkout@v2
       with:
-        path: ./rclref/_checkouts/riak_core/
+        path: ./rclref/_checkouts/riak_core
 
     - name: Checkout riak
       run: |
