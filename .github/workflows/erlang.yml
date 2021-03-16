@@ -50,12 +50,12 @@ jobs:
         repository: wattlebirdaz/rclref
         path: ./rclref
 
-    -name: Checkout riak
+    -name: Checkout repo riak
       uses: actions/checkout@v2
       with:
         path: ./riak_core/
 
-    - name: Checkout riak
+    - name: test rclref
       run: |
         cp -r riak_core/ rclref/_checkouts/riak_core
         ls -R
