@@ -43,15 +43,18 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: ./rebar3 as test coveralls send
+
     - name: Checkout rclref
       uses: actions/checkout@v2
       with:
         repository: wattlebirdaz/rclref
-        path: rclref
+        path: ./rclref
+
     -name: Checkout riak
       uses: actions/checkout@v2
       with:
-        path: riak_core
+        path: ./riak_core
+
     - name: Checkout riak
       run: |
         cp -r riak_core/ rclref/_checkouts/riak_core
