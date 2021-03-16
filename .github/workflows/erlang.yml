@@ -51,10 +51,11 @@ jobs:
     -name: Checkout riak  
       uses: actions/checkout@v2
       with:
-        path: rclref/_checkouts/riak_core
+        path: riak_core
     - name: Checkout riak
       run: |
-        ls
+        cp -r riak_core/ rclref/_checkouts/riak_core
+        ls -R
         cd rclref
         make ct
         ls -R
