@@ -48,7 +48,7 @@ jobs:
       with:
         repository: wattlebirdaz/rclref
         path: rclref
-    -name: Checkout riak  
+    -name: Checkout riak
       uses: actions/checkout@v2
       with:
         path: riak_core
