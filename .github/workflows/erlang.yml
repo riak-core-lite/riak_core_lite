@@ -50,7 +50,7 @@ jobs:
         repository: wattlebirdaz/rclref
         path: ./rclref
 
-    -name: Checkout repo riak
+    - name: Checkout repo riak
       uses: actions/checkout@v2
       with:
         path: ./riak_core/
