@@ -51,14 +51,14 @@ jobs:
       with:
         repository: wattlebirdaz/rclref
         path: ./rclref
-  
-    - name: Cache build
+      
       uses: actions/checkout@v2
       with:
         path: ./rclref/_checkouts/riak_core/*
 
     - name: Checkout riak
       run: |
+        ls
         cd ./rclref
         make ct
         ls -R
