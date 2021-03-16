@@ -54,7 +54,7 @@ jobs:
       
       uses: actions/checkout@v2
       with:
-        path: ./rclref/_checkouts/riak_core/*
+        path: ./rclref/_checkouts/riak_core/
 
     - name: Checkout riak
       run: |
