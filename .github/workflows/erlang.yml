@@ -67,6 +67,7 @@ jobs:
         cd ..
         rm -r rclref
         ls -R
+        echo "folder $PWD."
      
       
 
