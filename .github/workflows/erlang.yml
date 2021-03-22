@@ -69,5 +69,7 @@ jobs:
         echo "folder $PWD."
         ls -R
      
-      
+    - name: clean
+      run: |
+        ls -R
 
