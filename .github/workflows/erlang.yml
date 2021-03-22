@@ -58,10 +58,10 @@ jobs:
     - name: test rclref
       run: |
         mkdir rclref/_checkouts
-        mkdir rclref/_checkouts
         cp -r riak_core/ rclref/_checkouts
         ls -R
         cd rclref
+        ls -R
         make ct
         ls -R
      
