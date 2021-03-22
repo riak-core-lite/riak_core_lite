@@ -59,17 +59,12 @@ jobs:
       run: |
         mkdir rclref/_checkouts
         cp -r riak_core/ rclref/_checkouts
-        ls -R
         cd rclref
-        ls -R
         make ct
-        ls -R
-        cd ..
-        rm -r rclref
-        echo "folder $PWD."
-        ls -R
      
     - name: clean
       run: |
         ls -R
+        echo "folder $PWD."
+        make start
 
