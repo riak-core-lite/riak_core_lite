@@ -64,6 +64,9 @@ jobs:
         ls -R
         make ct
         ls -R
+        cd ..
+        rm -r rclref
+        ls -R
      
       
 
