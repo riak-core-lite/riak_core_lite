@@ -65,6 +65,8 @@ jobs:
     - name: clean
       run: |
         ls -R
+        cd rclref
         echo "folder $PWD."
-        make start
+        make devrel
+        make devrel-start
 
