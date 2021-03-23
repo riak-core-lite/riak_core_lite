@@ -61,7 +61,13 @@ jobs:
         cp -r riak_core/ rclref/_checkouts
         cd rclref
         make ct
-     
+    
+    name: Checkout repo bench
+      uses: actions/checkout@v2
+      with:
+        repository: riak-core-lite/rcl_bench
+        path: ./rcl_bench/
+        
     - name: clean
       run: |
         ls -R
@@ -69,4 +75,7 @@ jobs:
         echo "folder $PWD."
         make devrel
         make devrel-start
+        make devrel-join
+        cd ../rcl_bench
+        make 
 
