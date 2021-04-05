@@ -72,7 +72,13 @@ jobs:
       run: |
         cd rclref;\
         make devrel;\ 
-        make devrel-start;\
+        echo '-------';\
+        ls -R;\ 
+        echo '-------';\
+        echo $(pwd);\ 
+        make dev1-start;\
+        make dev2-start;\
+        make dev3-start;\
         make devrel-join;\
         make devrel-cluster-plan;\
         make devrel-cluster-commit;\
