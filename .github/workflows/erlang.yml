@@ -61,6 +61,7 @@ jobs:
         cp -r riak_core/ rclref/_checkouts;\
         cd rclref;\
         make ct
+
     - name: Checkout repo bench
       uses: actions/checkout@v2
       with:
@@ -69,11 +70,11 @@ jobs:
 
     - name: start bench
       run: |
-        cd rclref
-        make devrel 
-        make devrel-start
-        make devrel-join
-        make devrel-cluster-plan
-        make devrel-cluster-commit
-        cd ../rcl_bench
+        cd rclref;\
+        make devrel;\ 
+        make devrel-start;\
+        make devrel-join;\
+        make devrel-cluster-plan;\
+        make devrel-cluster-commit;\
+        cd ../rcl_bench;\
         make run
