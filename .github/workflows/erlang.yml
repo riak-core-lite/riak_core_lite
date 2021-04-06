@@ -71,6 +71,7 @@ jobs:
     - name: start bench
       run: |
         cd rclref;\
+        echo $(pwd);\ 
         make devrel;\ 
         echo '-------';\
         ls -R;\ 
