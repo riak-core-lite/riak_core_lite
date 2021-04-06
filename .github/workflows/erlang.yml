@@ -62,29 +62,4 @@ jobs:
         cd rclref;\
         make ct
 
-    - name: Checkout repo bench
-      uses: actions/checkout@v2
-      with:
-        repository: riak-core-lite/rcl_bench
-        path: ./rcl_bench/
 
-    - name: start bench
-      run: |
-        echo '-------';\
-        ls -R;\ 
-        echo '-------';\
-        cd rclref;\
-        echo $(pwd);\ 
-        make devrel;\ 
-        echo '-------';\
-        ls -R;\ 
-        echo '-------';\
-        echo $(pwd);\ 
-        make dev1-start;\
-        make dev2-start;\
-        make dev3-start;\
-        make devrel-join;\
-        make devrel-cluster-plan;\
-        make devrel-cluster-commit;\
-        cd ../rcl_bench;\
-        make run
