@@ -103,7 +103,7 @@ fresh(NumPartitions, SeedNode) ->
     Inc = ring_increment(NumPartitions),
     {NumPartitions,
      [{IndexAsInt, SeedNode}
-      || IndexAsInt <- lists:seq(0, (?RINGTOP) - 1, Inc)]}.
+      || IndexAsInt <- lists:seq(0, ?RINGTOP, Inc)]}.
 
 %% @doc Find the Node that owns the partition identified by IndexAsInt.
 -spec lookup(IndexAsInt :: index_as_int(),
