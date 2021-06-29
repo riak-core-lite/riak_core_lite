@@ -749,13 +749,13 @@ handle_msg(Msg, Parent, Name, StateName, StateData, Mod,
                       []);
         {stop, Reason, Reply, NStateData}
             when From =/= undefined ->
-            {'EXIT', R} = (catch terminate(Reason,
-                                           Name,
-                                           Msg,
-                                           Mod,
-                                           StateName,
-                                           NStateData,
-                                           [])),
+            {'EXIT', R} = catch terminate(Reason,
+                                          Name,
+                                          Msg,
+                                          Mod,
+                                          StateName,
+                                          NStateData,
+                                          []),
             reply(From, Reply),
             exit(R);
         {'EXIT',
@@ -851,13 +851,13 @@ handle_msg(Msg, Parent, Name, StateName, StateData, Mod,
                       Debug);
         {stop, Reason, Reply, NStateData}
             when From =/= undefined ->
-            {'EXIT', R} = (catch terminate(Reason,
-                                           Name,
-                                           Msg,
-                                           Mod,
-                                           StateName,
-                                           NStateData,
-                                           Debug)),
+            {'EXIT', R} = catch terminate(Reason,
+                                          Name,
+                                          Msg,
+                                          Mod,
+                                          StateName,
+                                          NStateData,
+                                          Debug),
             _ = reply(Name, From, Reply, Debug, StateName),
             exit(R);
         {'EXIT', What} ->
