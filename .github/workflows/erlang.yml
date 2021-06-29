@@ -11,6 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy: 
+      fail-fast: false
       matrix:
         erlang: [ 21,22,23,24 ]
 
