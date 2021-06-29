@@ -474,8 +474,8 @@ maybe_inconsistent(State, Node) ->
     NState = get_nstate(State, Node),
     CState = get_cstate(State, Node),
     JoinedTo = NState#nstate.joined_to,
-    JTStatus = catch orddict:fetch(JoinedTo,
-                                   State#state.members),
+    JTStatus = (catch orddict:fetch(JoinedTo,
+                                   State#state.members)),
     case {JoinedTo, JTStatus} of
         {undefined, _} -> false;
         {_, {invalid, _, _}} ->
