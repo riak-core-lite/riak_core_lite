@@ -436,8 +436,8 @@ visit_item2(_K, _V,
     %% When a TCP error occurs, #ho_acc.error is set to {error, Reason}.
     throw(Acc);
 visit_item2(K, V,
-            Acc = #ho_acc{ack = _AccSyncThreshold,
-                          acksync_threshold = _AccSyncThreshold}) ->
+            Acc = #ho_acc{ack = AccSyncThreshold,
+                          acksync_threshold = AccSyncThreshold}) ->
     #ho_acc{module = Module, socket = Sock,
             src_target = {SrcPartition, TargetPartition},
             stats = Stats} =

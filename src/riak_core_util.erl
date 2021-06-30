@@ -653,7 +653,7 @@ orddict_delta(A, B) ->
                            end,
                            A2,
                            B2),
-    Diff = orddict:filter(fun (_, {_Same, _Same}) -> false;
+    Diff = orddict:filter(fun (_, {Same, Same}) -> false;
                               (_, _) -> true
                           end,
                           Merged),
