@@ -103,7 +103,7 @@ fresh(NumPartitions, SeedNode) ->
     Inc = ring_increment(NumPartitions),
     {NumPartitions,
      [{IndexAsInt, SeedNode}
-      || IndexAsInt <- lists:seq(0, (?RINGTOP) - 1, Inc)]}.
+      || IndexAsInt <- lists:seq(0, (?RINGTOP) -1 -(?RINGTOP rem NumPartitions), Inc)]}.
 
 %% @doc Find the Node that owns the partition identified by IndexAsInt.
 -spec lookup(IndexAsInt :: index_as_int(),
@@ -267,6 +267,11 @@ random_node(NodeA, NodeB) ->
 %% ===================================================================
 -ifdef(TEST).
 
+fresh_sizes_test() ->
+    lists:foreach(fun(I) ->
+        ?assertEqual(I, (length(chash:nodes(chash:fresh(I, the_node)))))
+    end, [1, 10000]).
+
 update_test() ->
     Node = old@host,
     NewNode = new@host,
@@ -276,12 +281,19 @@ update_test() ->
                           {Index, _} = lists:nth(N, Nodes),
                           Index
                   end,
+
+    {5,
+     [{_, Node},
+      {_, Node},
+      {_, Node},
+      {_, Node},
+      {_, Node}]} = CHash,
+
     % Test update...
     FirstIndex = GetNthIndex(1, CHash),
     ThirdIndex = GetNthIndex(3, CHash),
     {5,
      [{_, NewNode},
-      {_, Node},
       {_, Node},
       {_, Node},
       {_, Node},
@@ -291,7 +303,6 @@ update_test() ->
      [{_, Node},
       {_, Node},
       {_, NewNode},
-      {_, Node},
       {_, Node},
       {_, Node}]} =
         update(ThirdIndex, NewNode, CHash).
