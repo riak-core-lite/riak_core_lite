@@ -119,17 +119,11 @@ coverage(Msg, {Index, Node}, Keyspaces, Sender, VMaster) ->
                make_coverage_request(Msg, Keyspaces, Sender, Index)).
     
 %% Send the command to an individual Index/Node combination, but also
-%% return the pid for the vnode handling the request, as `{ok,
-%% VnodePid}'.
+%% return the pid for the vnode handling the request, as `{ok, VnodePid}'.
 command_return_vnode({Index,Node}, Msg, Sender, VMaster) ->
     Req = make_request(Msg, Sender, Index),
-    case application:get_env(riak_core, vnode_routing) of
-      {ok, legacy} ->
-            gen_server:call({VMaster, Node}, {return_vnode, Req}, ?LONG_TIMEOUT);
-      {ok, proxy} ->
-            Mod = vmaster_to_vmod(VMaster),
-            riak_core_vnode_proxy:command_return_vnode({Mod,Index,Node}, Req)
-    end.
+    Mod = vmaster_to_vmod(VMaster),
+    riak_core_vnode_proxy:command_return_vnode({Mod,Index,Node}, Req).
 
 %% Send a synchronous command to an individual Index/Node combination.
 %% Will not return until the vnode has returned
@@ -195,16 +189,7 @@ proxy_cast(Who, Req) ->
     proxy_cast(Who, Req, normal).
 
 proxy_cast({VMaster, Node}, Req, How) ->
-    case application:get_env(riak_core, vnode_routing) of
-      {ok, legacy} ->
-            if How == normal ->
-                    gen_server:cast({VMaster, Node}, Req);
-               How == unreliable ->
-                    riak_core_send_msg:cast_unreliable({VMaster, Node}, Req)
-            end;
-      {ok, proxy} ->
-            do_proxy_cast({VMaster, Node}, Req, How)
-    end.
+    do_proxy_cast({VMaster, Node}, Req, How).
 
 do_proxy_cast({VMaster, Node}, Req=?VNODE_REQ{index=Idx}, How) ->
     Mod = vmaster_to_vmod(VMaster),

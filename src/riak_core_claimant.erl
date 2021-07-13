@@ -929,15 +929,9 @@ are_joining_nodes(CState) ->
 %% @private
 auto_joining_nodes(CState) ->
     Joining = riak_core_ring:members(CState, [joining]),
-    case application:get_env(riak_core, staged_joins, false) of
-        false ->
-            Joining;
-        true ->
-            [Member || Member <- Joining,
-                       riak_core_ring:get_member_meta(CState,
-                                                      Member,
-                                                      '$autojoin') == true]
-    end.
+%%    case application:get_env(riak_core, staged_joins, true) of false -> Joining; true ->
+    [Member || Member <- Joining, riak_core_ring:get_member_meta(CState, Member, '$autojoin') == true].
+%%    end.
 
 %% @private
 maybe_handle_auto_joining(Node, CState) ->
