@@ -31,8 +31,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--include_lib("kernel/include/logger.hrl").
-
 -define(SERVER, ?MODULE).
 
 -record(state, {cb,
@@ -177,6 +175,6 @@ listen_on(CallbackModule, IpAddrStr, Port) ->
         {ok, IpAddr} ->
             listen_on(CallbackModule, IpAddr, Port);
         Err ->
-            ?LOG_CRITICAL("Cannot start listener for ~p on invalid address ~p:~p", [CallbackModule, IpAddrStr, Port]),
+            logger:critical("Cannot start listener for ~p on invalid address ~p:~p", [CallbackModule, IpAddrStr, Port]),
             Err
     end.

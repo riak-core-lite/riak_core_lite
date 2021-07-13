@@ -30,32 +30,20 @@
 -export([get_handoff_ip/0, sock_opts/0, new_connection/2]).
 -record(state, {
           ipaddr :: string(),
-          portnum :: integer(),
-          ssl_opts :: list()
+          portnum :: integer()
          }).
 
 start_link() ->
-    PortNum = app_helper:get_env(riak_core, handoff_port),
-    IpAddr = app_helper:get_env(riak_core, handoff_ip),
-    SslOpts = riak_core_handoff_sender:get_handoff_ssl_options(),
-    gen_nb_server:start_link(?MODULE, IpAddr, PortNum, [IpAddr, PortNum, SslOpts]).
+    PortNum = application:get_env(riak_core, handoff_port, undefined),
+    IpAddr = application:get_env(riak_core, handoff_ip, undefined),
+    gen_nb_server:start_link(?MODULE, IpAddr, PortNum, [IpAddr, PortNum]).
 
 get_handoff_ip() ->
     riak_core_gen_server:call(?MODULE, handoff_ip, infinity).
 
-init([IpAddr, PortNum, SslOpts]) ->
+init([IpAddr, PortNum]) ->
     register(?MODULE, self()),
-
-    %% This exit() call shouldn't be necessary, AFAICT the VM's EXIT
-    %% propagation via linking should do the right thing, but BZ 823
-    %% suggests otherwise.  However, the exit() call should fall into
-    %% the "shouldn't hurt", especially since the next line will
-    %% explicitly try to spawn a new proc that will try to register
-    %% the riak_kv_handoff_listener name.
-    catch exit(whereis(riak_kv_handoff_listener), kill),
-    process_proxy:start_link(riak_kv_handoff_listener, ?MODULE),
-
-    {ok, #state{portnum=PortNum, ipaddr=IpAddr, ssl_opts = SslOpts}}.
+    {ok, #state{portnum=PortNum, ipaddr=IpAddr}}.
 
 sock_opts() -> [binary, {packet, 4}, {reuseaddr, true}, {backlog, 64}].
 
@@ -73,14 +61,15 @@ terminate(_Reason, _State) -> ok.
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
-new_connection(Socket, State = #state{ssl_opts = SslOpts}) ->
-    case riak_core_handoff_manager:add_inbound(SslOpts) of
+new_connection(Socket, State) ->
+    case riak_core_handoff_manager:add_inbound() of
         {ok, Pid} ->
             ok = gen_tcp:controlling_process(Socket, Pid),
             ok = riak_core_handoff_receiver:set_socket(Pid, Socket),
             {ok, State};
         {error, _Reason} ->
-            riak_core_stat:update(rejected_handoffs),
+          %% STATS
+%%            riak_core_stat:update(rejected_handoffs),
             gen_tcp:close(Socket),
             {ok, State}
     end.

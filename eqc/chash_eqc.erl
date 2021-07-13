@@ -67,10 +67,8 @@ eqc_test_() ->
 
 setup() ->
     %% Remove the logger noise.
-    application:load(sasl),
     error_logger:tty(false),
     %% Uncomment the following lines to send log output to files.
-    %% application:set_env(sasl, sasl_error_logger, {file, "chash_eqc_sasl.log"}),
     %% error_logger:logfile({open, "chash_eqc.log"}),
 
     %% TODO: Perform any required setup

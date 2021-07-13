@@ -31,6 +31,10 @@ start_vnode(Mod, Index, ForwardTo) when is_integer(Index) ->
     supervisor:start_child(?MODULE, [Mod, Index, ForwardTo]).
 
 start_link() ->
+    %% This simple_one_for_one supervisor can do a controlled shutdown.
+    %% This is needed because we need to make sure vnode shutdown triggers
+    %% async worker pool shutdown AND blocks waiting for the worker pool to
+    %% terminate.
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @private
