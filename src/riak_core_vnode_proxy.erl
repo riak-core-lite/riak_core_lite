@@ -35,9 +35,6 @@
 
 -include("riak_core_vnode.hrl").
 
--compile({nowarn_deprecated_function, 
-            [{gen_fsm, send_event, 2}]}).
-
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").

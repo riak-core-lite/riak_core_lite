@@ -47,7 +47,8 @@
          all_nodes/1,
          equal/2,
          prune/3,
-         timestamp/0]).
+         timestamp/0,
+         last_modified/1]).
 
 -ifdef(TEST).
 

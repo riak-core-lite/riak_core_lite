@@ -247,22 +247,22 @@ reconcile(Ring0, [OtherRing0]) ->
     OtherStatus = riak_core_ring:member_status(Ring2,
                                                OtherNode),
     case {WrongCluster, OtherStatus, Changed} of
-        {true, _, _} ->
+        {true, _OS, _C} ->
             %% TODO: Tell other node to stop gossiping to this node.
             %% STATS
             % riak_core_stat:update(ignored_gossip),
             ignore;
-        {_, down, _} ->
+        {false, down, _C} ->
             %% Tell other node to rejoin the cluster.
             riak_core_gossip:rejoin(OtherNode, Ring2),
             ignore;
-        {_, invalid, _} ->
+        {false, invalid, _C} ->
             %% Exiting/Removed node never saw shutdown cast, re-send.
             ClusterName = riak_core_ring:cluster_name(Ring),
             riak_core_ring_manager:refresh_ring(OtherNode,
                                                 ClusterName),
             ignore;
-        {_, _, new_ring} ->
+        {false, _OS, new_ring} ->
             Ring3 = riak_core_ring:ring_changed(Node, Ring2),
             %% STATS
             % riak_core_stat:update(rings_reconciled),

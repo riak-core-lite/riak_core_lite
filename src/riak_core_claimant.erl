@@ -34,7 +34,9 @@
          plan/0,
          commit/0,
          clear/0,
-         ring_changed/2]).
+         ring_changed/2,
+         pending_close/2
+         ]).
 
 -export([reassign_indices/1]). % helpers for claim sim
 
@@ -119,10 +121,6 @@
          seed :: erlang:timestamp()}).
 
 -type state() :: #state{}.
-
-%%-define(ROUT(S,A),io:format(S,A)).
-%%-define(ROUT(S,A),?debugFmt(S,A)).
--define(ROUT(S, A), logger:debug(S, A)).
 
 %%%===================================================================
 %%% API
@@ -252,11 +250,6 @@ abort_resize() -> stage(node(), abort_resize).
 pending_close(Ring, RingID) ->
     gen_server:call(?MODULE, {pending_close, Ring, RingID}).
 
-%% @doc Stage a request to set a new location for the given node.
--spec set_node_location(node(), string()) -> ok | {error, atom()}.
-set_node_location(Node, Location) ->
-    stage(Node, {set_location, Location}).
-
 %% @doc Clear the current set of staged transfers
 %% @returns `ok'.
 -spec clear() -> ok.
@@ -367,6 +360,14 @@ handle_call(plan, _From, State) ->
 handle_call(commit, _From, State) ->
     {Reply, State2} = commit_staged(State),
     {reply, Reply, State2};
+
+handle_call({pending_close, Ring, RingID}, _From, State) ->
+    State2 = tick(Ring, RingID, State),
+    {reply, ok, State2};
+
+handle_call(stop, _From, State) ->
+    {stop, normal, ok, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -384,7 +385,7 @@ handle_cast(_Msg, State) -> {noreply, State}.
                   State :: state()) -> {noreply, state()}.
 
 handle_info(tick, State) ->
-    State2 = tick(State),
+    State2 = tick(none, riak_core_ring_manager:get_ring_id(), State),
     {noreply, State2};
 handle_info(reset_ring_id, State) ->
     State2 = State#state{last_ring_id = undefined},
@@ -546,8 +547,7 @@ maybe_commit_staged(Ring, NextRing,
         {_, false, _} -> ignore;
         {_, _, false} -> {ignore, plan_changed};
         _ ->
-            NewRing = riak_core_ring:increment_vclock(Claimant,
-                                                      NextRing),
+            NewRing = riak_core_ring:increment_vclock(Claimant, NextRing),
             {new_ring, NewRing}
     end.
 
@@ -650,7 +650,8 @@ valid_request(Node, Action, Changes, Ring) ->
                                         Ring);
         {resize, NewRingSize} ->
             valid_resize_request(NewRingSize, Changes, Ring);
-        abort_resize -> valid_resize_abort_request(Ring)
+        abort_resize ->
+            valid_resize_abort_request(Ring)
     end.
 
 %% @private
@@ -821,20 +822,6 @@ valid_resize_abort_request(Ring) ->
     end.
 
 %% @private
-%% Validating node member status
-valid_set_location_request(_Location, Node, Ring) ->
-    case riak_core_ring:member_status(Ring, Node) of
-        valid ->
-            true;
-        joining ->
-            true;
-        invalid ->
-            {error, not_member};
-        _ ->
-            true
-    end.
-
-%% @private
 %% @doc Filter out any staged changes that are no longer valid. Changes
 %%      can become invalid based on other staged changes, or by cluster
 %%      changes that bypass the staging system.
@@ -904,25 +891,33 @@ schedule_tick() ->
 
 %% @private
 %% @doc Execute one claimant tick.
--spec tick(State :: state()) -> state().
+-spec tick(PreFetchRing :: riak_core_ring() | none, Ring:: riak_core_ring(), State :: state()) -> state().
 
-tick(State = #state{last_ring_id = LastID}) ->
-    case riak_core_ring_manager:get_ring_id() of
+tick(PreFetchRing, RingID, State = #state{last_ring_id = LastID}) ->
+    case RingID of
         LastID ->
             schedule_tick(),
             State;
         RingID ->
-            {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
-            maybe_force_ring_update(Ring),
-            schedule_tick(),
-            State#state{last_ring_id = RingID}
+            Ring =
+                case PreFetchRing of
+                    none ->
+                        {ok, Ring0} = riak_core_ring_manager:get_raw_ring(),
+                        Ring0;
+                    PreFetchRing ->
+                        PreFetchRing
+                end,
+            case riak_core_ring:check_lastgasp(Ring) of
+                true ->
+                    logger:info("Ingoring fresh ring as shutting down"),
+                    ok;
+                false ->
+                    maybe_force_ring_update(Ring),
+                    schedule_tick()
+            end,
+            State#state{last_ring_id=RingID}
     end.
 
-%% @private
-%% @doc Force a ring update if this is the ring's claimant and the ring is
-%%      ready.
--spec maybe_force_ring_update(Ring ::
-                                  riak_core_ring()) -> ok.
 
 maybe_force_ring_update(Ring) ->
     IsClaimant = riak_core_ring:claimant(Ring) == node(),
@@ -1189,9 +1184,7 @@ change({{force_replace, NewNode}, Node}, Ring) ->
 change({{resize, NewRingSize}, _Node}, Ring) ->
     riak_core_ring:resize(Ring, NewRingSize);
 change({abort_resize, _Node}, Ring) ->
-    riak_core_ring:set_pending_resize_abort(Ring);
-change({{set_location, Location}, Node}, Ring) ->
-    riak_core_ring:set_node_location(Node, Location, Ring).
+    riak_core_ring:set_pending_resize_abort(Ring).
 
 %%noinspection ErlangUnboundVariable
 %% @private
@@ -1506,14 +1499,14 @@ maybe_handle_joining(Node, Joining, CState) ->
 update_ring(CNode, CState, Replacing, Seed, Log,
             false) ->
     Next0 = riak_core_ring:pending_changes(CState),
-    ?ROUT("Members: ~p~n",
+    logger:debug("Members: ~p~n",
           [riak_core_ring:members(CState,
                                   [joining,
                                    valid,
                                    leaving,
                                    exiting,
                                    invalid])]),
-    ?ROUT("Updating ring :: next0 : ~p~n", [Next0]),
+    logger:debug("Updating ring :: next0 : ~p~n", [Next0]),
     %% Remove tuples from next for removed nodes
     InvalidMembers = riak_core_ring:members(CState,
                                             [invalid]),
@@ -1529,14 +1522,14 @@ update_ring(CNode, CState, Replacing, Seed, Log,
     %% Transfer ownership after completed handoff
     {RingChanged1, CState3} = transfer_ownership(CState2,
                                                  Log),
-    ?ROUT("Updating ring :: next1 : ~p~n",
+    logger:debug("Updating ring :: next1 : ~p~n",
           [riak_core_ring:pending_changes(CState3)]),
     %% Ressign leaving/inactive indices
     {RingChanged2, CState4} = reassign_indices(CState3,
                                                Replacing,
                                                Seed,
                                                Log),
-    ?ROUT("Updating ring :: next2 : ~p~n",
+    logger:debug("Updating ring :: next2 : ~p~n",
           [riak_core_ring:pending_changes(CState4)]),
     %% Rebalance the ring as necessary. If pending changes exist ring
     %% is not rebalanced
@@ -1556,7 +1549,7 @@ update_ring(CNode, CState, Replacing, Seed, Log,
                                       || {Idx, O, NO, _, _} <- Next4]),
             Diff = ordsets:subtract(NewS, OldS),
             _ = [Log(next, NChange) || NChange <- Diff],
-            ?ROUT("Updating ring :: next3 : ~p~n", [Next4]),
+            logger:debug("Updating ring :: next3 : ~p~n", [Next4]),
             CState5 = riak_core_ring:set_pending_changes(CState4,
                                                          Next4),
             CState6 = riak_core_ring:increment_ring_version(CNode,
