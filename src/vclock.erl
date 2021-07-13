@@ -421,16 +421,6 @@ last_modified_test() ->
             {<<"Pablo!">>, {1, calendar:datetime_to_gregorian_seconds(DT2)}}],
     ?assertMatch(DT2, last_modified(VC1)).
 
-last_modified_test() ->
-    DT1 = {{1972, 5, 6}, {16, 13, 0}},
-    DT2 = {{2020, 7, 12}, {15, 14, 0}},
-    VC0 = vclock:fresh(),
-    ?assertMatch(undefined, last_modified(VC0)),
-    VC1 =
-        [{<<"Clarke!">>, {1, calendar:datetime_to_gregorian_seconds(DT1)}},
-            {<<"Pablo!">>, {1, calendar:datetime_to_gregorian_seconds(DT2)}}],
-    ?assertMatch(DT2, last_modified(VC1)).
-
 merge_test() ->
     VC1 = [{<<"1">>, {1, 1}},
            {<<"2">>, {2, 2}},
