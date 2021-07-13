@@ -22,14 +22,6 @@
 
 -module(riak_core_vnode_manager).
 
-%% There is a dialyzer issue within exometer_core, as a temporary solution
-%% there will be no warnings from these specific functions
-%% - https://github.com/basho/riak_core/issues/946
--dialyzer({nowarn_function, [get_vnode/3, register_vnode_stats/3]}).
-
--compile({nowarn_deprecated_function, 
-            [{gen_fsm, send_all_state_event, 2}]}).
-
 -behaviour(gen_server).
 
 -export([start_link/0, stop/0]).
@@ -614,13 +606,19 @@ maybe_ensure_vnodes_started(Ring) ->
     end.
 
 ensure_vnodes_started(Ring) ->
-    spawn(fun () ->
-                  try riak_core_ring_handler:ensure_vnodes_started(Ring)
+    case riak_core_ring:check_lastgasp(Ring) of
+        true ->
+            logger:info("Don't start vnodes - last gasp ring");
+        false ->
+            spawn(fun() ->
+                  try
+                      riak_core_ring_handler:ensure_vnodes_started(Ring)
                   catch
                       Type:Reason:Stacktrace ->
                           logger:error("~p", [{Type, Reason, Stacktrace}])
                   end
-          end).
+            end)
+    end.
 
 schedule_management_timer() ->
     ManagementTick = application:get_env(riak_core,

@@ -56,6 +56,10 @@
 -export([cluster_name/1,
          set_tainted/1,
          check_tainted/2,
+         unset_tainted/1,
+         set_lastgasp/1,
+         check_lastgasp/1,
+         unset_lastgasp/1,
          nearly_equal/2,
          claimant/1,
          member_status/2,
@@ -287,28 +291,6 @@ all_members(#chstate{members = Members}) ->
 
 members(#chstate{members = Members}, Types) ->
     get_members(Members, Types).
-
--spec has_location_changed(chstate()) -> boolean().
-has_location_changed(State) ->
-  {ok, Value} = get_meta('$nodes_locations_changed', false, State),
-  Value.
-
--spec clear_location_changed(chstate()) -> chstate().
-clear_location_changed(State) ->
-  update_meta('$nodes_locations_changed', false, State).
-
--spec set_node_location(node(), string(), chstate()) -> chstate().
-set_node_location(Node, Location, State) ->
-  NodesLocations = get_nodes_locations(State),
-  NewNodesLocations = dict:store(Node, Location, NodesLocations),
-  NewState = update_meta('$nodes_locations_changed', true, State),
-  update_meta('$nodes_locations', NewNodesLocations, NewState).
-
--spec get_nodes_locations(chstate()) -> dict:dict().
-get_nodes_locations(?CHSTATE{members =Members} = ChState) ->
-  {ok, Value} = get_meta('$nodes_locations', dict:new(), ChState),
-  Nodes = get_members(Members),
-  dict:filter(fun(Node, _) -> lists:member(Node, Nodes) end, Value).
 
 %% @doc Produce a list of all active (not marked as down) cluster members
 -spec active_members(State :: chstate()) -> [Node ::
@@ -554,11 +536,18 @@ reconcile(ExternState, MyState) ->
                   "Error: riak_core_ring/reconcile :: reconcilin"
                   "g tainted external ring"),
     check_tainted(MyState,
-                  "Error: riak_core_ring/reconcile :: reconcilin"
-                  "g tainted internal ring"),
-    case internal_reconcile(MyState, ExternState) of
-        {false, State} -> {no_change, State};
-        {true, State} -> {new_ring, State}
+                  "Error: riak_core_ring/reconcile :: "
+                  "reconciling tainted internal ring"),
+    case check_lastgasp(ExternState) of
+        true ->
+            {no_change, MyState};
+        false ->
+            case internal_reconcile(MyState, ExternState) of
+                {false, State} ->
+                    {no_change, State};
+                {true, State} ->
+                    {new_ring, State}
+            end
     end.
 
 %% @doc  Rename OldNode to NewNode in a Riak ring.
@@ -2024,20 +2013,11 @@ equal_cstate(StateA, StateB, false) ->
     T4 = equal_rings(StateA, StateB),
     %% Clear fields checked manually and test remaining through equality.
     %% Note: We do not consider cluster name in equality.
-    StateA2 = StateA#chstate{nodename = undefined,
-                             members = undefined, vclock = undefined,
-                             rvsn = undefined, seen = undefined,
-                             chring = undefined, meta = undefined,
-                             clustername = undefined},
-    StateB2 = StateB#chstate{nodename = undefined,
-                             members = undefined, vclock = undefined,
-                             rvsn = undefined, seen = undefined,
-                             chring = undefined, meta = undefined,
-                             clustername = undefined},
-    T5 = StateA2 =:= StateB2,
+    T5 = (remaining_fields(StateA) =:= remaining_fields(StateB)),
+
     T1 andalso T2 andalso T3 andalso T4 andalso T5.
 
-remaining_fields(#chstate_v2{next = Next, claimant = Claimant}) ->
+remaining_fields(#chstate{next = Next, claimant = Claimant}) ->
     {Next, Claimant}.
 
 %% @private
@@ -2359,7 +2339,7 @@ lasgasp_test() ->
     ?assertMatch(false, check_lastgasp(RingA)),
     ?assertMatch(true, check_lastgasp(RingA1)),
     ?assertMatch({no_change, RingB}, reconcile(RingA1, RingB)),
-    
+
     ?assertMatch(true, nearly_equal(RingA, unset_lastgasp(RingA1))),
     ?assertMatch(false, check_lastgasp(unset_lastgasp(RingA1))).
 

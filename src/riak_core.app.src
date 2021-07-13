@@ -1,7 +1,7 @@
 {application,
  riak_core,
  [{description, "Riak Core Lite"},
-  {vsn, "0.10.2"},
+  {vsn, "0.10.3"},
   {applications,
    [kernel, stdlib, crypto, os_mon, poolboy]},
   {mod, {riak_core_app, []}},
