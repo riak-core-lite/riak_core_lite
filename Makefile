@@ -1,15 +1,16 @@
 PULSE_TESTS = worker_pool_pulse
+COVERPATH = ./_build/test/cover
+REBAR ?= ./rebar3
 
-.PHONY: deps test
+.PHONY: deps test docs xref dialyzer format
 
 all: compile
 
 compile: deps
-	./rebar3 compile
+	${REBAR} compile
 
 clean: clean-test
-	./rebar3 clean
-
+	${REBAR} clean
 
 distclean: clean
 
@@ -28,7 +29,33 @@ clean-test:
 # You should 'clean' before your first run of this target
 # so that deps get built with PULSE where needed.
 pulse:
-	./rebar3 compile -D PULSE
-	./rebar3 eunit -D PULSE skip_deps=true suite=$(PULSE_TESTS)
+	${REBAR} compile -D PULSE
+	${REBAR} eunit -D PULSE skip_deps=true suite=$(PULSE_TESTS)
 
-include tools.mk
+proper:
+	${REBAR} as proper do eunit
+  
+epc:
+	${REBAR} as epc eunit
+	
+format:
+	${REBAR} format
+
+test: compile
+	${REBAR} eunit
+
+coverage: compile
+	cp _build/proper+test/cover/eunit.coverdata ${COVERPATH}/proper.coverdata ;\
+	${REBAR} cover --verbose
+
+docs:
+	${REBAR} edoc
+
+xref: compile
+	${REBAR} xref
+
+dialyzer:
+	${REBAR} dialyzer
+
+lint:
+	${REBAR} lint

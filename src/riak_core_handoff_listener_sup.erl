@@ -19,21 +19,22 @@
 %% -------------------------------------------------------------------
 
 -module(riak_core_handoff_listener_sup).
+
 -behaviour(supervisor).
 
 %% beahvior functions
--export([start_link/0,
-         init/1
-        ]).
+-export([start_link/0, init/1]).
 
--define(CHILD(I,Type), {I,{I,start_link,[]},permanent,brutal_kill,Type,[I]}).
+-define(CHILD(I, Type),
+        {I, {I, start_link, []}, permanent, brutal_kill, Type,
+         [I]}).
 
 %% begins the supervisor, init/1 will be called
-start_link () ->
-    supervisor:start_link({local,?MODULE},?MODULE,[]).
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @private
-init ([]) ->
-    {ok,{{one_for_one,10,10},
-         [?CHILD(riak_core_handoff_listener,worker)
-         ]}}.
+init([]) ->
+    {ok,
+     {{one_for_one, 10, 10},
+      [?CHILD(riak_core_handoff_listener, worker)]}}.
