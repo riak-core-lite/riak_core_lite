@@ -60,57 +60,48 @@
 
 %%----------------------------------------------------------------------------
 
--ifdef(use_specs).
+-type priority() :: integer().
+-type squeue() :: {queue, [any()], [any()]}.
+-type pqueue() ::  squeue() | {pqueue, [{priority(), squeue()}]}.
 
--type(priority() :: integer()).
--type(squeue() :: {queue, [any()], [any()]}).
--type(pqueue() ::  squeue() | {pqueue, [{priority(), squeue()}]}).
-
--spec(new/0 :: () -> pqueue()).
--spec(is_queue/1 :: (any()) -> bool()).
--spec(is_empty/1 :: (pqueue()) -> bool()).
--spec(len/1 :: (pqueue()) -> non_neg_integer()).
--spec(to_list/1 :: (pqueue()) -> [{priority(), any()}]).
--spec(in/2 :: (any(), pqueue()) -> pqueue()).
--spec(in/3 :: (any(), priority(), pqueue()) -> pqueue()).
--spec(out/1 :: (pqueue()) -> {(empty | {value, any()}), pqueue()}).
--spec(out/2 :: (priority(), pqueue()) -> {(empty | {value, any()}), pqueue()}).
--spec(pout/1 :: (pqueue()) -> {(empty | {value, any(), priority()}), pqueue()}).
--spec(join/2 :: (pqueue(), pqueue()) -> pqueue()).
-
--endif.
 
 %%----------------------------------------------------------------------------
 
-new() ->
-    {queue, [], []}.
+-spec new() -> pqueue().
+new() -> {queue, [], []}.
 
+
+-spec is_queue(any()) -> boolean().
 is_queue({queue, R, F}) when is_list(R), is_list(F) ->
     true;
 is_queue({pqueue, Queues}) when is_list(Queues) ->
-    lists:all(fun ({P, Q}) -> is_integer(P) andalso is_queue(Q) end,
-              Queues);
+    lists:all(fun ({P, Q}) -> is_integer(P) andalso is_queue(Q) end, Queues);
 is_queue(_) ->
     false.
 
+-spec is_empty(pqueue()) -> boolean().
 is_empty({queue, [], []}) ->
     true;
 is_empty(_) ->
     false.
 
+-spec len(pqueue()) -> non_neg_integer().
 len({queue, R, F}) when is_list(R), is_list(F) ->
     length(R) + length(F);
 len({pqueue, Queues}) ->
     lists:sum([len(Q) || {_, Q} <- Queues]).
 
+-spec to_list(pqueue()) -> [{priority(), any()}].
 to_list({queue, In, Out}) when is_list(In), is_list(Out) ->
     [{0, V} || V <- Out ++ lists:reverse(In, [])];
 to_list({pqueue, Queues}) ->
     [{-P, V} || {P, Q} <- Queues, {0, V} <- to_list(Q)].
 
+-spec in(any(), pqueue()) -> pqueue().
 in(Item, Q) ->
     in(Item, 0, Q).
 
+-spec in(any(), priority(), pqueue()) -> pqueue().
 in(X, 0, {queue, [_] = In, []}) ->
     {queue, [X], In};
 in(X, 0, {queue, In, Out}) when is_list(In), is_list(Out) ->
@@ -128,6 +119,7 @@ in(X, Priority, {pqueue, Queues}) ->
                      lists:keysort(1, [{P, {queue, [X], []}} | Queues])
              end}.
 
+-spec out(pqueue()) -> {(empty | {value, any()}), pqueue()}.
 out({queue, [], []} = Q) ->
     {empty, Q};
 out({queue, [V], []}) ->
@@ -151,6 +143,7 @@ out({pqueue, [{P, Q} | Queues]}) ->
            end,
     {R, NewQ}.
 
+-spec out(priority(), pqueue()) -> {(empty | {value, any()}), pqueue()}.
 out(_Priority, {queue, [], []} = Q) ->
     {empty, Q};
 out(Priority, {queue, _, _} = Q) when Priority =< 0 ->
@@ -162,6 +155,8 @@ out(Priority, {pqueue, [{P, _Q} | _Queues]} = Q) when Priority =< (-P) ->
 out(_Priority, {pqueue, [_|_]} = Q) ->
     {empty, Q}.
 
+
+-spec pout(pqueue()) -> {(empty | {value, any(), priority()}), pqueue()}.
 pout({queue, [], []} = Q) ->
     {empty, Q};
 pout({queue, _, _} = Q) ->
@@ -179,6 +174,7 @@ pout({pqueue, [{P, Q} | Queues]}) ->
            end,
     {{value, V, -P}, NewQ}.
 
+-spec join(pqueue(), pqueue()) -> pqueue().
 join(A, {queue, [], []}) ->
     A;
 join({queue, [], []}, B) ->
@@ -291,7 +287,7 @@ merge_case() ->
 
 basic_test() ->
     simple_case(forward),
-    simple_case(reverse),
+simple_case(reverse),
     simple_case(mixed),
     merge_case(),
     ok.

@@ -271,7 +271,7 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, Ta
                     exit({shutdown, {error, ErrReason}})
             end
     end.
--ifndef('21.0').
+
 start_fold(TargetNode, Module, {Type, Opts}, ParentPid) ->
     SrcNode = node(),
     SrcPartition = get_src_partition(Opts),
@@ -300,36 +300,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid) ->
                        [Err, Reason, Stacktrace]),
              gen_fsm_compat:send_event(ParentPid, {handoff_error, Err, Reason})
      end.
--else.
-start_fold(TargetNode, Module, {Type, Opts}, ParentPid) ->
-    SrcNode = node(),
-    SrcPartition = get_src_partition(Opts),
-    TargetPartition = get_target_partition(Opts),
-    try
-        start_fold_(TargetNode, Module, Type, Opts, ParentPid, SrcNode, SrcPartition, TargetPartition)
-    catch
-        exit:{shutdown,max_concurrency} ->
-             %% Need to fwd the error so the handoff mgr knows
-             exit({shutdown, max_concurrency});
-         exit:{shutdown, timeout} ->
-             %% A receive timeout during handoff
-           %% STATS
-%%             riak_core_stat:update(handoff_timeouts),
-             ?log_fail("because of TCP recv timeout", []),
-             exit({shutdown, timeout});
-         exit:{shutdown, {error, Reason}} ->
-             ?log_fail("because of ~p", [Reason]),
-             gen_fsm_compat:send_event(ParentPid, {handoff_error,
-                                            fold_error, Reason}),
-             exit({shutdown, {error, Reason}});
-         throw:{be_quiet, Err, Reason} ->
-             gen_fsm_compat:send_event(ParentPid, {handoff_error, Err, Reason});
-         Err:Reason:Stack ->
-             ?log_fail("because of ~p:~p ~p",
-                       [Err, Reason, Stack]),
-             gen_fsm_compat:send_event(ParentPid, {handoff_error, Err, Reason})
-     end.
--endif.
+
 start_visit_item_timer() ->
     Ival = case application:get_env(riak_core, handoff_receive_timeout, undefined) of
                TO when is_integer(TO) ->
