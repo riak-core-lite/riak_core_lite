@@ -208,7 +208,8 @@ wants_claim_v2(Ring, Node) ->
     Count = proplists:get_value(Node, Counts, 0),
     case Count < Avg of
         false -> no;
-        true -> {yes, Avg - Count}
+        true ->
+            {yes, Avg - Count}
     end.
 
 %% @doc Provide default choose parameters if none given
@@ -293,8 +294,7 @@ choose_claim_v2(Ring, Node, Params0) ->
             %% number of indices desired is less than the computed set.
             Padding = lists:duplicate(TargetN, undefined),
             Expanded = lists:sublist(Active ++ Padding, TargetN),
-            PreferredClaim = riak_core_claim:diagonal_stripe(Ring,
-                                                             Expanded),
+            PreferredClaim = riak_core_claim:diagonal_stripe(Ring, Expanded),
             PreferredNth = [begin
                                 {Nth, Idx} = lists:keyfind(Idx, 2, AllIndices),
                                 Nth
@@ -316,13 +316,9 @@ choose_claim_v2(Ring, Node, Params0) ->
                                     TargetN,
                                     RingSize),
     %% Claim indices from the remaining candidate set
-    Claim = select_indices(Owners,
-                           Deltas,
-                           Indices2,
-                           TargetN,
-                           RingSize),
+    Claim = select_indices(Owners, Deltas, Indices2, TargetN, RingSize),
     Claim2 = lists:sublist(Claim, Want),
-    NewRing = lists:foldl(fun (Idx, Ring0) ->
+    NewRing = lists:foldl(fun(Idx, Ring0) ->
                                   riak_core_ring:transfer_node(Idx, Node, Ring0)
                           end,
                           Ring,
@@ -572,8 +568,7 @@ claim_diagonal(Wants, Owners, Params) ->
                        node(), integer()) -> riak_core_ring:riak_core_ring().
 
 sequential_claim(Ring, Node, TargetN) ->
-    Nodes = lists:usort([Node
-                         | riak_core_ring:claiming_members(Ring)]),
+    Nodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
     NodeCount = length(Nodes),
     RingSize = riak_core_ring:num_partitions(Ring),
     Overhang = RingSize rem NodeCount,
@@ -696,8 +691,7 @@ backfill_ring(RingSize, Nodes, Remaining, Acc) ->
                         Node :: term()) -> ring().
 
 claim_rebalance_n(Ring, Node) ->
-    Nodes = lists:usort([Node
-                         | riak_core_ring:claiming_members(Ring)]),
+    Nodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
     Zipped = diagonal_stripe(Ring, Nodes),
     lists:foldl(fun ({P, N}, Acc) ->
                         riak_core_ring:transfer_node(P, N, Acc)

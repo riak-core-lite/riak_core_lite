@@ -606,13 +606,19 @@ maybe_ensure_vnodes_started(Ring) ->
     end.
 
 ensure_vnodes_started(Ring) ->
-    spawn(fun () ->
-                  try riak_core_ring_handler:ensure_vnodes_started(Ring)
+    case riak_core_ring:check_lastgasp(Ring) of
+        true ->
+            logger:info("Don't start vnodes - last gasp ring");
+        false ->
+            spawn(fun() ->
+                  try
+                      riak_core_ring_handler:ensure_vnodes_started(Ring)
                   catch
                       Type:Reason:Stacktrace ->
                           logger:error("~p", [{Type, Reason, Stacktrace}])
                   end
-          end).
+            end)
+    end.
 
 schedule_management_timer() ->
     ManagementTick = application:get_env(riak_core,
@@ -1015,9 +1021,14 @@ update_never_started(Mod, Indices, State) ->
                 never_started = NeverStarted3}.
 
 maybe_start_vnodes(Ring, State) ->
-    State2 = update_never_started(Ring, State),
-    State3 = maybe_start_vnodes(State2),
-    State3.
+    case riak_core_ring:check_lastgasp(Ring) of
+        true ->
+            State;
+        false ->
+            State2 = update_never_started(Ring, State),
+            State3 = maybe_start_vnodes(State2),
+            State3
+    end.
 
 maybe_start_vnodes(State = #state{vnode_start_tokens =
                                       Tokens,

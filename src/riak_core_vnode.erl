@@ -28,6 +28,8 @@
          send_command/2,
          send_command_after/2]).
 
+
+
 -export([init/1,
          started/2,
          started/3,
@@ -1024,6 +1026,9 @@ vnode_coverage(Sender, Request, KeySpaces,
                                                     Work,
                                                     From),
             continue(State, NewModState);
+        {PoolName, _Work, _From, NewModState} ->
+            logger:error("Worker pools not supported: ~p", [PoolName]),
+            {stop, not_supported, State#state{modstate = NewModState}};
         {stop, Reason, NewModState} ->
             {stop, Reason, State#state{modstate = NewModState}}
     end.
