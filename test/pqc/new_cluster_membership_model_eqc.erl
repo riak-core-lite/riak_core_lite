@@ -1,15 +1,14 @@
 -module(new_cluster_membership_model_eqc).
 
 -ifdef(MODEL).
--ifdef(EQC).
--include_lib("eqc/include/eqc.hrl").
--include_lib("eqc/include/eqc_statem.hrl").
+-ifdef(PROPER).
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 -define(TEST_ITERATIONS, 3000).
 -define(QC_OUT(P),
-        eqc:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
+        proper:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
 
 -define(OUT(S,A),ok).
 %%-define(OUT(S,A),io:format(S,A)).
@@ -27,7 +26,7 @@
     vclock   :: vclock:vclock(), % for this chstate object, entries are
                                  % {Node, Ctr}
     chring   :: chash:chash(),   % chash ring of {IndexAsInt, Node} mappings
-    meta     :: dict(),          % dict of cluster-wide other data (primarily
+    meta     :: dict:dict(),          % dict of cluster-wide other data (primarily
                                  % bucket N-value, etc)
 
     clustername :: {node(), term()}, 
@@ -50,7 +49,7 @@
 
 %% Global test state
 -record(state, {
-          nstates :: dict(),
+          nstates :: dict:dict(),
           ring_size :: integer(),
           members  :: [{node(), {member_status(), vclock:vclock()}}],
           primary :: [integer()],
@@ -63,7 +62,7 @@
           active_handoffs :: [{integer(), integer(), integer()}],
           seed :: {integer(), integer(), integer()},
           old_seed :: {integer(), integer(), integer()},
-          split :: dict()
+          split :: dict:dict()
         }).
 
 eqc_test_() ->
@@ -74,8 +73,8 @@ eqc_test_() ->
        [{inorder,
          [manual_test_list(),
           %% Run the quickcheck tests
-          {timeout, 60000, % timeout is in msec
-           ?_assertEqual(true, catch quickcheck(numtests(?TEST_ITERATIONS, ?QC_OUT(prop_join()))))}
+          {timeout, 60000000, % timeout is in msec
+           ?_assertEqual(true, catch proper:quickcheck(numtests(?TEST_ITERATIONS, ?QC_OUT(prop_join()))))}
          ]}
        ]
       }
@@ -83,7 +82,7 @@ eqc_test_() ->
     }.
 
 eqc() ->
-    quickcheck(numtests(?TEST_ITERATIONS, ?QC_OUT(prop_join()))),
+    proper:quickcheck(numtests(?TEST_ITERATIONS, ?QC_OUT(prop_join()))),
     ok.
 
 setup() ->
@@ -93,7 +92,7 @@ cleanup(_) ->
     ok.
 
 prop_join() ->
-    ?FORALL(Cmds, more_commands(100, commands(?MODULE)),
+    ?FORALL(Cmds, commands(?MODULE),
            ?TRAPEXIT(
            (
            begin
@@ -276,7 +275,8 @@ initial_state() ->
 
 g_initial_nodes() ->
     Nodes = lists:seq(0, ?MAX_NODES-1),
-    ?LET(L, shuffle(Nodes), lists:split(?INITIAL_CLUSTER_SIZE, L)).
+    ?LET(L, Nodes, %shuffle(Nodes)
+     lists:split(?INITIAL_CLUSTER_SIZE, L)).
 
 g_idx(State) ->
     Indices = [Idx || {Idx, _} <- chash:nodes(chash:fresh(State#state.ring_size, undefined))],
@@ -287,7 +287,7 @@ g_gossip(State, Gossip) ->
     [{Node, get_nstate(State, Node)}, OtherNode, OtherCS].
 
 g_random_ring(State) ->
-    shuffle(lists:seq(0, State#state.ring_size-1)).
+    lists:seq(0, State#state.ring_size-1).%shuffle(
 
 g_posint() ->
     ?SUCHTHAT(X, largeint(), X > 0).
@@ -1386,19 +1386,19 @@ ring_ready(CState0) ->
     end.
 
 seed_random(State) ->
-    OldSeed = random:seed(State#state.seed),
+    OldSeed = rand:seed(State#state.seed),
     State#state{old_seed=OldSeed}.
 
 save_random(State=#state{old_seed=undefined}) ->
-    Seed = random:seed(),
+    Seed = rand:seed(),
     State#state{seed=Seed};
 save_random(State=#state{old_seed=OldSeed}) ->
-    Seed = random:seed(OldSeed),
+    Seed = rand:seed(OldSeed),
     State#state{seed=Seed}.
 
 save_random() ->
-    Seed = random:seed(),
-    random:seed(Seed),
+    Seed = rand:seed(),
+    rand:seed(Seed),
     Seed.
 
 ring_changed(State, _RRing, {Node, _NState}, CState0) ->
@@ -1620,7 +1620,7 @@ handle_down_nodes(CState, Next) ->
                  case (OwnerLeaving and NextDown) of
                      true ->
                          Active = riak_core_ring:active_members(CState) -- [O],
-                         RNode = lists:nth(random:uniform(length(Active)),
+                         RNode = lists:nth(rand:uniform(length(Active)),
                                            Active),
                          {Idx, O, RNode, Mods, Status};
                      _ ->
@@ -1743,7 +1743,7 @@ attempt_simple_transfer(Ring, [{P, Exit}|Rest], TargetN, Exit, Idx, Last) ->
                     target_n_fail;
                 Qualifiers ->
                     %% these nodes don't violate target_n forward
-                    Chosen = lists:nth(random:uniform(length(Qualifiers)),
+                    Chosen = lists:nth(rand:uniform(length(Qualifiers)),
                                        Qualifiers),
                     %% choose one, and do the rest of the ring
                     attempt_simple_transfer(

@@ -93,5 +93,4 @@ stop_servers(_Pid) ->
     riak_core_test_util:stop_pid(riak_core_vnode_manager),
     riak_core_test_util:stop_pid(riak_core_ring_events),
     riak_core_test_util:stop_pid(riak_core_vnode_sup),
-    riak_core_test_util:stop_pid(riak_core_ring_manager),
-    application:stop(goldrush).
+    riak_core_test_util:stop_pid(riak_core_ring_manager).

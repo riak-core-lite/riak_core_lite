@@ -19,25 +19,27 @@
 %% -------------------------------------------------------------------
 
 -module(riak_core_handoff_sender_sup).
+
 -behaviour(supervisor).
 
 %% callbacks
--export([start_link/0,
-         init/1
-        ]).
+-export([start_link/0, init/1]).
 
 %% API
 -export([start_sender/5]).
 
 -include("riak_core_handoff.hrl").
--define(CHILD(I,Type), {I,{I,start_link,[]},temporary,brutal_kill,Type,[I]}).
+
+-define(CHILD(I, Type),
+        {I, {I, start_link, []}, temporary, brutal_kill, Type,
+         [I]}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 start_link() ->
-    supervisor:start_link({local,?MODULE},?MODULE,[]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @doc Start the handoff process for the module (`Module'), partition
 %%      (`Partition'), and vnode (`VNode') from the local node to the
@@ -53,16 +55,19 @@ start_link() ->
 %%                       for each unsent key.
 %%        * unsent_acc0 - optional. The intial accumulator value passed to unsent_fun
 %%                        for the first unsent key
--spec start_sender(ho_type(), atom(), term(), pid(), [{atom(), term()}]) -> {ok, pid()}.
+-spec start_sender(ho_type(), atom(), term(), pid(),
+                   [{atom(), term()}]) -> {ok, pid()}.
+
 start_sender(Type, Module, TargetNode, VNode, Opts) ->
-    supervisor:start_child(?MODULE, [TargetNode, Module, {Type, Opts}, VNode]).
+    supervisor:start_child(?MODULE,
+                           [TargetNode, Module, {Type, Opts}, VNode]).
 
 %%%===================================================================
 %%% Callbacks
 %%%===================================================================
 
 %% @private
-init ([]) ->
-    {ok,{{simple_one_for_one,10,10},
-         [?CHILD(riak_core_handoff_sender,worker)
-         ]}}.
+init([]) ->
+    {ok,
+     {{simple_one_for_one, 10, 10},
+      [?CHILD(riak_core_handoff_sender, worker)]}}.
