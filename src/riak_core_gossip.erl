@@ -35,13 +35,22 @@
 
 -export([start_link/0, stop/0]).
 
--export([init/1, handle_call/3, handle_cast/2,
-         handle_info/2, terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
--export([distribute_ring/1, send_ring/1, send_ring/2,
-         remove_from_cluster/2, remove_from_cluster/3,
-         random_gossip/1, recursive_gossip/1,
-         random_recursive_gossip/1, rejoin/2]).
+-export([distribute_ring/1,
+         send_ring/1,
+         send_ring/2,
+         remove_from_cluster/2,
+         remove_from_cluster/3,
+         random_gossip/1,
+         recursive_gossip/1,
+         random_recursive_gossip/1,
+         rejoin/2]).
 
 %% Default gossip rate: allow at most 45 gossip messages every 10 seconds
 -define(DEFAULT_LIMIT, {45, 10000}).
@@ -71,7 +80,9 @@ send_ring(FromNode, ToNode) ->
                     {send_ring_to, ToNode}).
 
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [],
+    gen_server:start_link({local, ?MODULE},
+                          ?MODULE,
+                          [],
                           []).
 
 stop() -> gen_server:cast(?MODULE, stop).
@@ -82,9 +93,9 @@ rejoin(Node, Ring) ->
 %% @doc Gossip state to a random node in the ring.
 random_gossip(Ring) ->
     case riak_core_ring:random_other_active_node(Ring) of
-      no_node -> % must be single node cluster
-          ok;
-      RandomNode -> send_ring(node(), RandomNode)
+        no_node -> % must be single node cluster
+            ok;
+        RandomNode -> send_ring(node(), RandomNode)
     end.
 
 %% @doc Gossip state to a fixed set of nodes determined from a binary
@@ -108,8 +119,8 @@ recursive_gossip(Ring) ->
     %% and therefore we fallback to random_recursive_gossip as necessary.
     Active = riak_core_ring:active_members(Ring),
     case lists:member(node(), Active) of
-      true -> recursive_gossip(Ring, node());
-      false -> random_recursive_gossip(Ring)
+        true -> recursive_gossip(Ring, node());
+        false -> random_recursive_gossip(Ring)
     end.
 
 random_recursive_gossip(Ring) ->
@@ -125,7 +136,8 @@ random_recursive_gossip(Ring) ->
 init(_State) ->
     schedule_next_reset(),
     {Tokens, _} = application:get_env(riak_core,
-                                      gossip_limit, ?DEFAULT_LIMIT),
+                                      gossip_limit,
+                                      ?DEFAULT_LIMIT),
     State = #state{gossip_tokens = Tokens},
     {ok, State}.
 
@@ -150,7 +162,8 @@ handle_cast({distribute_ring, Ring}, State) ->
     riak_core_ring:check_tainted(Ring,
                                  "Error: riak_core_gossip/distribute_ring "
                                  ":: Sending tainted ring over gossip"),
-    gen_server:abcast(Nodes, ?MODULE,
+    gen_server:abcast(Nodes,
+                      ?MODULE,
                       {reconcile_ring, Ring}),
     {noreply, State};
 handle_cast({reconcile_ring, OtherRing}, State) ->
@@ -169,18 +182,18 @@ handle_cast(gossip_ring, State) ->
 handle_cast({rejoin, OtherRing}, State) ->
     {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
     SameCluster = riak_core_ring:cluster_name(Ring) =:=
-                    riak_core_ring:cluster_name(OtherRing),
+                      riak_core_ring:cluster_name(OtherRing),
     case SameCluster of
-      true ->
-          OtherNode = riak_core_ring:owner_node(OtherRing),
-          case riak_core:join(node(), OtherNode, true, true) of
-            ok -> ok;
-            {error, Reason} ->
-                logger:error("Could not rejoin cluster: ~p", [Reason]),
-                ok
-          end,
-          {noreply, State};
-      false -> {noreply, State}
+        true ->
+            OtherNode = riak_core_ring:owner_node(OtherRing),
+            case riak_core:join(node(), OtherNode, true, true) of
+                ok -> ok;
+                {error, Reason} ->
+                    logger:error("Could not rejoin cluster: ~p", [Reason]),
+                    ok
+            end,
+            {noreply, State};
+        false -> {noreply, State}
     end;
 handle_cast(_, State) -> {noreply, State}.
 
@@ -188,7 +201,8 @@ handle_info(reset_tokens, State) ->
     schedule_next_reset(),
     gen_server:cast(?MODULE, gossip_ring),
     {Tokens, _} = application:get_env(riak_core,
-                                      gossip_limit, ?DEFAULT_LIMIT),
+                                      gossip_limit,
+                                      ?DEFAULT_LIMIT),
     {noreply, State#state{gossip_tokens = Tokens}};
 handle_info(_Info, State) -> {noreply, State}.
 
@@ -204,7 +218,8 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 schedule_next_reset() ->
     {_, Reset} = application:get_env(riak_core,
-                                     gossip_limit, ?DEFAULT_LIMIT),
+                                     gossip_limit,
+                                     ?DEFAULT_LIMIT),
     erlang:send_after(Reset, ?MODULE, reset_tokens).
 
 %%noinspection ErlangUnboundVariable
@@ -216,42 +231,44 @@ reconcile(Ring0, [OtherRing0]) ->
     Members = riak_core_ring:reconcile_members(Ring,
                                                OtherRing),
     WrongCluster = riak_core_ring:cluster_name(Ring) /=
-                     riak_core_ring:cluster_name(OtherRing),
+                       riak_core_ring:cluster_name(OtherRing),
     PreStatus = riak_core_ring:member_status(Members,
                                              OtherNode),
     IgnoreGossip = WrongCluster or (PreStatus =:= invalid)
-                     or (PreStatus =:= down),
+                       or (PreStatus =:= down),
     case IgnoreGossip of
-      true -> Ring2 = Ring, Changed = false;
-      false ->
-          {Changed, Ring2} = riak_core_ring:reconcile(OtherRing,
-                                                      Ring)
+        true ->
+            Ring2 = Ring,
+            Changed = false;
+        false ->
+            {Changed, Ring2} = riak_core_ring:reconcile(OtherRing,
+                                                        Ring)
     end,
     OtherStatus = riak_core_ring:member_status(Ring2,
                                                OtherNode),
     case {WrongCluster, OtherStatus, Changed} of
-      {true, _, _} ->
-          %% TODO: Tell other node to stop gossiping to this node.
-          %% STATS
-          % riak_core_stat:update(ignored_gossip),
-          ignore;
-      {_, down, _} ->
-          %% Tell other node to rejoin the cluster.
-          riak_core_gossip:rejoin(OtherNode, Ring2),
-          ignore;
-      {_, invalid, _} ->
-          %% Exiting/Removed node never saw shutdown cast, re-send.
-          ClusterName = riak_core_ring:cluster_name(Ring),
-          riak_core_ring_manager:refresh_ring(OtherNode,
-                                              ClusterName),
-          ignore;
-      {_, _, new_ring} ->
-          Ring3 = riak_core_ring:ring_changed(Node, Ring2),
-          %% STATS
-          % riak_core_stat:update(rings_reconciled),
-          log_membership_changes(Ring, Ring3),
-          {reconciled_ring, Ring3};
-      {_, _, _} -> ignore
+        {true, _, _} ->
+            %% TODO: Tell other node to stop gossiping to this node.
+            %% STATS
+            % riak_core_stat:update(ignored_gossip),
+            ignore;
+        {_, down, _} ->
+            %% Tell other node to rejoin the cluster.
+            riak_core_gossip:rejoin(OtherNode, Ring2),
+            ignore;
+        {_, invalid, _} ->
+            %% Exiting/Removed node never saw shutdown cast, re-send.
+            ClusterName = riak_core_ring:cluster_name(Ring),
+            riak_core_ring_manager:refresh_ring(OtherNode,
+                                                ClusterName),
+            ignore;
+        {_, _, new_ring} ->
+            Ring3 = riak_core_ring:ring_changed(Node, Ring2),
+            %% STATS
+            % riak_core_stat:update(rings_reconciled),
+            log_membership_changes(Ring, Ring3),
+            {reconciled_ring, Ring3};
+        {_, _, _} -> ignore
     end.
 
 log_membership_changes(OldRing, NewRing) ->
@@ -308,7 +325,8 @@ log_node_removed(Node, Old) ->
                 [Node, Old]).
 
 remove_from_cluster(Ring, ExitingNode) ->
-    remove_from_cluster(Ring, ExitingNode,
+    remove_from_cluster(Ring,
+                        ExitingNode,
                         erlang:timestamp()).
 
 remove_from_cluster(Ring, ExitingNode, Seed) ->

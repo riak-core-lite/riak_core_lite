@@ -32,7 +32,11 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILD(I, Type, Timeout, Args),
-        {I, {I, start_link, Args}, permanent, Timeout, Type,
+        {I,
+         {I, start_link, Args},
+         permanent,
+         Timeout,
+         Type,
          [I]}).
 
 -define(CHILD(I, Type, Timeout),
