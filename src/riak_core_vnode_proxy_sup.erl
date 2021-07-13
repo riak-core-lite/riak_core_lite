@@ -39,8 +39,8 @@ init([]) ->
 start_proxy(Mod, Index) ->
     Ref = proxy_ref(Mod, Index),
     Pid = case supervisor:start_child(?MODULE, Ref) of
-            {ok, Child} -> Child;
-            {error, {already_started, Child}} -> Child
+              {ok, Child} -> Child;
+              {error, {already_started, Child}} -> Child
           end,
     Pid.
 
@@ -59,7 +59,10 @@ start_proxies(Mod) ->
 proxy_ref(Mod, Index) ->
     {{Mod, Index},
      {riak_core_vnode_proxy, start_link, [Mod, Index]},
-     permanent, 5000, worker, [riak_core_vnode_proxy]}.
+     permanent,
+     5000,
+     worker,
+     [riak_core_vnode_proxy]}.
 
 %% @private
 get_indices() ->

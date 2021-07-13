@@ -36,10 +36,21 @@
 
 -module(chash).
 
--export([contains_name/2, fresh/2, lookup/2, key_of/1,
-         members/1, merge_rings/2, next_index/2, nodes/1,
-         predecessors/2, predecessors/3, ring_increment/1,
-         size/1, successors/2, successors/3, update/3]).
+-export([contains_name/2,
+         fresh/2,
+         lookup/2,
+         key_of/1,
+         members/1,
+         merge_rings/2,
+         next_index/2,
+         nodes/1,
+         predecessors/2,
+         predecessors/3,
+         ring_increment/1,
+         size/1,
+         successors/2,
+         successors/3,
+         update/3]).
 
 -export_type([chash/0, index/0, index_as_int/0]).
 
@@ -92,7 +103,7 @@ fresh(NumPartitions, SeedNode) ->
     Inc = ring_increment(NumPartitions),
     {NumPartitions,
      [{IndexAsInt, SeedNode}
-      || IndexAsInt <- lists:seq(0, (?RINGTOP) - 1, Inc)]}.
+      || IndexAsInt <- lists:seq(0, (?RINGTOP) -1 -(?RINGTOP rem NumPartitions), Inc)]}.
 
 %% @doc Find the Node that owns the partition identified by IndexAsInt.
 -spec lookup(IndexAsInt :: index_as_int(),
@@ -144,7 +155,9 @@ next_index(IntegerKey, {NumPartitions, _}) ->
 %% @doc Return the entire set of NodeEntries in the ring.
 -spec nodes(CHash :: chash()) -> [node_entry()].
 
-nodes(CHash) -> {_NumPartitions, Nodes} = CHash, Nodes.
+nodes(CHash) ->
+    {_NumPartitions, Nodes} = CHash,
+    Nodes.
 
 %% @doc Given an object key, return all NodeEntries in order starting at Index.
 -spec ordered_from(Index :: index(),
@@ -190,7 +203,8 @@ ring_increment(NumPartitions) ->
 -spec size(CHash :: chash()) -> integer().
 
 size(CHash) ->
-    {_NumPartitions, Nodes} = CHash, length(Nodes).
+    {_NumPartitions, Nodes} = CHash,
+    length(Nodes).
 
 %% @doc Given an object key, return all NodeEntries in order starting at Index.
 -spec successors(Index :: index(),
@@ -210,7 +224,9 @@ successors(Index, CHash, N) ->
     Ordered = ordered_from(Index, CHash),
     {NumPartitions, _Nodes} = CHash,
     if Num =:= NumPartitions -> Ordered;
-       true -> {Res, _} = lists:split(Num, Ordered), Res
+       true ->
+           {Res, _} = lists:split(Num, Ordered),
+           Res
     end.
 
 %% @doc Make the partition beginning at IndexAsInt owned by Name'd node.
@@ -219,7 +235,9 @@ successors(Index, CHash, N) ->
 
 update(IndexAsInt, Name, CHash) ->
     {NumPartitions, Nodes} = CHash,
-    NewNodes = lists:keyreplace(IndexAsInt, 1, Nodes,
+    NewNodes = lists:keyreplace(IndexAsInt,
+                                1,
+                                Nodes,
                                 {IndexAsInt, Name}),
     {NumPartitions, NewNodes}.
 
@@ -249,24 +267,44 @@ random_node(NodeA, NodeB) ->
 %% ===================================================================
 -ifdef(TEST).
 
+fresh_sizes_test() ->
+    lists:foreach(fun(I) ->
+        ?assertEqual(I, (length(chash:nodes(chash:fresh(I, the_node)))))
+    end, [1, 10000]).
+
 update_test() ->
     Node = old@host,
     NewNode = new@host,
     % Create a fresh ring...
     CHash = chash:fresh(5, Node),
     GetNthIndex = fun (N, {_, Nodes}) ->
-                          {Index, _} = lists:nth(N, Nodes), Index
+                          {Index, _} = lists:nth(N, Nodes),
+                          Index
                   end,
+
+    {5,
+     [{_, Node},
+      {_, Node},
+      {_, Node},
+      {_, Node},
+      {_, Node}]} = CHash,
+
     % Test update...
     FirstIndex = GetNthIndex(1, CHash),
     ThirdIndex = GetNthIndex(3, CHash),
     {5,
-     [{_, NewNode}, {_, Node}, {_, Node}, {_, Node},
-      {_, Node}, {_, Node}]} =
+     [{_, NewNode},
+      {_, Node},
+      {_, Node},
+      {_, Node},
+      {_, Node}]} =
         update(FirstIndex, NewNode, CHash),
     {5,
-     [{_, Node}, {_, Node}, {_, NewNode}, {_, Node},
-      {_, Node}, {_, Node}]} =
+     [{_, Node},
+      {_, Node},
+      {_, NewNode},
+      {_, Node},
+      {_, Node}]} =
         update(ThirdIndex, NewNode, CHash).
 
 contains_test() ->
@@ -300,7 +338,8 @@ inverse_pred_test() ->
 
 merge_test() ->
     CHashA = chash:fresh(8, node_one),
-    CHashB = chash:update(0, node_one,
+    CHashB = chash:update(0,
+                          node_one,
                           chash:fresh(8, node_two)),
     CHash = chash:merge_rings(CHashA, CHashB),
     ?assertEqual(node_one, (chash:lookup(0, CHash))).

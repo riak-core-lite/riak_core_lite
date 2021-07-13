@@ -26,8 +26,12 @@
 
 -ifdef(TEST).
 
--export([setup_mockring1/0, fake_ring/2, stop_pid/1,
-         wait_for_pid/1, stop_pid/2, unlink_named_process/1]).
+-export([setup_mockring1/0,
+         fake_ring/2,
+         stop_pid/1,
+         wait_for_pid/1,
+         stop_pid/2,
+         unlink_named_process/1]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -46,8 +50,8 @@ stop_pid(Pid, ExitType) ->
 wait_for_pid(Pid) ->
     Mref = erlang:monitor(process, Pid),
     receive
-      {'DOWN', Mref, process, _, _} -> ok
-      after 5000 -> {error, didnotexit}
+        {'DOWN', Mref, process, _, _} -> ok
+        after 5000 -> {error, didnotexit}
     end.
 
 unlink_named_process(Name) when is_atom(Name) ->
@@ -56,27 +60,31 @@ unlink_named_process(Name) when is_atom(Name) ->
 setup_mockring1() ->
     % requires a running riak_core_ring_manager, in test-mode is ok
     Ring0 = riak_core_ring:fresh(16, node()),
-    Ring1 = riak_core_ring:add_member(node(), Ring0,
+    Ring1 = riak_core_ring:add_member(node(),
+                                      Ring0,
                                       othernode@otherhost),
-    Ring2 = riak_core_ring:add_member(node(), Ring1,
+    Ring2 = riak_core_ring:add_member(node(),
+                                      Ring1,
                                       othernode2@otherhost2),
     Ring3 = lists:foldl(fun (_, R) ->
                                 riak_core_ring:transfer_node(hd(riak_core_ring:my_indices(R)),
                                                              othernode@otherhost,
                                                              R)
                         end,
-                        Ring2, [1, 2, 3, 4, 5, 6]),
+                        Ring2,
+                        [1, 2, 3, 4, 5, 6]),
     Ring = lists:foldl(fun (_, R) ->
                                riak_core_ring:transfer_node(hd(riak_core_ring:my_indices(R)),
                                                             othernode2@otherhost2,
                                                             R)
                        end,
-                       Ring3, [1, 2, 3, 4, 5, 6]),
+                       Ring3,
+                       [1, 2, 3, 4, 5, 6]),
     riak_core_ring_manager:set_ring_global(Ring).
 
 fake_ring(Size, NumNodes) ->
     ManyNodes = [list_to_atom("dev" ++
-                                integer_to_list(X) ++ "@127.0.0.1")
+                                  integer_to_list(X) ++ "@127.0.0.1")
                  || _ <- lists:seq(0, Size div NumNodes),
                     X <- lists:seq(1, NumNodes)],
     Nodes = lists:sublist(ManyNodes, Size),
@@ -89,16 +97,21 @@ fake_ring(Size, NumNodes) ->
                                 RingAcc2 = riak_core_ring:add_member(Node,
                                                                      RingAcc,
                                                                      OtherNode),
-                                riak_core_ring:set_member(Node, RingAcc2,
-                                                          OtherNode, valid,
+                                riak_core_ring:set_member(Node,
+                                                          RingAcc2,
+                                                          OtherNode,
+                                                          valid,
                                                           same_vclock)
                         end,
-                        Ring, OtherNodes),
+                        Ring,
+                        OtherNodes),
     Ring3 = lists:foldl(fun ({Idx, Owner}, RingAcc) ->
-                                riak_core_ring:transfer_node(Idx, Owner,
+                                riak_core_ring:transfer_node(Idx,
+                                                             Owner,
                                                              RingAcc)
                         end,
-                        Ring2, Owners),
+                        Ring2,
+                        Owners),
     Ring3.
 
 -endif. %TEST.

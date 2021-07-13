@@ -1,4 +1,3 @@
-
 %% -------------------------------------------------------------------
 %%
 %% A dummey gen_event listener for testing.
@@ -30,10 +29,15 @@
 %%% ------------------------------------------------------------------
 
 -export([code_change/3]).
+
 -export([handle_call/2]).
+
 -export([handle_event/2]).
+
 -export([handle_info/2]).
+
 -export([init/1]).
+
 -export([terminate/2]).
 
 -record(state, {}).
@@ -42,21 +46,16 @@
 %%% gen_event Function Definitions
 %%% ------------------------------------------------------------------
 
-init(_) ->
-    {ok, #state{}}.
+init(_) -> {ok, #state{}}.
 
-handle_event(_Event, State) ->
-    {ok, State}.
+handle_event(_Event, State) -> {ok, State}.
 
 handle_call(_Request, State) ->
     Reply = ok,
     {ok, Reply, State}.
 
-handle_info(_Info, State) ->
-    {ok, State}.
+handle_info(_Info, State) -> {ok, State}.
 
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, _State) -> ok.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+code_change(_OldVsn, State, _Extra) -> {ok, State}.
