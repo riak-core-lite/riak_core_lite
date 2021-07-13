@@ -52,8 +52,6 @@
          core_status/1,
          handoff_error/3]).
 
--export([queue_work/4]).
-
 -export([cast_finish_handoff/1,
          send_an_event/2,
          send_req/2,
@@ -1028,15 +1026,9 @@ vnode_coverage(Sender, Request, KeySpaces,
                                                     Work,
                                                     From),
             continue(State, NewModState);
-        {PoolName, Work, From, NewModState} ->
-            %% dispatch some work to the node worker pool
-            %% the result is sent back to 'From'
-            %% The node worker pool stops too many vnodes from running
-            %% the fold concurrently
-            %% If a node_worker_pool has not been setup under the given name
-            %% then it will fallback to the vnode worker pool
-            queue_work(PoolName, Work, From, Pool),
-            continue(State, NewModState);
+        {PoolName, _Work, _From, NewModState} ->
+            logger:error("Worker pools not supported: ~p", [PoolName]),
+            {stop, not_supported, State#state{modstate = NewModState}};
         {stop, Reason, NewModState} ->
             {stop, Reason, State#state{modstate = NewModState}}
     end.
@@ -1458,22 +1450,6 @@ mod_set_forwarding(Forward,
                                                       ModState),
             State#state{modstate = NewModState};
         false -> State
-    end.
-
-queue_work(PoolName, Work, From, VnodeWrkPool) ->
-    PoolName0 =
-        case PoolName of
-            queue -> riak_core_node_worker_pool:nwp();
-            PoolName -> PoolName
-        end,
-    case whereis(PoolName0) of
-        undefined ->
-            lager:info("Using vnode pool as ~w pool is not registered",
-                        [PoolName0]),
-            riak_core_stat:update({worker_pool, unregistered}),
-            riak_core_vnode_worker_pool:handle_work(VnodeWrkPool, Work, From);
-        _P ->
-            riak_core_node_worker_pool:handle_work(PoolName0, Work, From)
     end.
 
 %% ===================================================================
