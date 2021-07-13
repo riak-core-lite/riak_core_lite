@@ -35,7 +35,7 @@
 %% handoff api
 -export([add_outbound/6,
          add_outbound/7,
-         add_inbound/1,
+         add_inbound/0,
          xfer/3,
          kill_xfer/3,
          status/0,
@@ -91,12 +91,12 @@ add_outbound(HOType,Module,SrcIdx,TargetIdx,Node,VnodePid,Opts) ->
                             infinity)
     end.
 
-add_inbound(SSLOpts) ->
+add_inbound() ->
     case application:get_env(riak_core, disable_inbound_handoff) of
         {ok, true} ->
             {error, max_concurrency};
         _ ->
-            gen_server:call(?MODULE,{add_inbound,SSLOpts},infinity)
+            gen_server:call(?MODULE,{add_inbound},infinity)
     end.
 
 %% @doc Initiate a transfer from `SrcPartition' to `TargetPartition'
@@ -173,8 +173,8 @@ handle_call({add_outbound,Type,Mod,SrcIdx,TargetIdx,Node,Pid,Opts},_From,
         Error ->
             {reply, Error, State}
     end;
-handle_call({add_inbound,SSLOpts},_From,State=#state{handoffs=HS}) ->
-    case receive_handoff(SSLOpts) of
+handle_call({add_inbound},_From,State=#state{handoffs=HS}) ->
+    case receive_handoff() of
         {ok,Handoff=#handoff_status{transport_pid=Receiver}} ->
             HS2 = HS ++ [Handoff],
             {reply, {ok,Receiver}, State#state{handoffs=HS2}};
@@ -252,7 +252,7 @@ handle_cast({add_exclusion, {Mod, Idx}}, State=#state{excl=Excl}) ->
 handle_cast({status_update, ModSrcTgt, StatsUpdate}, State=#state{handoffs=HS}) ->
     case lists:keyfind(ModSrcTgt, #handoff_status.mod_src_tgt, HS) of
         false ->
-            lager:error("status_update for non-existing handoff ~p", [ModSrcTgt]),
+            logger:error("status_update for non-existing handoff ~p", [ModSrcTgt]),
             {noreply, State};
         HO ->
             Stats2 = update_stats(StatsUpdate, HO#handoff_status.stats),
@@ -297,10 +297,10 @@ handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
                     X when X == max_concurrency orelse
                            (element(1, X) == shutdown andalso
                             element(2, X) == max_concurrency) ->
-                        lager:info("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
+                        logger:info("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
                         true;
                     _ ->
-                        lager:error("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
+                        logger:error("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
                         true
                 end,
 
@@ -337,7 +337,7 @@ handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
                  NewHS} ->
                     %% In this case the vnode died and the handoff
                     %% sender must be killed.
-                    lager:error("An ~w handoff of partition ~w ~w was "
+                    logger:error("An ~w handoff of partition ~w ~w was "
                                 "terminated because the vnode died",
                                 [Dir, M, I]),
                     demonitor(TransM),
@@ -455,7 +455,7 @@ record_seen_index(Ring, Shrinking, NValMap, DefaultN, Mod, Src, Key, Seen) ->
     end.
 
 get_concurrency_limit () ->
-    app_helper:get_env(riak_core,handoff_concurrency,?HANDOFF_CONCURRENCY).
+    application:get_env(riak_core,handoff_concurrency,?HANDOFF_CONCURRENCY).
 
 %% true if handoff_concurrency (inbound + outbound) hasn't yet been reached
 handoff_concurrency_limit_reached () ->
@@ -557,12 +557,12 @@ send_handoff(HOType, {Mod, Src, Target}, Node, Vnode, HS, {Filter, FilterModFun}
     end.
 
 %% spawn a receiver process
-receive_handoff (SSLOpts) ->
+receive_handoff () ->
     case handoff_concurrency_limit_reached() of
         true ->
             {error, max_concurrency};
         false ->
-            {ok,Pid}=riak_core_handoff_receiver_sup:start_receiver(SSLOpts),
+            {ok,Pid}=riak_core_handoff_receiver_sup:start_receiver(),
             PidM = monitor(process, Pid),
 
             %% successfully started up a new receiver
@@ -617,7 +617,7 @@ kill_xfer_i(ModSrcTarget, Reason, HS) ->
                 undefined ->
                     ok;
                 _ ->
-                    lager:info(Msg, [Type, Mod, SrcNode, SrcPartition,
+                    logger:info(Msg, [Type, Mod, SrcNode, SrcPartition,
                                      TargetNode, TargetPartition, Reason])
             end,
             exit(TP, {kill_xfer, Reason}),
@@ -680,9 +680,8 @@ simple_handoff () ->
 
     %% clear handoff_concurrency and make sure a handoff fails
     ?assertEqual(ok,set_concurrency(0)),
-    ?assertEqual({error,max_concurrency},add_inbound([])),
-    ?assertEqual({error,max_concurrency},add_outbound(ownership,riak_kv_vnode,
-                                                      0,node(),self(),[])),
+    ?assertEqual({error,max_concurrency},add_inbound()),
+    ?assertEqual({error,max_concurrency},add_outbound(ownership,riak_kv_vnode, 0,node(),self(),[])),
 
     %% allow for a single handoff
     ?assertEqual(ok,set_concurrency(1)),
@@ -691,13 +690,16 @@ simple_handoff () ->
     ok.
 
 config_disable () ->
+    %% expect error log
+    error_logger:tty(false),
+
     ?assertEqual(ok, handoff_enable(inbound)),
     ?assertEqual(ok, handoff_enable(outbound)),
     ?assertEqual(ok, set_concurrency(2)),
 
     ?assertEqual([], status()),
 
-    Res = add_inbound([]),
+    Res = add_inbound(),
     ?assertMatch({ok, _}, Res),
     {ok, Pid} = Res,
 
@@ -726,14 +728,16 @@ config_disable () ->
     Status0 = fun() -> length(status()) =:= 0 end,
     ?assertEqual(ok, wait_until(Status0, 500, 1)),
 
-    ?assertEqual({error, max_concurrency}, add_inbound([])),
+
+    ?assertEqual({error, max_concurrency}, add_inbound()),
 
     ?assertEqual(ok, handoff_enable(inbound)),
     ?assertEqual(ok, handoff_enable(outbound)),
     ?assertEqual(0, length(status())),
 
-    ?assertMatch({ok, _}, add_inbound([])),
-    ?assertEqual(1, length(status())).
+    ?assertMatch({ok, _}, add_inbound()),
+    ?assertEqual(1, length(status())),
+    error_logger:tty(true).
 
 %% Copied from riak_test's rt.erl:
 wait_until(Fun, Retry, Delay) when Retry > 0 ->

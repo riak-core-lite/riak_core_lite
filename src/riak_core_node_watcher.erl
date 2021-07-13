@@ -37,9 +37,15 @@
          node_up/0,
          node_down/0,
          services/0, services/1,
-         nodes/1,
-         avsn/0]).
+         nodes/1]).
 
+%% TEST API
+-ifdef(TEST).
+
+-export([avsn/0,
+         set_broadcast_module/2]).
+
+-endif.
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -147,7 +153,12 @@ services() ->
     gen_server:call(?MODULE, services, infinity).
 
 services(Node) ->
-    internal_get_services(Node).
+    case check_node_valid(Node) of
+        true ->
+            internal_get_services(Node);
+        _ ->
+            invalid_node
+    end.
 
 nodes(Service) ->
     internal_get_nodes(Service).
@@ -157,9 +168,15 @@ nodes(Service) ->
 %% Test API
 %% ===================================================================
 
+-ifdef(TEST).
+
 avsn() ->
     gen_server:call(?MODULE, get_avsn, infinity).
 
+set_broadcast_module(Module, Fn) ->
+    gen_server:call(?MODULE, {set_bcast_mod, Module, Fn}, infinity).
+
+-endif.
 
 %% ====================================================================
 %% gen_server callbacks
@@ -203,7 +220,7 @@ handle_call({service_up, Id, Pid, MFA, Options}, From, State) ->
 
     State2 = remove_health_check(Id, State1),
 
-    case app_helper:get_env(riak_core, enable_health_checks, true) of
+    case application:get_env(riak_core, enable_health_checks, true) of
         true ->
             %% install the health check
             CheckInterval = proplists:get_value(check_interval, Options,
@@ -267,13 +284,13 @@ handle_call(services, _From, State) ->
 handle_call(suspend_healths, _From, State = #state{healths_enabled=false}) ->
     {reply, already_disabled, State};
 handle_call(suspend_healths, _From, State = #state{healths_enabled=true}) ->
-    lager:info("suspending all health checks"),
+    logger:info("suspending all health checks"),
     Healths = all_health_fsms(suspend, State#state.health_checks),
     {reply, ok, update_avsn(State#state{health_checks = Healths, healths_enabled = false})};
 handle_call(resume_healths, _From, State = #state{healths_enabled=true}) ->
     {reply, already_enabled, State};
 handle_call(resume_healths, _From, State = #state{healths_enabled=false}) ->
-    lager:info("resuming all health checks"),
+    logger:info("resuming all health checks"),
     Healths = all_health_fsms(resume, State#state.health_checks),
     {reply, ok, update_avsn(State#state{health_checks = Healths, healths_enabled = true})}.
 
@@ -362,6 +379,11 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
+check_node_valid(Node) ->
+    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+    Members = riak_core_ring:all_members(Ring),
+    lists:member(Node, Members).
+
 update_avsn(State) ->
     State#state { avsn = State#state.avsn + 1 }.
 
@@ -403,7 +425,7 @@ schedule_broadcast(State) ->
             _ = erlang:cancel_timer(OldTref),
             ok
     end,
-    Interval = app_helper:get_env(riak_core, gossip_interval),
+    {ok, Interval} = application:get_env(riak_core, gossip_interval),
     Tref = erlang:send_after(Interval, self(), broadcast),
     State#state { bcast_tref = Tref }.
 
@@ -686,11 +708,11 @@ health_fsm(checking, {result, Pid, Cause}, Service, #health_check{checking_pid =
 
 health_fsm(checking, {'EXIT', Pid, Cause}, Service, #health_check{checking_pid = Pid} = InCheck)
   when Cause =/= normal ->
-    lager:error("health check process for ~p error'ed:  ~p", [Service, Cause]),
+    logger:error("health check process for ~p error'ed:  ~p", [Service, Cause]),
     Fails = InCheck#health_check.callback_failures + 1,
     if
         Fails == InCheck#health_check.max_callback_failures ->
-            lager:error("health check callback for ~p failed too "
+            logger:error("health check callback for ~p failed too "
                         "many times, disabling.", [Service]),
             {down, suspend, InCheck#health_check{checking_pid = undefined,
                                                  callback_failures = Fails}};

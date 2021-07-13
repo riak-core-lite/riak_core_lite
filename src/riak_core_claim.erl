@@ -2,7 +2,7 @@
 %%
 %% riak_core: Core Riak Application
 %%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -57,60 +57,33 @@
          default_choose_claim/1, default_choose_claim/2, default_choose_claim/3,
          never_wants_claim/1, never_wants_claim/2,
          random_choose_claim/1, random_choose_claim/2, random_choose_claim/3]).
--export([wants_claim_v1/1, wants_claim_v1/2,
-         wants_claim_v2/1, wants_claim_v2/2,
-         wants_claim_v3/1, wants_claim_v3/2,
-         choose_claim_v1/1, choose_claim_v1/2, choose_claim_v1/3,
+-export([wants_claim_v2/1, wants_claim_v2/2,
          choose_claim_v2/1, choose_claim_v2/2, choose_claim_v2/3,
-         choose_claim_v3/1, choose_claim_v3/2, choose_claim_v3/3,
          claim_rebalance_n/2, claim_diversify/3, claim_diagonal/3,
          wants/1, wants_owns_diff/2, meets_target_n/2, diagonal_stripe/2]).
 
--ifdef(TEST).
--compile(export_all).
--ifdef(EQC).
--export([prop_claim_ensures_unique_nodes/1, prop_wants/0, prop_wants_counts/0,eqc_check/2,
-         prop_claim_ensures_unique_nodes_v2/0, % prop_claim_ensures_unique_nodes_v3/0,
-         prop_take_idxs/0]).
--include_lib("eqc/include/eqc.hrl").
--endif.
--include_lib("eunit/include/eunit.hrl").
--endif.
 
 -define(DEF_TARGET_N, 4).
 
--type delta() :: {node(), Ownership::non_neg_integer(), Delta::integer()}.
--type deltas() :: [delta()].
-
 claim(Ring) ->
-    Want = app_helper:get_env(riak_core, wants_claim_fun),
-    Choose = app_helper:get_env(riak_core, choose_claim_fun),
-    claim(Ring, Want, Choose).
+    claim(Ring, want, choose).
 
-claim(Ring, Want, Choose) ->
+claim(Ring, _, _) ->
     Members = riak_core_ring:claiming_members(Ring),
     lists:foldl(fun(Node, Ring0) ->
-                        claim_until_balanced(Ring0, Node, Want, Choose)
+                        claim_until_balanced(Ring0, Node, want, choose)
                 end, Ring, Members).
 
 claim_until_balanced(Ring, Node) ->
-    Want = app_helper:get_env(riak_core, wants_claim_fun),
-    Choose = app_helper:get_env(riak_core, choose_claim_fun),
-    claim_until_balanced(Ring, Node, Want, Choose).
+    claim_until_balanced(Ring, Node, want, choose).
 
-claim_until_balanced(Ring, Node, {WMod, WFun}=Want, Choose) ->
-    NeedsIndexes = apply(WMod, WFun, [Ring, Node]),
+claim_until_balanced(Ring, Node, want, choose) ->
+    NeedsIndexes = wants_claim_v2(Ring, Node),
     case NeedsIndexes of
-        no ->
-            Ring;
+        no -> Ring;
         {yes, _NumToClaim} ->
-            NewRing = case Choose of
-                          {CMod, CFun} ->
-                              CMod:CFun(Ring, Node);
-                          {CMod, CFun, Params} ->
-                              CMod:CFun(Ring, Node, Params)
-                      end,
-            claim_until_balanced(NewRing, Node, Want, Choose)
+            NewRing = choose_claim_v2(Ring, Node),
+            claim_until_balanced(NewRing, Node, want, choose)
     end.
 
 %% ===================================================================
@@ -123,20 +96,10 @@ default_choose_claim(Ring) ->
     default_choose_claim(Ring, node()).
 
 default_choose_claim(Ring, Node) ->
-    case riak_core_ring:legacy_ring(Ring) of
-        true ->
-            choose_claim_v1(Ring, Node);
-        false ->
-            choose_claim_v2(Ring, Node)
-    end.
+    choose_claim_v2(Ring, Node).
 
 default_choose_claim(Ring, Node, Params) ->
-    case riak_core_ring:legacy_ring(Ring) of
-        true ->
-            choose_claim_v1(Ring, Node, Params);
-        false ->
-            choose_claim_v2(Ring, Node, Params)
-    end.
+    choose_claim_v2(Ring, Node, Params).
 
 %% @spec default_wants_claim(riak_core_ring()) -> {yes, integer()} | no
 %% @doc Want a partition if we currently have less than floor(ringsize/nodes).
@@ -144,35 +107,7 @@ default_wants_claim(Ring) ->
     default_wants_claim(Ring, node()).
 
 default_wants_claim(Ring, Node) ->
-    case riak_core_ring:legacy_ring(Ring) of
-        true ->
-            wants_claim_v1(Ring, Node);
-        false ->
-            wants_claim_v2(Ring, Node)
-    end.
-
-%% @deprecated
-wants_claim_v1(Ring) ->
-    wants_claim_v1(Ring, node()).
-
-%% @deprecated
-wants_claim_v1(Ring0, Node) ->
-    Ring = riak_core_ring:upgrade(Ring0),
-    %% Calculate the expected # of partitions for a perfectly balanced ring. Use
-    %% this expectation to determine the relative balance of the ring. If the
-    %% ring isn't within +-2 partitions on all nodes, we need to rebalance.
-    ExpParts = get_expected_partitions(Ring, Node),
-    PCounts = lists:foldl(fun({_Index, ANode}, Acc) ->
-                                  orddict:update_counter(ANode, 1, Acc)
-                          end, [{Node, 0}], riak_core_ring:all_owners(Ring)),
-    RelativeCounts = [I - ExpParts || {_ANode, I} <- PCounts],
-    WantsClaim = (lists:min(RelativeCounts) < -2) or (lists:max(RelativeCounts) > 2),
-    case WantsClaim of
-        true ->
-            {yes, 0};
-        false ->
-            no
-    end.
+    wants_claim_v2(Ring, Node).
 
 wants_claim_v2(Ring) ->
     wants_claim_v2(Ring, node()).
@@ -186,68 +121,8 @@ wants_claim_v2(Ring, Node) ->
     Avg = RingSize div NodeCount,
     Count = proplists:get_value(Node, Counts, 0),
     case Count < Avg of
-        false ->
-            case riak_core_ring:has_location_changed(Ring) of
-              true ->
-                {yes, 1};
-              false ->
-                no
-            end;
-        true ->
-            {yes, Avg - Count}
-    end.
-
-%% Wants claim v3 - calculates the wants the same way as choose_claim_v3
-%% and checks if they have changed since it was last run.
-wants_claim_v3(Ring) ->
-    wants_claim_v3(Ring, node()).
-
-wants_claim_v3(Ring, _Node) ->
-    Wants = wants(Ring),
-    
-    %% This case will only hold true during claim_until_balanced
-    %% as only the ownership information is transferred after
-    %% running claim not the metadata.
-    case riak_core_ring:get_meta(claimed, Ring) of
-        {ok, {claim_v3, Wants}} ->
-            lager:debug("WantsClaim3(~p) no.  Current ring claimed for ~p\n", 
-                        [_Node, Wants]),
-            no;
-        {ok, {claim_v3, CurWants}} ->
-            lager:debug("WantsClaim3(~p) yes.  Current ring claimed for "
-                        "different wants\n~p\n",
-                        [_Node, CurWants]),
-            {yes, 1};
-        undefined ->
-            %% First time through claim_until_balanced, check for override
-            %% to recalculate.
-            case app_helper:get_env(riak_core, force_reclaim, false) of
-                true ->
-                    application:unset_env(riak_core, force_reclaim),
-                    lager:info("Forced rerun of claim algorithm - "
-                               "unsetting force_reclaim"),
-                    {yes, 1};
-                false ->
-                    %% Otherwise, base wants decision on whether the current 
-                    %% wants versus current ownership if the claim does not
-                    %% manage to claim all requested nodes then the temporary
-                    %% 'claim_v3' metadata will stop the loop
-                    Owns = get_counts(riak_core_ring:claiming_members(Ring),
-                                      riak_core_ring:all_owners(Ring)),
-                    Deltas = wants_owns_diff(Wants, Owns),
-                    Diffs = lists:sum([abs(Diff) || {_, Diff} <- Deltas]),
-                    case Diffs of
-                        0 ->
-                            lager:debug("WantsClaim3(~p) no.  All wants met.\n", 
-                                        [_Node]),
-                            no;
-                        _ ->
-                            lager:debug("WantsClaim3(~p) yes - ~p.\n"
-                                        "Does not meet wants - diffs ~p\n",
-                                        [_Node, Diffs, Deltas]),
-                            {yes, Diffs}
-                    end
-            end
+        false -> no;
+        true -> {yes, Avg - Count}
     end.
 
 %% Provide default choose parameters if none given
@@ -257,34 +132,10 @@ default_choose_params() ->
 default_choose_params(Params) ->
     case proplists:get_value(target_n_val, Params) of
         undefined ->
-            TN = app_helper:get_env(riak_core, target_n_val, ?DEF_TARGET_N),
+            TN = application:get_env(riak_core, target_n_val, ?DEF_TARGET_N),
             [{target_n_val, TN} | Params];
         _->
             Params
-    end.
-
-%% @deprecated
-choose_claim_v1(Ring) ->
-    choose_claim_v1(Ring, node()).
-
-%% @deprecated
-choose_claim_v1(Ring0, Node) ->
-    choose_claim_v1(Ring0, Node, []).
-
-choose_claim_v1(Ring0, Node, Params0) ->
-    Params = default_choose_params(Params0),
-    Ring = riak_core_ring:upgrade(Ring0),
-    TargetN = proplists:get_value(target_n_val, Params),
-    case meets_target_n(Ring, TargetN) of
-        {true, TailViolations} ->
-            %% if target N is met, then it doesn't matter where
-            %% we claim vnodes, as long as we don't violate the
-            %% target N with any of our additions
-            %% (== claim partitions at least N steps apart)
-            claim_with_n_met(Ring, TailViolations, Node);
-        false ->
-            %% we don't meet target N yet, rebalance
-            claim_rebalance_n(Ring, Node)
     end.
 
 choose_claim_v2(Ring) ->
@@ -301,12 +152,12 @@ choose_claim_v2(RingOrig, Node, Params0) ->
     Active = riak_core_ring:claiming_members(Ring),
     %% Owners::[{index(), node()}]
     Owners = riak_core_ring:all_owners(Ring),
-    %% Ownerships ::[node(), non_neg_integer()]
-    Ownerships = get_counts(Active, Owners),
+    %% Counts::[node(), non_neg_integer()]
+    Counts = get_counts(Active, Owners),
     RingSize = riak_core_ring:num_partitions(Ring),
     NodeCount = erlang:length(Active),
     %% Deltas::[node(), integer()]
-    Deltas = get_deltas(RingSize, NodeCount, Owners, Ownerships),
+    Deltas = get_deltas(RingSize, NodeCount, Owners, Counts),
     {_, Want} = lists:keyfind(Node, 1, Deltas),
     TargetN = proplists:get_value(target_n_val, Params),
     AllIndices = lists:zip(lists:seq(0, length(Owners)-1),
@@ -379,14 +230,14 @@ choose_claim_v2(RingOrig, Node, Params0) ->
 -spec get_deltas(RingSize::pos_integer(),
                  NodeCount::pos_integer(),
                  Owners::[{Index::non_neg_integer(), node()}],
-                 Ownerships::[{node(), non_neg_integer()}]) ->
-                        [{node(), integer()}].
-get_deltas(RingSize, NodeCount, Owners, Ownerships) ->
+                 Counts::[{node(), non_neg_integer()}]) ->
+                        Deltas::[{node(), integer()}].
+get_deltas(RingSize, NodeCount, Owners, Counts) ->
     Avg = RingSize / NodeCount,
     %% the most any node should own
-    Max = ceiling(Avg),
-    ActiveDeltas = [{Member, Ownership, normalise_delta(Avg - Ownership)}
-                    || {Member, Ownership} <- Ownerships],
+    Max = ceiling(RingSize / NodeCount),
+    ActiveDeltas = [{Member, Count, normalise_delta(Avg - Count)}
+                    || {Member, Count} <- Counts],
     BalancedDeltas = rebalance_deltas(ActiveDeltas, Max, RingSize),
     add_default_deltas(Owners, BalancedDeltas, 0).
 
@@ -405,28 +256,26 @@ normalise_delta(Delta) ->
 
 %% @private so that we don't end up with an imbalanced ring where one
 %% node has more vnodes than it should (e.g. [{n1, 6}, {n2, 6}, {n3,
-%% 6}, {n4, 8}, {n5,6}] we rebalance the deltas so that select_indices
+%% 6}, {n4, 8}, {n5,6} we rebalance the deltas so that select_indices
 %% doesn't leave some node not giving up enough partitions
--spec rebalance_deltas(deltas(),
-                       Max::pos_integer(), RingSize::pos_integer()) ->
-                              [{node(), integer()}].
-rebalance_deltas(ActiveDeltas, Max, RingSize) ->
-    AppliedDeltas = [Own + Delta || {_, Own, Delta} <- ActiveDeltas],
+-spec rebalance_deltas([{node(), integer()}], pos_integer(), pos_integer()) -> [{node(), integer()}].
+rebalance_deltas(NodeDeltas, Max, RingSize) ->
+    AppliedDeltas = [Own + Delta || {_, Own, Delta} <- NodeDeltas],
 
     case lists:sum(AppliedDeltas) - RingSize of
         0 ->
-            [{Node, Delta} || {Node, _Cnt, Delta} <- ActiveDeltas];
+            [{Node, Delta} || {Node, _Cnt, Delta} <- NodeDeltas];
         N when N < 0 ->
-            increase_keeps(ActiveDeltas, N, Max, [])
+            increase_keeps(NodeDeltas, N, Max, [])
     end.
 
 %% @private increases the delta for (some) nodes giving away
 %% partitions to the max they can keep
--spec increase_keeps(deltas(),
-                     WantsError::integer(),
-                     Max::pos_integer(),
-                     Acc:: deltas() | []) ->
-                            [{node(), integer()}].
+-spec increase_keeps(Deltas::[{node(), integer()}],
+                      WantsError::integer(),
+                      Max::pos_integer(),
+                      Acc::[{node(), integer()}]) ->
+                             Rebalanced::[{node(), integer()}].
 increase_keeps(Rest, 0, _Max, Acc) ->
     [{Node, Delta} || {Node, _Own, Delta} <- lists:usort(lists:append(Rest, Acc))];
 increase_keeps([], N, Max, Acc) when N < 0 ->
@@ -437,16 +286,16 @@ increase_keeps([{Node, Own, Delta} | Rest], N, Max, Acc) when Delta < 0 ->
                    true -> 1;
                    false -> 0
                end,
-    increase_keeps(Rest, N+Additive, Max, [{Node, Own, Delta+Additive} | Acc]);
+    increase_keeps(Rest, N+Additive, Max, [{Node, Own+Delta+Additive} | Acc]);
 increase_keeps([NodeDelta | Rest], N, Max, Acc) ->
     increase_keeps(Rest, N, Max, [NodeDelta | Acc]).
 
 %% @private increases the delta for (some) nodes taking partitions to the max
 %% they can ask for
--spec increase_takes(deltas(),
+-spec increase_takes(Deltas::[{node(), integer()}],
                       WantsError::integer(),
                       Max::pos_integer(),
-                      Acc::deltas() | []) ->
+                      Acc::[{node(), integer()}]) ->
                              Rebalanced::[{node(), integer()}].
 increase_takes(Rest, 0, _Max, Acc) ->
     [{Node, Delta} || {Node, _Own, Delta} <- lists:usort(lists:append(Rest, Acc))];
@@ -494,99 +343,6 @@ meets_target_n([], TargetN, Index, First, Last) ->
     {true, [ Part || {_, _, Part} <- Violations ]}.
 
 
-choose_claim_v3(Ring) ->
-    choose_claim_v3(Ring, node()).
-
-choose_claim_v3(Ring, ClaimNode) ->
-    Params = [{target_n_val, app_helper:get_env(riak_core, target_n_val, 
-                                                ?DEF_TARGET_N)}],
-    choose_claim_v3(Ring, ClaimNode, Params).
-
-choose_claim_v3(Ring, _ClaimNode, Params) ->
-    S = length(riak_core_ring:active_members(Ring)),
-    Q = riak_core_ring:num_partitions(Ring),
-    TN = proplists:get_value(target_n_val, Params, ?DEF_TARGET_N),
-    Wants = wants(Ring),
-    lager:debug("Claim3 started: S=~p Q=~p TN=~p\n", [S, Q, TN]),
-    lager:debug("       wants: ~p\n", [Wants]),
-    {Partitions, Owners} = lists:unzip(riak_core_ring:all_owners(Ring)),
-
-    %% Seed the random number generator for predictable results
-    %% run the claim, then put it back if possible
-    OldSeedState = rand:export_seed(),
-    _ = rand:seed(exs64, proplists:get_value(seed, Params, {1,2,3})),
-    {NewOwners, NewMetrics} = claim_v3(Wants, Owners, Params),
-    case OldSeedState of
-        undefined ->
-            ok;
-        _ ->
-            _ = rand:seed(OldSeedState),
-            ok
-    end,
-
-    lager:debug("Claim3 metrics: ~p\n", [NewMetrics]),
-    %% Build a new ring from it
-    NewRing = lists:foldl(fun({_P, OldOwn, OldOwn}, R0) ->
-                                  R0;
-                             ({P, _OldOwn, NewOwn}, R0) ->
-                                  riak_core_ring:transfer_node(P, NewOwn, R0)
-                          end, Ring, 
-                          lists:zip3(Partitions, Owners, NewOwners)),
-    riak_core_ring:update_meta(claimed, {claim_v3, Wants}, NewRing).
-
-%%
-%% Claim V3 - unlike the v1/v2 algorithms, v3 treats claim as an optimization problem.
-%% In it's current form it creates a number of possible claim plans and evaluates
-%% them for violations, balance and diversity, choosing the 'best' plan.
-%%
-%% Violations are a count of how many partitions owned by the same node are within target-n
-%% of one another. Lower is better, 0 is desired if at all possible.
-%%
-%% Balance is a measure of the number of partitions owned versus the number of partitions
-%% wanted.  Want is supplied to the algorithm by the caller as a list of node/counts.  The
-%% score for deviation is the RMS of the difference between what the node wanted and what it 
-%% has.  Lower is better, 0 if all wants are mets.
-%%
-%% Diversity measures how often nodes are close to one another in the preference
-%% list.  The more diverse (spread of distances apart), the more evenly the
-%% responsibility for a failed node is spread across the cluster.  Diversity is
-%% calculated by working out the count of each distance for each node pair
-%% (currently distances are limited up to target N) and computing the RMS on that.
-%% Lower diversity score is better, 0 if nodes are perfectly diverse.
-%%
-claim_v3(Wants, Owners, Params) ->
-    TN = proplists:get_value(target_n_val, Params, ?DEF_TARGET_N),
-    Q = length(Owners),
-    Claiming = [N || {N,W} <- Wants, W > 0],
-    Trials = proplists:get_value(trials, Params, 100),
-    case length(Claiming) > TN of
-        true ->
-            NIs = build_nis(Wants, Owners),
-
-            lager:debug("claim3 - NIs\n",[]),
-            _ = [lager:debug("  ~p\n", [NI]) || NI <- NIs],
-
-            %% Generate plans that resolve violations and overloads
-            Plans = lists:usort(make_plans(Trials, NIs, Q, TN)),
-
-            %% Work out which plan meets the balance and diversity objectives
-            {_NewOwners, NewMetrics} = New = evaluate_plans(Plans, Wants, Q, TN),
-
-            case proplists:get_value(violations, NewMetrics) of
-                0 ->
-                    New;
-                _ ->
-                    lager:debug("claimv3: Could not make plan without violations, diversifying\n",
-                                []),
-                   %% If could not build ring without violations, diversify it
-                    claim_diversify(Wants, Owners, Params)
-            end;
-        false ->
-            lager:debug("claimv3: Not enough nodes to run (have ~p need ~p), diagonalized\n",
-                        [length(Claiming), TN+1]),
-            claim_diagonal(Wants, Owners, Params)
-    end.
-
 %% Claim diversify tries to build a perfectly diverse ownership list that meets
 %% target N.  It uses wants to work out which nodes want partitions, but does
 %% not honor the counts currently.  The algorithm incrementally builds the ownership
@@ -629,10 +385,8 @@ claim_diagonal(Wants, Owners, Params) ->
                        node(),
                        integer()) ->
                               riak_core_ring:riak_core_ring().
-sequential_claim(Ring0, Node, TargetN) ->
-    Ring = riak_core_ring:upgrade(Ring0),
-    OrigNodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
-    Nodes = get_nodes_by_location(OrigNodes, Ring),
+sequential_claim(Ring, Node, TargetN) ->
+    Nodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
     NodeCount = length(Nodes),
     RingSize = riak_core_ring:num_partitions(Ring),
 
@@ -672,34 +426,30 @@ ceiling(F) ->
     end.
 
 
-%% @private increase the tail so that there is no wrap around preflist
-%% violation, by taking a `Shortfall' number nodes from earlier in the
-%% preflist
--spec solve_tail_violations(pos_integer(), [node()], non_neg_integer(), pos_integer()) -> [[node()]].
+%% @private rem_fill increase the tail so that there is no wrap around
+%% preflist violation, by taking a `Shortfall' number nodes from
+%% earlier in the preflist
+-spec solve_tail_violations(integer(), [node()], integer(), integer()) -> [node()].
 solve_tail_violations(RingSize, Nodes, Shortfall, MinFetchesPerSeq) ->
     StartingNode = (RingSize rem length(Nodes)) + 1,
-    build_nodelist(RingSize, Nodes, Shortfall, StartingNode, MinFetchesPerSeq).
-
--spec build_nodelist(pos_integer(), [node()], non_neg_integer(), pos_integer(), pos_integer())
-                    -> [[node()]].
-build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq) ->
-    %% Build the tail with sufficient nodes to satisfy TargetN
-    NodeCount = length(Nodes),
-    LastSegLength = (RingSize rem NodeCount) + Shortfall,
-    NewSeq = lists:sublist(Nodes, 1, LastSegLength),
-    build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, [NewSeq]).
+    build_nodelist(RingSize, Nodes, Shortfall, StartingNode, MinFetchesPerSeq, []).
 
 %% @private build the node list by building tail to satisfy TargetN, then removing
 %% the added nodes from earlier segments
--spec build_nodelist(pos_integer(), [node()], non_neg_integer(), pos_integer(), pos_integer(), [[node()]])
-                    -> [[node()]].
+-spec build_nodelist(integer(), [node()], integer(), integer(), integer(), [node()]) -> [node()].
 build_nodelist(RingSize, Nodes, _Shortfall=0, _NodeCounter, _MinFetchesPerSeq, Acc) ->
     %% Finished shuffling, backfill if required
     ShuffledRing = lists:flatten(Acc),
     backfill_ring(RingSize, Nodes,
                   (RingSize-length(ShuffledRing)) div (length(Nodes)), Acc);
+build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, _Acc=[]) ->
+    %% Build the tail with sufficient nodes to satisfy TargetN
+    NodeCount = length(Nodes),
+    LastSegLength = (RingSize rem NodeCount) + Shortfall,
+    NewSeq = lists:sublist(Nodes, 1, LastSegLength),
+    build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, NewSeq);
 build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, Acc) ->
-    %% Build rest of list, subtracting minimum of MinFetchesPerSeq, Shortfall
+    %% Build rest of list, subtracting minimum of MinFetchesPerSeq, Shortfall 
     %% or (NodeCount - NodeCounter) each time
     NodeCount = length(Nodes),
     NodesToRemove = min(min(MinFetchesPerSeq, Shortfall), NodeCount - NodeCounter),
@@ -710,17 +460,15 @@ build_nodelist(RingSize, Nodes, Shortfall, NodeCounter, MinFetchesPerSeq, Acc) -
                    MinFetchesPerSeq, [ NewSeq | Acc]).
 
 %% @private Backfill the ring with full sequences
--spec backfill_ring(pos_integer(), [node()], integer(), [[node()]]) -> [[node()]].
+-spec backfill_ring(integer(), [node()], integer(), [node()]) -> [node()].
 backfill_ring(_RingSize, _Nodes, _Remaining=0, Acc) ->
     Acc;
 backfill_ring(RingSize, Nodes, Remaining, Acc) ->
     backfill_ring(RingSize, Nodes, Remaining - 1, [Nodes | Acc]).
 
 
-claim_rebalance_n(Ring0, Node) ->
-    Ring = riak_core_ring:upgrade(Ring0),
-    OrigNodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
-    Nodes = get_nodes_by_location(OrigNodes, Ring),
+claim_rebalance_n(Ring, Node) ->
+    Nodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
     Zipped = diagonal_stripe(Ring, Nodes),
 
     lists:foldl(fun({P, N}, Acc) ->
@@ -747,8 +495,7 @@ random_choose_claim(Ring) ->
 random_choose_claim(Ring, Node) ->
     random_choose_claim(Ring, Node, []).
 
-random_choose_claim(Ring0, Node, _Params) ->
-    Ring = riak_core_ring:upgrade(Ring0),
+random_choose_claim(Ring, Node, _Params) ->
     riak_core_ring:transfer_node(riak_core_ring:random_other_index(Ring),
                                  Node, Ring).
 
@@ -760,92 +507,6 @@ never_wants_claim(_,_) -> no.
 %% ===================================================================
 %% Private
 %% ===================================================================
-
-%% @private
-claim_hole(Ring, Mine, Owners, Node) ->
-    Choices = case find_biggest_hole(Mine) of
-                  {I0, I1} when I0 < I1 ->
-                      %% start-middle of the ring
-                      lists:takewhile(
-                        fun({I, _}) -> I /= I1 end,
-                        tl(lists:dropwhile(
-                             fun({I, _}) -> I /= I0 end,
-                             Owners)));
-                  {I0, I1} when I0 > I1 ->
-                      %% wrap-around end-start of the ring
-                      tl(lists:dropwhile(
-                           fun({I, _}) -> I /= I0 end, Owners))
-                          ++lists:takewhile(
-                              fun({I, _}) -> I /= I1 end, Owners);
-                  {I0, I0} ->
-                      %% node only has one claim
-                      {Start, End} =
-                          lists:splitwith(
-                            fun({I, _}) -> I /= I0 end,
-                            Owners),
-                      tl(End)++Start
-              end,
-    Half = length(Choices) div 2,
-    {I, _} = lists:nth(Half, Choices),
-    riak_core_ring:transfer_node(I, Node, Ring).
-
-%% @private
-claim_with_n_met(Ring, TailViolations, Node) ->
-    CurrentOwners = lists:keysort(1, riak_core_ring:all_owners(Ring)),
-    Nodes = lists:usort([Node|riak_core_ring:claiming_members(Ring)]),
-    case lists:sort([ I || {I, N} <- CurrentOwners, N == Node ]) of
-        [] ->
-            %% node hasn't claimed anything yet - just claim stuff
-            Spacing = length(Nodes),
-            [{First,_}|OwnList] =
-                case TailViolations of
-                    [] ->
-                        %% no wrap-around problems - choose whatever
-                        lists:nthtail(Spacing-1, CurrentOwners);
-                    [TV|_] ->
-                        %% attempt to cure a wrap-around problem
-                        lists:dropwhile(
-                             fun({I, _}) -> I /= TV end,
-                             lists:reverse(CurrentOwners))
-                end,
-            {_, NewRing} = lists:foldl(
-                             fun({I, _}, {0, Acc}) ->
-                                     {Spacing, riak_core_ring:transfer_node(I, Node, Acc)};
-                                (_, {S, Acc}) ->
-                                     {S-1, Acc}
-                             end,
-                             {Spacing, riak_core_ring:transfer_node(First, Node, Ring)},
-                             OwnList),
-            NewRing;
-        Mine ->
-            %% node already has claims - respect them
-            %% pick biggest hole & sit in the middle
-            %% rebalance will cure any mistake on the next pass
-            claim_hole(Ring, Mine, CurrentOwners, Node)
-    end.
-
-%% @private
-find_biggest_hole(Mine) ->
-    lists:foldl(fun({I0, I1}, none) ->
-                        {I0, I1};
-                   ({I0, I1}, {C0, C1}) when I0 < I1->
-                        %% start-middle of the ring
-                        if I1-I0 > C1-C0 ->
-                                {I0, I1};
-                           true ->
-                                {C0, C1}
-                        end;
-                   ({I0, I1}, {C0, C1}) ->
-                        %% wrap-around end-start of the ring
-                        Span = I1+trunc(math:pow(2, 160))-1-I0,
-                        if Span > C1-C0 ->
-                                {I0, I1};
-                           true ->
-                                {C0, C1}
-                        end
-                end,
-                none,
-                lists:zip(Mine, tl(Mine)++[hd(Mine)])).
 
 %% @private
 %%
@@ -870,9 +531,9 @@ find_violations(Ring, TargetN) ->
 %% @private
 %%
 %% @doc Counts up the number of partitions owned by each node.
--spec get_counts([node()], [{non_neg_integer(), node()}]) ->
-                        [{node(), pos_integer()}].
-get_counts(Nodes, PartitionOwners) ->
+-spec get_counts([node()], [{integer(),_}]) ->
+                        [{node(), non_neg_integer()}].
+get_counts(Nodes, Ring) ->
     Empty = [{Node, 0} || Node <- Nodes],
     Counts = lists:foldl(fun({_Idx, Node}, Counts) ->
                                  case lists:member(Node, Nodes) of
@@ -881,7 +542,7 @@ get_counts(Nodes, PartitionOwners) ->
                                      false ->
                                          Counts
                                  end
-                         end, dict:from_list(Empty), PartitionOwners),
+                         end, dict:from_list(Empty), Ring),
     dict:to_list(Counts).
 
 %% @private
@@ -890,22 +551,6 @@ add_default_deltas(IdxOwners, Deltas, Default) ->
     Owners2 = lists:usort(Owners),
     Defaults = [{Member, Default} || Member <- Owners2],
     lists:ukeysort(1, Deltas ++ Defaults).
-
-%% @private
-get_expected_partitions(Ring, Node) ->
-    riak_core_ring:num_partitions(Ring) div get_member_count(Ring, Node).
-
-%% @private
-get_member_count(Ring, Node) ->
-    %% Determine how many nodes are involved with the ring; if the requested
-    %% node is not yet part of the ring, include it in the count.
-    AllMembers = riak_core_ring:claiming_members(Ring),
-    case lists:member(Node, AllMembers) of
-        true ->
-            length(AllMembers);
-        false ->
-            length(AllMembers) + 1
-    end.
 
 %% @private
 %%
@@ -975,15 +620,6 @@ spaced_by_n(NthA, NthB, TargetN, RingSize) ->
     end,
     (NFwd >= TargetN) and (NBack >= TargetN).
 
-%% @private
-%%
-%% @doc Build node info list from Wants and Owners.  
-build_nis(Wants, Owners) ->
-    Initial = [{N, orddict:new()} || {N, _W} <- Wants],
-    {_, Ownership} = lists:foldl(fun(N, {I,A}) ->
-                                         {I+1, orddict:append_list(N, [I], A)}
-                                 end, {0, Initial}, Owners),
-    [{Node, Want, Owned} || {Node, Want} <- Wants, {Node1, Owned} <- Ownership, Node == Node1].
 
 %% For each node in wants, work out how many more partition each node wants (positive) or is
 %% overloaded by (negative) compared to what it owns.
@@ -1026,260 +662,6 @@ roundup(I) when I >= 0 ->
         _ -> T
     end.
 
-%% @private Evaluate a list of plans and return the best.
-evaluate_plans(Plans, Wants, Q, TN) ->
-    {_, FOM} =
-        lists:foldl(fun(Plan, {Trial, {_RunningOwners, RunningMetrics}=T}) ->
-                            OM = {_Owners, Metrics} = score_plan(Plan, Wants, Q, TN),
-                            case better_plan(Metrics, RunningMetrics) of
-                                true ->
-                                    lager:debug("Claim3: Trial ~p found better plan: ~p\n",
-                                                [Trial, Metrics]),
-                                    {Trial + 1, OM};
-                                _ ->
-                                    {Trial + 1, T}
-                            end
-                    end, {1, {undefined, undefined}}, Plans),
-    FOM.
-
-%% @private
-%% Return true if plan P1 is better than plan P2, assumes the metrics
-%% are ordered [{violations, Violations}, {balance, Balance}, {diversity, Diversity}]}.
-%%
-better_plan(_M1, undefined) ->
-    true; %% M1 is a better plan than no plan
-better_plan(M1, M2) ->
-    %% For now, the values we want are in the order we care about, make sure we
-    %% get minimum violations, best balance, best diversity (0 is best)
-    V1 = lists:unzip(M1),
-    V2 = lists:unzip(M2),
-    V1 < V2.
-
-%% @private
-%% Score the plan - return a tuple of {Owners, Metrics}
-%% where metrics scores violations, balance and diversity
-score_plan(NIs, Wants, Q, TN) ->
-    Owners = make_owners(NIs),
-    AM = riak_core_claim_util:adjacency_matrix(Owners),
-    Diversity = riak_core_claim_util:score_am(AM, TN),
-
-    Balance = balance(Wants, NIs),
-
-    %% TODO: Change this to an exact count of violations.
-    %% This is the list of claimable violations per-node
-    %% so will over-count.  The scoring algorithm
-    %% works as any violations will give a non-zero count
-    %% and will need to be resolved before any balance or
-    %% diversity scores are accounted for.
-    Violations = length(lists:flatten([Vs || {_, _, _, Vs} <- violations(NIs, Q, TN),
-                                             length(Vs) > 0])),
-
-    {Owners, [{violations, Violations}, {balance, Balance}, {diversity, Diversity}]}.
-
-%% @private
-%% Convert a nodeinfo list with Nodes and lists of owned indices to an
-%% ownership list
-make_owners(NIs) ->
-    IdxNodes = [ [ {Idx, Node} || Idx <- Idxs] || {Node, _Want, Idxs} <- NIs],
-    [Owner || {_, Owner} <- lists:sort(lists:flatten(IdxNodes))].
-
-%% @private
-%% Compute the balance score - sum of squared difference from desired count
-balance(Wants, NIs) ->
-    lists:sum([begin
-                   {Node, Want, Idxs} = lists:keyfind(Node, 1, NIs),
-                   Diff = Want - length(Idxs),
-                   Diff * Diff
-               end || {Node, Want} <- Wants]).
-
-%% @private 
-%% Make the number of plans requested
-make_plans(NumPlans, NIs, Q, TN) ->
-    lists:usort([make_plan(NIs, Q, TN) || _ <- lists:seq(1,NumPlans)]).
-
-%% @private
-%% Make a plan to meet the Wants in the NodeInfos
-%% First resovle any violations, then resolve any overloads
-make_plan(NIs, Q, TN) ->
-    %% Make a list of all indices that violate target N
-    %% and allow other nodes to take them until they hit
-    %% the number they want.  Violating nodes should
-    %% give up to their violation count.
-    VExchs = violations(NIs, Q, TN),
-    NIs1 = take_idxs(VExchs, NIs, Q, TN),
-
-    %% Make a list of indices from overloaded nodes
-    OLExchs = overloads(NIs1),
-    FinalNIs = take_idxs(OLExchs, NIs1, Q, TN),
-
-    %% TODO: Add step to allow minor perturbations of the ring to improve
-    %% diversity
-    lists:sort(FinalNIs).
-
-%% @private
-%% Return a list of exchanges that resolves indices in violation
-violations(NIs, Q, TN) ->
-    NodeViolations = [{Node, indices_within_n(Idxs, Q, TN)} || {Node, _Want, Idxs} <- NIs],
-
-    VIdxs = ordsets:from_list(lists:flatten([CIdxs || {_, CIdxs} <- NodeViolations])),
-    [begin
-         Give = length(V),
-         Take = gt0(Want - length(Idxs)),
-         {Node, Give, Take, VIdxs} 
-     end || {Node, Want, Idxs} <- NIs, {Node1, V} <- NodeViolations, Node == Node1].
-
-%% @private
-%% Return a list of exchanges to fix overloads 
-overloads(NIs) ->
-    OLIdxs = ordsets:from_list(lists:flatten([Idxs || {_Node, Want, Idxs} <- NIs,
-                                                      length(Idxs) > Want])),
-    [begin
-         Give = gt0(length(Idxs) - Want),
-         Take = gt0(Want - length(Idxs)),
-         case Take of
-             0 ->
-                 {Node, Give, Take, []};
-             _ ->
-                 {Node, Give, Take, OLIdxs}
-         end
-     end || {Node, Want, Idxs} <- NIs].
-
-%% @private
-%% Given a list of Exchanges of the form [{Node, #Give, #Take, ClaimableIdxs}]
-%% randomly select from exchanges until there are no more nodes that wish to take
-%% indices that can.  Update the owned indexes in the provided NodeInfos 
-%% of the form [{Node, Want, OwnedIdxs]}
-%% 
-take_idxs(Exchanges, NIs, Q, TN) ->
-    %% work out globally unavailable indexes from nodes that do not wish
-    %% to give any indices- find OIdxs for all exchanges with give=0
-    GUIdxs = ordsets:from_list(
-               lists:flatten(
-                 [OIdxs || {Node, 0, _Take, _CIdxs} <- Exchanges,
-                           {Node1, _Want, OIdxs} <- NIs,
-                           Node == Node1])),
-    %% Remove any exchanges in GUIdxs or that would violate TN for the node 
-    Exchanges1 = [{Node, Give, Take, remove_unclaimable(CIdxs, GUIdxs, Node, NIs, Q, TN)} || 
-                     {Node, Give, Take, CIdxs} <- Exchanges],
-
-    %% Recursively take indices until all takes are satisfied
-    take_idxs0(Exchanges1, NIs, Q, TN).
-    
-take_idxs0(Exchanges, NIs, Q, TN) ->
-    %% Pick a recipient for a claimed index
-    case [{Node, CIdxs} || {Node, _Give, Take, CIdxs} <- Exchanges, Take > 0, CIdxs /= []] of
-        [] ->
-            NIs;
-        Takers ->
-            {TNode, TCIdxs} = random_el(Takers),
-            CIdx = random_el(TCIdxs),
-
-            %% Find the owner of CIdx and remove it from the giving node owned idxs in NIs
-            [ {GNode, GWant, GOIdxs} ] = [ T || {_Node, _GWant, GIdxs}=T <- NIs,
-                                                ordsets:is_element(CIdx, GIdxs) ],
-            NIs1 = lists:keyreplace(GNode, 1, NIs, 
-                                    {GNode, GWant, ordsets:del_element(CIdx, GOIdxs)}),
-
-            %% Add CIdx to owned indices in NIs
-            {TNode, TWant, TOIdxs} = lists:keyfind(TNode, 1, NIs1),
-            NIs2 = lists:keyreplace(TNode, 1, NIs1, 
-                                    {TNode, TWant, ordsets:add_element(CIdx, TOIdxs)}),
-
-            %% If the Give count is zero in the recipients it has given up all it is prepared
-            %% to, so remove all idxs owned by the give node from other claimable indices in
-            %% the recipients.
-            %% Also remove the indices within TN of CIdx from the TakeNode
-            {GNode, GGive, _GTake, _GCIdxs} = lists:keyfind(GNode, 1, Exchanges),
-
-            %% Update the recipients list, removing any nodes that have taken the 
-            %% number they requested from the recipients list, and removing the
-            %% indices owned by any nodes that have given all they wanted.
-
-            UIdxs = case GGive - 1 > 0 of % unclaimable indices
-                        true -> %% Still idxs to give, just remove claimed idx
-                            [CIdx];
-                        false ->
-                            GOIdxs
-                    end,
-            %% Indexes unclaiamble by the take node
-            TUIdxs = ordsets:union(UIdxs, 
-                                   ordsets:from_list(expand_idx(CIdx, Q, TN))),
-
-            Exchanges2 = lists:foldl(
-                            fun({Node, Give, Take, CIdxs}, Acc) when Node == TNode ->
-                                    [{TNode, Give, Take - 1, ordsets:subtract(CIdxs, TUIdxs)} | Acc];
-                               ({Node, Give, Take, CIdxs}, Acc) when Node == GNode ->
-                                    [{GNode, Give - 1, Take, ordsets:subtract(CIdxs, UIdxs)} | Acc];
-                               ({Node, Give, Take, CIdxs}, Acc) ->
-                                    [{Node, Give, Take, ordsets:subtract(CIdxs, UIdxs)} | Acc]
-                            end, [], Exchanges),
-            %% TODO: Consider removing reverse, not necessary for algorithm
-            take_idxs0(lists:reverse(Exchanges2), NIs2, Q, TN)
-    end.
-
-%% @private
-%% expand Idx by TN-1 in each direction
-expand_idx(Idx, Q, TN) ->
-    [X rem Q || X <- lists:seq(Q + Idx - (TN - 1), Q + Idx + TN - 1)].
-
-%% @private
-%% Remove unclaimable indexes from CIdxs that are in GUIdxs or within TN of indices
-%% owned by Node from CIdxs
-remove_unclaimable(CIdxs, GUIdxs, Node, NIs, Q, TN) ->
-    {_Node, _Want, OIdxs} = lists:keyfind(Node, 1, NIs),
-    NUIdxs = ordsets:from_list(
-               lists:flatten([ [(Q + Idx + Off) rem Q,
-                                (Q + Idx - Off) rem Q] || Idx <- OIdxs,
-                                                          Off <- lists:seq(1, TN - 1) ])),
-    ordsets:subtract(ordsets:subtract(CIdxs, NUIdxs), GUIdxs).
-
-%% @private 
-%% Return the value if greater than zero, otherwise zero
-gt0(I) when I > 0 ->
-    I;
-gt0(_) ->
-    0.
-
-%% @private 
-%% Pick a random element from the list
-random_el(L) ->
-    lists:nth(urand(length(L)), L).
-
-%% @private 
-%% Return a random number between Low, High inclusive
-%% Abstract away choice of random number generation
-urand(High) ->
-    urand(1, High).
-
-urand(Low, High) ->
-    Low + rand:uniform(High - Low + 1) - 1.
-
-%% @private
-%% return all the indices within TN of Indices
-indices_within_n([], _Q, _TN) ->
-    [];
-indices_within_n([_I], _Q, _TN) ->
-    [];
-indices_within_n(Indices, Q, TN) ->
-    indices_within_n(Indices, TN, lists:last(Indices), Q, []).
-
-indices_within_n([], _TN, _Last, _Q, Acc) ->
-    lists:usort(Acc);
-indices_within_n([This | Indices], TN, Last, Q, Acc) ->
-    Acc1 = case circular_distance(Last, This, Q) < TN of
-               true ->
-                   [Last, This| Acc];
-               false ->
-                   Acc
-           end,
-    indices_within_n(Indices, TN, This, Q, Acc1).
-
-%% @private
-%% Circular distance, indices start at 0
-%% Distance of 0, 1 == 1
-%% [a,b,c,a,b,c] - distance of a apart distance(0, 3) == 3
-circular_distance(I1, I2, Q) ->
-    min((Q + I1 - I2) rem Q, (Q + I2 - I1) rem Q).
 
 %% @private
 %% Get active nodes ordered by take location parameters into account
@@ -1298,6 +680,9 @@ get_nodes_by_location(Nodes, Ring) ->
 %% Unit tests
 %% ===================================================================
 -ifdef(TEST).
+-compile(export_all).
+
+-include_lib("eunit/include/eunit.hrl").
 
 wants_claim_test() ->
     riak_core_ring_manager:setup_ets(test),
@@ -1307,29 +692,6 @@ wants_claim_test() ->
     riak_core_ring_manager:cleanup_ets(test),
     riak_core_ring_manager:stop().
 
-find_biggest_hole_test() ->
-    Max = trunc(math:pow(2, 160)),
-    Part16 = Max/16,
-
-    %% single partition claimed
-    ?assertEqual({Part16*5, Part16*5},
-                 find_biggest_hole([Part16*5])),
-    
-    %% simple hole is in the middle
-    ?assertEqual({Part16*3, Part16*13},
-                 find_biggest_hole([Part16*3, Part16*13])),
-    %% complex hole in the middle
-    ?assertEqual({Part16*5, Part16*10},
-                 find_biggest_hole([Part16*3, Part16*5,
-                                    Part16*10, Part16*15])),
-    
-    %% simple hole is around the end
-    ?assertEqual({Part16*10, Part16*8},
-                 find_biggest_hole([Part16*8, Part16*10])),
-    %% complex hole is around the end
-    ?assertEqual({Part16*13, Part16*3},
-                 find_biggest_hole([Part16*3, Part16*7,
-                                    Part16*10, Part16*13])).
 
 %% @private console helper function to return node lists for claiming
 %% partitions
@@ -1358,6 +720,10 @@ has_violations(Diag) ->
 
 -ifdef(EQC).
 
+-export([prop_claim_ensures_unique_nodes/1, prop_wants/0, prop_wants_counts/0, eqc_check/2]).
+-include_lib("eqc/include/eqc.hrl").
+-include_lib("eunit/include/eunit.hrl").
+
 
 -define(QC_OUT(P),
         eqc:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
@@ -1375,87 +741,17 @@ test_nodes(Count) ->
 test_nodes(Count, StartNode) ->
     [list_to_atom(lists:concat(["n_", N])) || N <- lists:seq(StartNode, StartNode + Count)].
 
-claim_ensures_unique_nodes_v2_test_() ->
-    Prop = eqc:testing_time(30, ?QC_OUT(prop_claim_ensures_unique_nodes_v2())),
+property_claim_ensures_unique_nodes_v2_test_() ->
+    Prop = eqc:testing_time(30, ?QC_OUT(prop_claim_ensures_unique_nodes(choose_claim_v2))),
     {timeout, 120, fun() -> ?assert(eqc:quickcheck(Prop)) end}.
 
-claim_ensures_unique_nodes_adding_groups_v2_test_() ->
+property_claim_ensures_unique_nodes_adding_groups_v2_test_() ->
     Prop = eqc:testing_time(30, ?QC_OUT(prop_claim_ensures_unique_nodes_adding_groups(choose_claim_v2))),
     {timeout, 120, fun() -> ?assert(eqc:quickcheck(Prop)) end}.
 
-claim_ensures_unique_nodes_adding_singly_v2_test_() ->
+property_claim_ensures_unique_nodes_adding_singly_v2_test_() ->
     Prop = eqc:testing_time(30, ?QC_OUT(prop_claim_ensures_unique_nodes_adding_singly(choose_claim_v2))),
     {timeout, 120, fun() -> ?assert(eqc:quickcheck(Prop)) end}.
-
-%% Run few tests in eunit and more if needed by calling "./rebar3 eqc"
-% claim_ensures_unique_nodes_v3_test_() ->
-%     Prop = eqc:numtests(5, ?QC_OUT(prop_claim_ensures_unique_nodes_old(choose_claim_v3))),
-%     {timeout, 240, fun() -> ?assert(eqc:quickcheck(Prop)) end}.
-
-prop_claim_ensures_unique_nodes_v2() ->
-    prop_claim_ensures_unique_nodes(choose_claim_v2).
-
-%% No longer test properties of claim_v3.
-%% Although claim_v3 continues to exist as a hidden configuration option, it
-%% is known to fail to meet the required properties, and claim_v2 should be
-%% used in all known circumstances.
-%%
-%% TODO : Remove claim_v3 from the code base
-%%
-%% This TODO is currently deferred due to the difficulty of understanding
-%% how to test the full possibility of cluster change scenarios.  Perhaps
-%% there may be circumstances where a probabilistic approach to planning
-%% cluster changes may still be beneficial
-%%
-% prop_claim_ensures_unique_nodes_v3() ->
-%    prop_claim_ensures_unique_nodes(choose_claim_v3).
-
-%% NOTE: this is a less than adequate test that has been re-instated
-%% so that we don't leave the code worse than we found it. Work that
-%% fixed claim_v2's tail violations and vnode balance issues did not
-%% fix the same for v3, but the test that v3 ran had been updated for
-%% those fixes, leaving a failing v3 test. This test is the original
-%% test re-instated to pass.
-prop_claim_ensures_unique_nodes_old(ChooseFun) ->
-    %% NOTE: We know that this doesn't work for the case of {_, 3}.
-    ?FORALL({PartsPow, NodeCount}, {choose(4,9), choose(4,15)}, %{choose(4, 9), choose(4, 15)},
-            begin
-                Nval = 3,
-                TNval = Nval + 1,
-                Params = [{target_n_val, TNval}],
-
-                Partitions = ?POW_2(PartsPow),
-                [Node0 | RestNodes] = test_nodes(NodeCount),
-
-                R0 = riak_core_ring:fresh(Partitions, Node0),
-                Rfinal = lists:foldl(fun(Node, Racc) ->
-                                             Racc0 = riak_core_ring:add_member(Node0, Racc, Node),
-                                             ?MODULE:ChooseFun(Racc0, Node, Params)
-                                     end, R0, RestNodes),
-
-                Preflists = riak_core_ring:all_preflists(Rfinal, Nval),
-                Counts = orddict:to_list(
-                           lists:foldl(fun(PL,Acc) ->
-                                               PLNodes = lists:usort([N || {_,N} <- PL]),
-                                               case length(PLNodes) of
-                                                   Nval ->
-                                                       Acc;
-                                                   _ ->
-                                                       ordsets:add_element(PL, Acc)
-                                               end
-                                       end, [], Preflists)),
-                ?WHENFAIL(
-                   begin
-                       io:format(user, "{Partitions, Nodes} {~p, ~p}~n",
-                                 [Partitions, NodeCount]),
-                       io:format(user, "Owners: ~p~n",
-                                 [riak_core_ring:all_owners(Rfinal)])
-                   end,
-                   conjunction([{meets_target_n,
-                                 equals({true,[]},
-                                        meets_target_n(Rfinal, TNval))},
-                                {unique_nodes, equals([], Counts)}]))
-            end).
 
 prop_claim_ensures_unique_nodes(ChooseFun) ->
     %% NOTE: We know that this doesn't work for the case of {_, 3}.
@@ -1504,10 +800,6 @@ prop_claim_ensures_unique_nodes(ChooseFun) ->
                                 {balanced_ring, balanced_ring(Partitions, NodeCount, Rfinal)}]))
             end).
 
-%% @TODO this fails, we didn't fix v3
-%% prop_claim_ensures_unique_nodes_adding_groups_v3_test_() ->
-%%     Prop = eqc:numtests(5, ?QC_OUT(prop_claim_ensures_unique_nodes(choose_claim_v3))),
-%%     {timeout, 240, fun() -> ?assert(eqc:quickcheck(Prop)) end}.
 
 prop_claim_ensures_unique_nodes_adding_groups(ChooseFun) ->
     %% NOTE: We know that this doesn't work for the case of {_, 3}.
@@ -1566,11 +858,6 @@ prop_claim_ensures_unique_nodes_adding_groups(ChooseFun) ->
                                 {balanced_ring, balanced_ring(Partitions, NodeCount, Rfinal)}]))
             end).
 
-
-%% @TODO take this out (and add issue/comment in commit) not fixed
-%% prop_claim_ensures_unique_nodes_adding_singly_v3_test_() ->
-%%     Prop = eqc:testing_time(30, ?QC_OUT(prop_claim_ensures_unique_nodes_adding_singly(choose_claim_v3))),
-%%     {timeout, 240, fun() -> ?assert(eqc:quickcheck(Prop)) end}.
 
 prop_claim_ensures_unique_nodes_adding_singly(ChooseFun) ->
     %% NOTE: We know that this doesn't work for the case of {_, 3}.
@@ -1659,6 +946,9 @@ prop_wants_counts() ->
                              {sum, equals(Q, lists:sum(Wants))}])
             end).
 
+wants_test() ->
+    ?assert(eqc:quickcheck(?QC_OUT((prop_wants())))).
+
 prop_wants() ->
     ?FORALL({NodeStatus, Q},
             {?SUCHTHAT(L, non_empty(list(elements([leaving, joining]))),
@@ -1703,6 +993,9 @@ prop_wants() ->
 %% Large positive integer between 1 and Max
 large_pos(Max) ->
     ?LET(X, largeint(), 1 + (abs(X) rem Max)).
+
+take_idxs_test() ->
+    ?assert(eqc:quickcheck(?QC_OUT((prop_take_idxs())))).
 
 prop_take_idxs() ->
     ?FORALL({OwnersSeed, CIdxsSeed, ExchangesSeed, TNSeed},

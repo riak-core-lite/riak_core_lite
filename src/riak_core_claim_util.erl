@@ -34,7 +34,6 @@
          rotations/1, substitutions/2]).
 -ifdef(TEST).
 -ifdef(EQC).
--export([prop_adjacency_summary/0]).
 -include_lib("eqc/include/eqc.hrl").
 -endif.
 -include_lib("eunit/include/eunit.hrl").
@@ -451,7 +450,7 @@ construct(Complete, M, Owners, DAM, NVal) ->
             case Eligible of
                 [] ->
                     %% No eligible nodes - not enough to meet NVal, use any node
-                    lager:debug("construct -- unable to construct without violating NVal"),
+                    logger:debug("construct -- unable to construct without violating NVal"),
                     {Owners1, DAM1} = prepend_next_owner(M, M, Owners, DAM, NVal),
                     construct(Complete, M, Owners1, DAM1, NVal);
                 _ ->
@@ -610,6 +609,9 @@ substitute(Names, Mapping, L) ->
 
 -ifdef(TEST).
 -ifdef(EQC).
+
+property_adjacency_summary_test_() ->
+    {timeout, 60, ?_test(eqc:quickcheck(eqc:testing_time(30, prop_adjacency_summary())))}.
 
 longer_list(K, G) ->
     ?SIZED(Size, resize(trunc(K*Size), list(resize(Size, G)))).

@@ -66,6 +66,32 @@
           split :: dict()
         }).
 
+eqc_test_() ->
+    {spawn,
+     [{setup,
+       fun setup/0,
+       fun cleanup/1,
+       [{inorder,
+         [manual_test_list(),
+          %% Run the quickcheck tests
+          {timeout, 60000, % timeout is in msec
+           ?_assertEqual(true, catch quickcheck(numtests(?TEST_ITERATIONS, ?QC_OUT(prop_join()))))}
+         ]}
+       ]
+      }
+     ]
+    }.
+
+eqc() ->
+    quickcheck(numtests(?TEST_ITERATIONS, ?QC_OUT(prop_join()))),
+    ok.
+
+setup() ->
+    ok.
+
+cleanup(_) ->
+    ok.
+
 prop_join() ->
     ?FORALL(Cmds, more_commands(100, commands(?MODULE)),
            ?TRAPEXIT(
@@ -1360,19 +1386,19 @@ ring_ready(CState0) ->
     end.
 
 seed_random(State) ->
-    OldSeed = rand:seed(State#state.seed),
+    OldSeed = random:seed(State#state.seed),
     State#state{old_seed=OldSeed}.
 
 save_random(State=#state{old_seed=undefined}) ->
-    Seed = rand:seed(),
+    Seed = random:seed(),
     State#state{seed=Seed};
 save_random(State=#state{old_seed=OldSeed}) ->
-    Seed = rand:seed(OldSeed),
+    Seed = random:seed(OldSeed),
     State#state{seed=Seed}.
 
 save_random() ->
-    Seed = rand:seed(),
-    rand:seed(Seed),
+    Seed = random:seed(),
+    random:seed(Seed),
     Seed.
 
 ring_changed(State, _RRing, {Node, _NState}, CState0) ->
@@ -1594,7 +1620,7 @@ handle_down_nodes(CState, Next) ->
                  case (OwnerLeaving and NextDown) of
                      true ->
                          Active = riak_core_ring:active_members(CState) -- [O],
-                         RNode = lists:nth(rand:uniform(length(Active)),
+                         RNode = lists:nth(random:uniform(length(Active)),
                                            Active),
                          {Idx, O, RNode, Mods, Status};
                      _ ->
@@ -1607,14 +1633,14 @@ handle_down_nodes(CState, Next) ->
     Next3.
 
 claim_until_balanced(Ring, Node) ->
-    %%{WMod, WFun} = app_helper:get_env(riak_core, wants_claim_fun),
+    %%{WMod, WFun} = application:get_env(riak_core, wants_claim_fun, undefined),
     {WMod, WFun} = {riak_core_claim, default_wants_claim},
     NeedsIndexes = apply(WMod, WFun, [Ring, Node]),
     case NeedsIndexes of
         no ->
             Ring;
         {yes, _NumToClaim} ->
-            %%{CMod, CFun} = app_helper:get_env(riak_core, choose_claim_fun),
+            %%{CMod, CFun} = application:get_env(riak_core, choose_claim_fun, undefined),
             {CMod, CFun} = {riak_core_claim, default_choose_claim},
             NewRing = CMod:CFun(Ring, Node),
             claim_until_balanced(NewRing, Node)
@@ -1688,7 +1714,7 @@ remove_from_cluster(Ring, ExitingNode) ->
     ExitRing.
 
 attempt_simple_transfer(Ring, Owners, ExitingNode) ->
-    %%TargetN = app_helper:get_env(riak_core, target_n_val),
+    %%TargetN = application:get_env(riak_core, target_n_val, undefined),
     TargetN = 3,
     attempt_simple_transfer(Ring, Owners,
                             TargetN,
@@ -1717,7 +1743,7 @@ attempt_simple_transfer(Ring, [{P, Exit}|Rest], TargetN, Exit, Idx, Last) ->
                     target_n_fail;
                 Qualifiers ->
                     %% these nodes don't violate target_n forward
-                    Chosen = lists:nth(rand:uniform(length(Qualifiers)),
+                    Chosen = lists:nth(random:uniform(length(Qualifiers)),
                                        Qualifiers),
                     %% choose one, and do the rest of the ring
                     attempt_simple_transfer(

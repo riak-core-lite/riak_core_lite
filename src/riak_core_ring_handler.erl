@@ -12,7 +12,7 @@
 %% specific language governing permissions and limitations
 %% under the License.
 
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.  All Rights Reserved.
 
 -module(riak_core_ring_handler).
 -behaviour(gen_event).

@@ -20,11 +20,11 @@
 %%
 %% -------------------------------------------------------------------
 -module(riak_core).
--export([stop/0, stop/1, join/1, join/5, staged_join/1, remove/1, down/1,
+-export([stop/0, stop/1, join/1, join/4, staged_join/1, remove/1, down/1,
          leave/0, remove_from_cluster/1]).
 -export([vnode_modules/0, health_check/1]).
 -export([register/1, register/2, bucket_fixups/0, bucket_validators/0]).
--export([stat_mods/0]).
+-export([stat_mods/0, stat_prefix/0]).
 
 -export([add_guarded_event_handler/3, add_guarded_event_handler/4]).
 -export([delete_guarded_event_handler/3]).
@@ -40,7 +40,7 @@ stop() -> stop("riak stop requested").
 
 -ifdef(TEST).
 stop(Reason) ->
-    lager:notice("~p", [Reason]),
+    logger:notice("~p", [Reason]),
     % if we're in test mode, we don't want to halt the node, so instead
     % we just stop the application.
     application:stop(riak_core).
@@ -48,7 +48,7 @@ stop(Reason) ->
 stop(Reason) ->
     % we never do an application:stop because that makes it very hard
     %  to really halt the runtime, which is what we need here.
-    lager:notice("~p", [Reason]),
+    logger:notice("~p", [Reason]),
     init:stop().
 -endif.
 
@@ -72,9 +72,9 @@ join(Node, Auto) when is_atom(Node) ->
 join(Node, Node, _) ->
     {error, self_join};
 join(_, Node, Auto) ->
-    join(false, node(), Node, false, Auto).
+    join(node(), Node, false, Auto).
 
-join(false, _, Node, Rejoin, Auto) ->
+join(_, Node, Rejoin, Auto) ->
     case net_adm:ping(Node) of
         pang ->
             {error, not_reachable};
@@ -83,29 +83,14 @@ join(false, _, Node, Rejoin, Auto) ->
     end.
 
 get_other_ring(Node) ->
-    case riak_core_util:safe_rpc(Node, riak_core_ring_manager, get_my_ring, []) of
-        {ok, Ring} ->
-            case riak_core_ring:legacy_ring(Ring) of
-                true ->
-                    {ok, Ring};
-                false ->
-                    riak_core_util:safe_rpc(Node, riak_core_ring_manager, get_raw_ring, [])
-            end;
-        Error ->
-            Error
-    end.
+    riak_core_util:safe_rpc(Node, riak_core_ring_manager, get_raw_ring, []).
 
 standard_join(Node, Rejoin, Auto) when is_atom(Node) ->
     case net_adm:ping(Node) of
         pong ->
             case get_other_ring(Node) of
                 {ok, Ring} ->
-                    case riak_core_ring:legacy_ring(Ring) of
-                        true ->
-                            legacy_join(Node);
-                        false ->
-                            standard_join(Node, Ring, Rejoin, Auto)
-                    end;
+                    standard_join(Node, Ring, Rejoin, Auto);
                 _ ->
                     {error, unable_to_get_join_ring}
             end;
@@ -139,7 +124,6 @@ standard_join(Node, Ring, Rejoin, Auto) ->
         {_, _, false} ->
             {error, different_ring_sizes};
         _ ->
-            GossipVsn = riak_core_gossip:gossip_version(),
             Ring2 = riak_core_ring:add_member(node(), Ring,
                                               node()),
             Ring3 = riak_core_ring:set_owner(Ring2, node()),
@@ -148,14 +132,8 @@ standard_join(Node, Ring, Rejoin, Auto) ->
                                                   Ring3,
                                                   node(),
                                                   gossip_vsn,
-                                                  GossipVsn),
-            ParticipateInCoverage = app_helper:get_env(riak_core,participate_in_coverage),
-            Ring4a =
-                riak_core_ring:update_member_meta(node(),
-                                                  Ring4,
-                                                  node(),
-                                                  participate_in_coverage, ParticipateInCoverage),
-            {_, Ring5} = riak_core_capability:update_ring(Ring4a),
+                                                  2),
+            Ring5 = Ring4,
             Ring6 = maybe_auto_join(Auto, node(), Ring5),
             riak_core_ring_manager:set_my_ring(Ring6),
             riak_core_gossip:send_ring(Node, node())
@@ -165,25 +143,6 @@ maybe_auto_join(false, _Node, Ring) ->
     Ring;
 maybe_auto_join(true, Node, Ring) ->
     riak_core_ring:update_member_meta(Node, Ring, Node, '$autojoin', true).
-
-legacy_join(Node) when is_atom(Node) ->
-    {ok, OurRingSize} = application:get_env(riak_core, ring_creation_size),
-    case net_adm:ping(Node) of
-        pong ->
-            case riak_core_util:safe_rpc(Node,
-                          application,
-                          get_env,
-                          [riak_core, ring_creation_size]) of
-                {ok, OurRingSize} ->
-                    riak_core_gossip:send_ring(Node, node());
-                {badrpc, rpc_process_down} ->
-                    {error, not_reachable};
-                _ ->
-                    {error, different_ring_sizes}
-            end;
-        pang ->
-            {error, not_reachable}
-    end.
 
 remove(Node) ->
     {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
@@ -207,8 +166,6 @@ standard_remove(Node) ->
     ok.
 
 down(Node) ->
-    down(false, Node).
-down(false, Node) ->
     {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
     case net_adm:ping(Node) of
         pong ->
@@ -259,7 +216,6 @@ standard_leave(Node) ->
 %%      by other nodes.
 remove_from_cluster(ExitingNode) when is_atom(ExitingNode) ->
     remove(ExitingNode).
-
 
 vnode_modules() ->
     case application:get_env(riak_core, vnode_modules) of
@@ -345,16 +301,6 @@ register(App, [{permissions, Permissions}|T]) ->
     register(App, T);
 register(App, [{auth_mod, {AuthType, AuthMod}}|T]) ->
     register_proplist({AuthType, AuthMod}, auth_mods),
-    register(App, T);
-register(App,
-            [{node_worker_pool,
-                {WorkerMod, PoolSize, WArgs, WProps, node_worker_pool}}|T]) ->
-    register_pool(App, WorkerMod, PoolSize, WArgs, WProps, node_worker_pool),
-    register(App, T);
-register(App,
-            [{dscp_worker_pool,
-                {WorkerMod, PoolSize, WArgs, WProps, PoolType}}|T]) ->
-    register_pool(App, WorkerMod, PoolSize, WArgs, WProps, PoolType),
     register(App, T).
 
 register_mod(App, Module, Type) when is_atom(Type) ->
@@ -362,7 +308,10 @@ register_mod(App, Module, Type) when is_atom(Type) ->
         vnode_modules ->
             riak_core_vnode_proxy_sup:start_proxies(Module);
         stat_mods ->
-            riak_core_stats_sup:start_server(Module);
+            %% STATS
+%%            riak_core_stats_sup:start_server(Module);
+            logger:warning("Metric collection disabled"),
+            ok;
         _ ->
             ok
     end,
@@ -373,13 +322,6 @@ register_mod(App, Module, Type) when is_atom(Type) ->
             application:set_env(riak_core, Type,
                 lists:usort([{App,Module}|Mods]))
     end.
-
-register_pool(_App, WorkerMod, PoolSize, WorkerArgs, WorkerProps, PoolType) ->
-    ok = riak_core_node_worker_pool_sup:start_pool(WorkerMod,
-                                                   PoolSize,
-                                                   WorkerArgs,
-                                                   WorkerProps,
-                                                   PoolType).
 
 register_metadata(App, Value, Type) ->
     case application:get_env(riak_core, Type) of
@@ -464,13 +406,13 @@ wait_for_application(App, Elapsed) ->
         true when Elapsed == 0 ->
             ok;
         true when Elapsed > 0 ->
-            lager:info("Wait complete for application ~p (~p seconds)", [App, Elapsed div 1000]),
+            logger:info("Wait complete for application ~p (~p seconds)", [App, Elapsed div 1000]),
             ok;
         false ->
             %% Possibly print a notice.
             ShouldPrint = Elapsed rem ?WAIT_PRINT_INTERVAL == 0,
             case ShouldPrint of
-                true -> lager:info("Waiting for application ~p to start (~p seconds).", [App, Elapsed div 1000]);
+                true -> logger:info("Waiting for application ~p to start (~p seconds).", [App, Elapsed div 1000]);
                 false -> skip
             end,
             timer:sleep(?WAIT_POLL_INTERVAL),
@@ -484,15 +426,18 @@ wait_for_service(Service, Elapsed) ->
         true when Elapsed == 0 ->
             ok;
         true when Elapsed > 0 ->
-            lager:info("Wait complete for service ~p (~p seconds)", [Service, Elapsed div 1000]),
+            logger:info("Wait complete for service ~p (~p seconds)", [Service, Elapsed div 1000]),
             ok;
         false ->
             %% Possibly print a notice.
             ShouldPrint = Elapsed rem ?WAIT_PRINT_INTERVAL == 0,
             case ShouldPrint of
-                true -> lager:info("Waiting for service ~p to start (~p seconds)", [Service, Elapsed div 1000]);
+                true -> logger:info("Waiting for service ~p to start (~p seconds)", [Service, Elapsed div 1000]);
                 false -> skip
             end,
             timer:sleep(?WAIT_POLL_INTERVAL),
             wait_for_service(Service, Elapsed + ?WAIT_POLL_INTERVAL)
     end.
+
+stat_prefix() ->
+    application:get_env(riak_core, stat_prefix, riak).

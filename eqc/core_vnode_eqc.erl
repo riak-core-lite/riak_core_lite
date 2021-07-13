@@ -27,8 +27,8 @@
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_fsm.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("include/riak_core_vnode.hrl").
--compile([export_all, nowarn_export_all]).
+-include_lib("riak_core/include/riak_core_vnode.hrl").
+-compile([export_all]).
 
 -define(POST_COND(PC, ErrTuple),
         case PC of
@@ -48,10 +48,27 @@
                async_size = 0,
                async_work=[]}). % {Index, AsyncRef} async work submitted to each vnode
 
+simple_test_() ->
+    {setup,
+     fun setup_simple/0,
+     fun(OldVars) ->
+         riak_core_test_util:unlink_named_process(riak_core_ring_manager),
+         riak_core_ring_manager:stop(),
+         riak_core_test_util:stop_pid(riak_core_ring_events),
+         application:stop(goldrush),
+         [ok = application:set_env(riak_core, K, V) || {K,V} <- OldVars],
+         ok
+     end,
+     {timeout, 600,
+      ?_assertEqual(true, quickcheck(?QC_OUT(numtests(100, prop_simple()))))}}.
+
 setup_simple() ->
-    error_logger:tty(false),
-    application:set_env(sasl, sasl_error_logger, {file, "core_vnode_eqc_sasl.log"}),
-    error_logger:logfile({open, "core_vnode_eqc.log"}),
+    %% call `meck:unload' here because there are other tests that have
+    %% meck'ed things we use, and they an break us if eunit doesn't tear
+    %% them down fast enough.
+    meck:unload(),
+    %error_logger:tty(false),
+    %error_logger:logfile({open, "core_vnode_eqc.log"}),
 
     Vars = [{ring_creation_size, 8},
             {ring_state_dir, "<nostore>"},
@@ -60,26 +77,30 @@ setup_simple() ->
             %% race condition with `all_nodes'.
             {vnode_rolling_start, 0}],
     OldVars = [begin
-                   Old = app_helper:get_env(riak_core, AppKey),
+                   Old = application:get_env(riak_core, AppKey, undefined),
                    ok = application:set_env(riak_core, AppKey, Val),
                    {AppKey, Old}
                end || {AppKey, Val} <- Vars],
-    exometer:start(),
     riak_core_ring_events:start_link(),
     riak_core_ring_manager:start_link(test),
     riak_core_vnode_proxy_sup:start_link(),
     riak_core:register([{vnode_module, mock_vnode}]),
+    OldVars.
+
+test(N) ->
+    quickcheck(numtests(N, prop_simple())).
+
+eqc_setup() ->
+    OldVars = setup_simple(),
     fun() ->
             riak_core_ring_manager:stop(),
-            application:stop(exometer),
-            application:stop(lager),
             application:stop(goldrush),
             [ok = application:set_env(riak_core, K, V) || {K,V} <- OldVars],
             ok
     end.
 
 prop_simple() ->
-    ?SETUP(fun setup_simple/0,
+    ?SETUP(fun eqc_setup/0,
            ?FORALL(Cmds, commands(?MODULE, {setup, initial_state_data()}),
                    aggregate(command_names(Cmds),
                              begin
@@ -102,8 +123,7 @@ prop_simple() ->
                                                   equals(lists:sort(async_work(S#qcst.asyncdone_pid)),
                                                          lists:sort(filter_work(S#qcst.async_work,
                                                                                 S#qcst.asyncdone_pid)))}]))
-                             end))
-          ).
+                             end))).
 
 active_index(#qcst{started=Started}) ->
     elements(Started).
@@ -182,14 +202,14 @@ next_state_data(_From,_To,S=#qcst{counters=Counters,
   when Func =:= asyncnoreply; Func =:= asyncreply; Func =:= asynccrash ->
     NewWork = [{Idx, R} || {Idx, _N} <- Preflist],
     S2=S#qcst{async_work=Work ++ NewWork,
-           counters=lists:foldl(fun({I, _N}, C) ->
-                                        orddict:update_counter(I, 1, C)
-                                end, Counters, Preflist)},
+              counters=lists:foldl(fun({I, _N}, C) ->
+                                           orddict:update_counter(I, 1, C)
+                                   end, Counters, Preflist)},
     %% io:format(user, "S2=~p\n", [S2]),
     S2;
 next_state_data(_From,_To,S,_R,_C) ->
     S.
-%
+                                                %
 
 setup(S) ->
     [{setup,   {call,?MODULE,enable_async,[gen_async_pool()]}},
@@ -345,9 +365,9 @@ start_servers() ->
 stop_servers() ->
     %% Make sure VMaster is killed before sup as start_vnode is a cast
     %% and there may be a pending request to start the vnode.
-    stop_pid(whereis(mock_vnode_master)),
-    stop_pid(whereis(riak_core_vnode_manager)),
-    stop_pid(whereis(riak_core_vnode_sup)).
+    riak_core_test_util:stop_pid(mock_vnode_master),
+    riak_core_test_util:stop_pid(riak_core_vnode_manager),
+    riak_core_test_util:stop_pid(riak_core_vnode_sup).
 
 restart_master() ->
     %% Call get status to make sure the riak_core_vnode_master
@@ -355,25 +375,8 @@ restart_master() ->
     %% commands like neverreply are not cast on to the vnode and the
     %% counters are not updated correctly.
     sys:get_status(mock_vnode_master),
-    stop_pid(whereis(mock_vnode_master)),
+    riak_core_test_util:stop_pid(mock_vnode_master),
     {ok, _VMaster} = riak_core_vnode_master:start_link(mock_vnode).
-
-stop_pid(undefined) ->
-    ok;
-stop_pid(Pid) ->
-    unlink(Pid),
-    exit(Pid, kill), %% Don't wait for graceful shutdown
-    ok = wait_for_pid(Pid).
-
-wait_for_pid(Pid) ->
-    Mref = erlang:monitor(process, Pid),
-    receive
-        {'DOWN',Mref,process,_,_} ->
-            ok
-    after
-        5000 ->
-            {error, didnotexit}
-    end.
 
 %% Async work collector process - collect all messages until work requested
 async_work_proc(AsyncWork, Crashes) ->
@@ -395,10 +398,10 @@ async_work_proc(AsyncWork, Crashes) ->
 
 %% Request async work completed
 async_work(undefined) ->
-%%    io:format(user, "Did not get as far as setting up async worker\n", []),
+    %%    io:format(user, "Did not get as far as setting up async worker\n", []),
     [];
 async_work(Pid) ->
-%%    io:format(user, "Getting async work from ~p\n", [Pid]),
+    %%    io:format(user, "Getting async work from ~p\n", [Pid]),
     Pid ! {get, self()},
     receive
         {work, Work} ->
@@ -410,10 +413,10 @@ async_work(Pid) ->
 
 %% Request async work crashes
 async_crashes(undefined) ->
-%%    io:format(user, "Did not get as far as setting up async worker\n", []),
+    %%    io:format(user, "Did not get as far as setting up async worker\n", []),
     [];
 async_crashes(Pid) ->
-%%    io:format(user, "Getting async crashes from ~p\n", [Pid]),
+    %%    io:format(user, "Getting async crashes from ~p\n", [Pid]),
     Pid ! {crashes, self()},
     receive
         {crashes, Crashes} ->
@@ -435,15 +438,15 @@ filter_work(Work, Pid) ->
             exit(Pid, kill)
     end,
     lists:filter(fun({_Index, {_Reply, Tag}}=WorkItem) ->
-                case lists:member(Tag, CrashRefs) of
-                    true ->
-                        %% this isn't quite straightforward as a request can
-                        %% apparently go to multiple vnodes. We have to make
-                        %% sure we're only removing crashes from vnodes that
-                        %% didn't reply
-                        lists:member(WorkItem, CompletedWork);
-                    _ -> true
-                end
-        end, Work).
+                         case lists:member(Tag, CrashRefs) of
+                             true ->
+                                 %% this isn't quite straightforward as a request can
+                                 %% apparently go to multiple vnodes. We have to make
+                                 %% sure we're only removing crashes from vnodes that
+                                 %% didn't reply
+                                 lists:member(WorkItem, CompletedWork);
+                             _ -> true
+                         end
+                 end, Work).
 
 -endif.

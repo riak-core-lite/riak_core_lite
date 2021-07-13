@@ -20,37 +20,24 @@
 
 -behaviour(gen_server).
 
--compile({nowarn_deprecated_function, 
-            [{gen_fsm, send_all_state_event, 2}]}).
-
 -include("riak_core_vnode.hrl").
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
         code_change/3]).
 -export([start_link/1, handle_work/3, handle_work/4]).
 
--ifdef(PULSE).
--compile(export_all).
--compile({parse_transform, pulse_instrument}).
--compile({pulse_replace_module, [{gen_fsm, pulse_gen_fsm},
-                                 {gen_server, pulse_gen_server}]}).
--endif.
+-type mod_state() :: term().
 
 -record(state, {
         module :: atom(),
-        modstate :: any()
+        modstate :: mod_state()
     }).
 
--callback init_worker(VnodeIDx :: partition(),
-                        Args :: list(any()),
-                        Props :: list(tuple())) ->
-                            {ok, WorkerState :: any()}.
-
--callback handle_work(Work :: any(),
-                        From :: sender(),
-                        WorkerState :: any()) ->
-                            {noreply, UpdWorkerState :: any()} |
-                            {reply, Reply :: any(), UpdWorkerState :: any()}.
+-callback init_worker(partition(), Args :: term(), Props :: [{atom(), term()}]) ->
+    {ok, mod_state()}.
+-callback handle_work(Work :: term(), sender(), mod_state()) ->
+    {reply, Reply :: term(), mod_state()} |
+    {noreply, mod_state()}.
 
 start_link(Args) ->
     WorkerMod = proplists:get_value(worker_callback_mod, Args),
@@ -66,11 +53,11 @@ handle_work(Worker, Work, From, Caller) ->
 init([Module, VNodeIndex, WorkerArgs, WorkerProps, Caller]) ->
     {ok, WorkerState} = Module:init_worker(VNodeIndex, WorkerArgs, WorkerProps),
     %% let the pool queue manager know there might be a worker to checkout
-    gen_fsm:send_all_state_event(Caller, worker_start),
+    riak_core_vnode_worker_pool:worker_started(Caller),
     {ok, #state{module=Module, modstate=WorkerState}}.
 
 handle_call(Event, _From, State) ->
-    lager:debug("Vnode worker received synchronous event: ~p.", [Event]),
+    logger:debug("Vnode worker received synchronous event: ~p.", [Event]),
     {reply, ok, State}.
 
 handle_cast({work, Work, WorkFrom, Caller},
@@ -83,17 +70,12 @@ handle_cast({work, Work, WorkFrom, Caller},
             NS
     end,
     %% check the worker back into the pool
-    gen_fsm:send_all_state_event(Caller, {checkin, self()}),
+    riak_core_vnode_worker_pool:checkin_worker(Caller, self()),
     {noreply, State#state{modstate=NewModState}};
-handle_cast(_Event, State) ->
-    {noreply, State}.
 
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_cast(_Event, State) -> {noreply, State}.
 
-terminate(_Reason, _State) ->
-    ok.
 
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
+handle_info(_Info, State) -> {noreply, State}.
+terminate(_Reason, _State) -> ok.
+code_change(_OldVsn, State, _Extra) -> {ok, State}.

@@ -22,13 +22,10 @@
 -behaviour(supervisor).
 
 %% beahvior functions
--export([start_link/0,
-         init/1
-        ]).
+-export([start_link/0, init/1]).
 
 %% public functions
--export([start_receiver/1
-        ]).
+-export([start_receiver/0]).
 
 -define(CHILD(I,Type), {I,{I,start_link,[]},temporary,brutal_kill,Type,[I]}).
 
@@ -43,5 +40,5 @@ init ([]) ->
          ]}}.
 
 %% start a sender process
-start_receiver (SSLOpts) ->
-    supervisor:start_child(?MODULE,[SSLOpts]).
+start_receiver () ->
+    supervisor:start_child(?MODULE,[]).

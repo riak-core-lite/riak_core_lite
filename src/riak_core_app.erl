@@ -32,86 +32,43 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    %% Don't add our system_monitor event handler here.  Instead, let
-    %% riak_core_sysmon_minder start it, because that process can act
-    %% on any handler crash notification, whereas we cannot.
+    ok = validate_ring_state_directory_exists(),
 
-    case application:get_env(riak_core, delayed_start) of
-        {ok, Delay} ->
-            lager:info("Delaying riak_core startup as requested"),
-            timer:sleep(Delay);
-        _ ->
-            ok
-    end,
+    start_riak_core_sup().
 
-    %% Validate that the ring state directory exists
+stop(_State) ->
+    logger:info("Stopped application riak_core", []),
+    ok.
+
+validate_ring_state_directory_exists() ->
     riak_core_util:start_app_deps(riak_core),
-    RingStateDir = app_helper:get_env(riak_core, ring_state_dir),
+    {ok, RingStateDir} = application:get_env(riak_core, ring_state_dir),
     case filelib:ensure_dir(filename:join(RingStateDir, "dummy")) of
         ok ->
             ok;
         {error, RingReason} ->
-            lager:critical(
-              "Ring state directory ~p does not exist, "
-              "and could not be created: ~p",
-              [RingStateDir, lager:posix_error(RingReason)]),
+            logger:critical(
+              "Ring state directory ~p does not exist, " "and could not be created: ~p",
+              [RingStateDir, riak_core_util:posix_error(RingReason)]),
             throw({error, invalid_ring_state_dir})
-    end,
+    end.
 
-    %% Register our cluster_info app callback modules, with catch if
-    %% the app is missing or packaging is broken.
-    catch cluster_info:register_app(riak_core_cinfo_core),
 
-    %% add these defaults now to supplement the set that may have been
-    %% configured in app.config
-    riak_core_bucket:append_bucket_defaults(riak_core_bucket_type:defaults(default_type)),
-
+start_riak_core_sup() ->
     %% Spin up the supervisor; prune ring files as necessary
     case riak_core_sup:start_link() of
         {ok, Pid} ->
-            riak_core:register(riak_core, [{stat_mod, riak_core_stat},
-                                           {permissions, [get_bucket,
-                                                          set_bucket,
-                                                          get_bucket_type,
-                                                          set_bucket_type]}]),
-            ok = riak_core_ring_events:add_guarded_handler(riak_core_ring_handler, []),
-
-            riak_core_capability:register({riak_core, vnode_routing},
-                                          [proxy, legacy],
-                                          legacy,
-                                          {riak_core,
-                                           legacy_vnode_routing,
-                                           [{true, legacy}, {false, proxy}]}),
-            riak_core_capability:register({riak_core, staged_joins},
-                                          [true, false],
-                                          false),
-            riak_core_capability:register({riak_core, resizable_ring},
-                                          [true, false],
-                                          false),
-            riak_core_capability:register({riak_core, fold_req_version},
-                                          [v2, v1],
-                                          v1),
-            riak_core_capability:register({riak_core, security},
-                                          [true, false],
-                                          false),
-            riak_core_capability:register({riak_core, bucket_types},
-                                          [true, false],
-                                          false),
-            riak_core_capability:register({riak_core, net_ticktime},
-                                          [true, false],
-                                          false),
-
-            riak_core_cli_registry:load_schema(),
-            riak_core_cli_registry:register_node_finder(),
-            riak_core_cli_registry:register_cli(),
-
-            riak_core_throttle:init(),
+            ok = register_applications(),
+            ok = add_ring_event_handler(),
 
             {ok, Pid};
         {error, Reason} ->
             {error, Reason}
     end.
 
-stop(_State) ->
-    lager:info("Stopped  application riak_core.\n", []),
+register_applications() ->
     ok.
+
+add_ring_event_handler() ->
+    ok = riak_core_ring_events:add_guarded_handler(riak_core_ring_handler, []).
+

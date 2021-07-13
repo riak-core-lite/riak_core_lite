@@ -36,7 +36,7 @@ merge(Overriding, Other) ->
 
 
 -spec validate(create | update,
-               {riak_core_bucket_type:bucket_type(), undefined | binary()} | binary(),
+               {riak_core_bucket:bucket_type(), undefined | binary()} | binary(),
                undefined | [{atom(), any()}],
                [{atom(), any()}]) -> {ok, [{atom(), any()}]} | {error, [{atom(), atom()}]}.
 validate(CreateOrUpdate, Bucket, ExistingProps, BucketProps) ->
@@ -77,6 +77,16 @@ validate_core_prop(create, {_Bucket, undefined}, Existing, {claimant, Claimant})
 validate_core_prop(update, {_Bucket, _BucketName}, _Existing, {claimant, _Claimant}) ->
     %% cannot update claimant
     {claimant, "Cannot update claimant property"};
+validate_core_prop(update, {_Bucket, _BucketName}, _Existing, {ddl, _DDL}) ->
+    %% cannot update time series DDL
+    {ddl, "Cannot update time series data definition"};
+validate_core_prop(update, {_Bucket, _BucketName}, _Existing, {table_def, _DDL}) ->
+    %% cannot update time series DDL (or, if it slips past riak_kv_console,
+    %% the table_def SQL(ish) code that is parsed to make a DDL)
+    %%
+    %% Defining the table_def atom here also sidesteps occasional
+    %% errors from existing_atom functions
+    {ddl, "Cannot update time series data definition"};
 validate_core_prop(create, {_Bucket, undefined}, undefined, {active, false}) ->
     %% first creation call that sets active to false is always valid
     true;
@@ -107,11 +117,11 @@ validate_reserved_name(_) ->
 
 -spec defaults() -> [{atom(), any()}].
 defaults() ->
-    app_helper:get_env(riak_core, default_bucket_props).
+    application:get_env(riak_core, default_bucket_props, undefined).
 
 -spec append_defaults([{atom(), any()}]) -> ok.
 append_defaults(Items) when is_list(Items) ->
-    OldDefaults = app_helper:get_env(riak_core, default_bucket_props, []),
+    OldDefaults = application:get_env(riak_core, default_bucket_props, []),
     NewDefaults = merge(OldDefaults, Items),
     FixedDefaults = case riak_core:bucket_fixups() of
         [] -> NewDefaults;
@@ -126,6 +136,7 @@ append_defaults(Items) when is_list(Items) ->
     ok.
 
 -spec resolve([{atom(), any()}], [{atom(), any()}]) -> [{atom(), any()}].
+%%noinspection ErlangUnusedVariable
 resolve(PropsA, PropsB) when is_list(PropsA) andalso
                              is_list(PropsB) ->
     PropsASorted = lists:ukeysort(1, PropsA),
@@ -168,8 +179,6 @@ resolve_prop({precommit, PC1}, {precommit, PC2}) ->
     resolve_hooks(PC1, PC2);
 resolve_prop({pw, PW1}, {pw, PW2}) ->
     max(PW1, PW2);
-resolve_prop({node_confirms, NodeConfirms1}, {node_confirms, NodeConfirms2}) ->
-    max(NodeConfirms1, NodeConfirms2);
 resolve_prop({r, R1}, {r, R2}) ->
     max(R1, R2);
 resolve_prop({rw, RW1}, {rw, RW2}) ->
@@ -208,7 +217,6 @@ simple_resolve_test() ->
               {pr,0},
               {precommit,[{a, b}]},
               {pw,0},
-              {node_confirms,0},
               {r,quorum},
               {rw,quorum},
               {small_vclock,50},
@@ -229,7 +237,6 @@ simple_resolve_test() ->
               {pr,1},
               {precommit,[{c, d}]},
               {pw,3},
-              {node_confirms,3},
               {r,3},
               {rw,3},
               {w,1},
@@ -249,7 +256,6 @@ simple_resolve_test() ->
                 {pr,1},
                 {precommit,[{a, b}, {c, d}]},
                 {pw,3},
-                {node_confirms,3},
                 {r,quorum},
                 {rw,quorum},
                 {small_vclock,50},
