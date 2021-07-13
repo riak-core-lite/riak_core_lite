@@ -28,6 +28,8 @@
          send_command/2,
          send_command_after/2]).
 
+
+
 -export([init/1,
          started/2,
          started/3,
@@ -225,7 +227,7 @@
 %% message and the function signature is: handle_exit(Pid, Reason, State).
 %%
 %% It should return a tuple indicating the next state for the fsm. For a list of
-%% valid return types see the documentation for the gen_fsm handle_info callback.
+%% valid return types see the documentation for the gen_fsm_compat handle_info callback.
 %%
 %% Here is what the spec for handle_exit/3 would look like:
 %% -spec handle_exit(pid(), atom(), term()) ->
@@ -271,84 +273,7 @@ send_command(Pid, Request) ->
     gen_fsm_compat:send_event(Pid,
                               #riak_vnode_req_v1{request = Request}).
 
-%% Sends a command to the FSM that called it after Time
-%% has passed.
--spec send_command_after(integer(),
-                         term()) -> reference().
-
-send_command_after(Time, Request) ->
-    gen_fsm_compat:send_event_after(Time,
-                                    #riak_vnode_req_v1{request = Request}).
-
-init([Module, Index, InitialInactivityTimeout,
-      Forward]) ->
-    process_flag(trap_exit, true),
-    State = #state{index = Index, mod = Module,
-                   forward = Forward,
-                   inactivity_timeout = InitialInactivityTimeout},
-    {ok, started, State, 0}.
-
-started(timeout,
-        State = #state{inactivity_timeout =
-                           InitialInactivityTimeout}) ->
-    case do_init(State) of
-      {ok, State2} ->
-          {next_state, active, State2, InitialInactivityTimeout};
-      {error, Reason} -> {stop, Reason}
-    end.
-
-started(wait_for_init, _From,
-        State = #state{inactivity_timeout =
-                           InitialInactivityTimeout}) ->
-    case do_init(State) of
-      {ok, State2} ->
-          {reply, ok, active, State2, InitialInactivityTimeout};
-      {error, Reason} -> {stop, Reason}
-    end.
-
-do_init(State = #state{index = Index, mod = Module,
-                       forward = Forward}) ->
-    {ModState, Props} = case Module:init([Index]) of
-                          {ok, MS} -> {MS, []};
-                          {ok, MS, P} -> {MS, P};
-                          {error, R} -> {error, R}
-                        end,
-    case {ModState, Props} of
-      {error, Reason} -> {error, Reason};
-      _ ->
-          PoolConfig = case lists:keyfind(pool, 1, Props) of
-                         {pool, WorkerModule, PoolSize, WorkerArgs} = PoolCfg ->
-                             logger:debug("starting worker pool ~p with size of "
-                                          "~p~n",
-                                          [WorkerModule, PoolSize]),
-                             {ok, PoolPid} =
-                                 riak_core_vnode_worker_pool:start_link(WorkerModule,
-                                                                        PoolSize,
-                                                                        Index,
-                                                                        WorkerArgs,
-                                                                        worker_props),
-                             PoolCfg;
-                         _ -> PoolPid = undefined
-                       end,
-          riak_core_handoff_manager:remove_exclusion(Module,
-                                                     Index),
-          Timeout = application:get_env(riak_core,
-                                        vnode_inactivity_timeout,
-                                        ?DEFAULT_TIMEOUT),
-          Timeout2 = Timeout + rand:uniform(Timeout),
-          State2 = State#state{modstate = ModState,
-                               inactivity_timeout = Timeout2,
-                               pool_pid = PoolPid, pool_config = PoolConfig},
-          logger:debug("vnode :: ~p/~p :: ~p~n",
-                       [Module, Index, Forward]),
-          State3 = mod_set_forwarding(Forward, State2),
-          {ok, State3}
-    end.
-
-wait_for_init(Vnode) ->
-    gen_fsm_compat:sync_send_event(Vnode, wait_for_init,
-                                   infinity).
-
+%% #3 -
 handoff_error(Vnode, Err, Reason) ->
     gen_fsm_compat:send_event(Vnode,
                               {handoff_error, Err, Reason}).
@@ -406,14 +331,18 @@ cancel_handoff(VNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         cancel_handoff).
 
-%% # - riak_core_vnode_master - command2
-%send_req
+%% #13 - riak_core_vnode_master - send_an_event
+send_an_event(VNode, Event) ->
+    gen_fsm_compat:send_event(VNode, Event).
 
-%% # - riak_core_vnode_master - handle_cast/handle_call
+%% #14 - riak_core_vnode_master - handle_cast/handle_call
+
+%riak_core_vnode_master - command2
+%riak_core_vnode_proxy - handle_call
 send_req(VNode, Req) ->
     gen_fsm_compat:send_event(VNode, Req).
 
-%% # - riak_core_vnode_master - handle_call
+%% #15 - riak_core_vnode_master - handle_call
 send_all_proxy_req(VNode, Req) ->
     gen_fsm_compat:send_all_state_event(VNode, Req).
 
@@ -470,88 +399,13 @@ reply(ignore, _Reply) -> ok.
 -spec monitor(Sender :: sender()) -> Monitor ::
                                          reference().
 
-%% Active vnodes operate in three states: normal, handoff, and forwarding.
-%%
-%% In the normal state, vnode commands are passed to handle_command. When
-%% a handoff is triggered, handoff_target is set and the vnode
-%% is said to be in the handoff state.
-%%
-%% In the handoff state, vnode commands are passed to handle_handoff_command.
-%% However, a vnode may be blocked during handoff (and therefore not servicing
-%% commands) if the handoff procedure is blocking (eg. in riak_kv when not
-%% using async fold).
-%%
-%% After handoff, a vnode may move into forwarding state. The forwarding state
-%% is a product of the new gossip/membership code and will not occur if the
-%% node is running in legacy mode. The forwarding state represents the case
-%% where the vnode has already handed its data off to the new owner, but the
-%% new owner is not yet listed as the current owner in the ring. This may occur
-%% because additional vnodes are still waiting to handoff their data to the
-%% new owner, or simply because the ring has yet to converge on the new owner.
-%% In the forwarding state, all vnode commands and coverage commands are
-%% forwarded to the new owner for processing.
-%%
-%% The above becomes a bit more complicated when the vnode takes part in resizing
-%% the ring, since several transfers with a single vnode as the source are necessary
-%% to complete the operation. A vnode will remain in the handoff state, for, potentially,
-%% more than one transfer and may be in the handoff state despite there being no active
-%% transfers with this vnode as the source. During this time requests that can be forwarded
-%% to a partition for which the transfer has already completed, are forwarded. All other
-%% requests are passed to handle_handoff_command.
-forward_or_vnode_command(Sender, Request,
-                         State = #state{forward = Forward, mod = Module,
-                                        index = Index}) ->
-    Resizing = is_list(Forward),
-    RequestHash = case Resizing of
-                    true -> Module:request_hash(Request);
-                    false -> undefined
-                  end,
-    case {Forward, RequestHash} of
-      %% typical vnode operation, no forwarding set, handle request locally
-      {undefined, _} -> vnode_command(Sender, Request, State);
-      %% implicit forwarding after ownership transfer/hinted handoff
-      {F, _} when not is_list(F) ->
-          vnode_forward(implicit, {Index, Forward}, Sender,
-                        Request, State),
-          continue(State);
-      %% during resize we can't forward a request w/o request hash, always handle locally
-      {_, undefined} -> vnode_command(Sender, Request, State);
-      %% possible forwarding during ring resizing
-      {_, _} ->
-          {ok, R} = riak_core_ring_manager:get_my_ring(),
-          FutureIndex = riak_core_ring:future_index(RequestHash,
-                                                    Index, R),
-          vnode_resize_command(Sender, Request, FutureIndex,
-                               State)
-    end.
-
-vnode_command(_Sender, _Request,
-              State = #state{modstate = {deleted, _}}) ->
-    continue(State);
-vnode_command(Sender, Request,
-              State = #state{mod = Module, modstate = ModState,
-                             pool_pid = Pool}) ->
-    case catch Module:handle_command(Request, Sender,
-                                     ModState)
-        of
-      {'EXIT', ExitReason} ->
-          reply(Sender, {vnode_error, ExitReason}),
-          logger:error("~p command failed ~p",
-                       [Module, ExitReason]),
-          {stop, ExitReason, State#state{modstate = ModState}};
-      continue -> continue(State, ModState);
-      {reply, Reply, NewModState} ->
-          reply(Sender, Reply), continue(State, NewModState);
-      {noreply, NewModState} -> continue(State, NewModState);
-      {async, Work, From, NewModState} ->
-          %% dispatch some work to the vnode worker pool
-          %% the result is sent back to 'From'
-          riak_core_vnode_worker_pool:handle_work(Pool, Work,
-                                                  From),
-          continue(State, NewModState);
-      {stop, Reason, NewModState} ->
-          {stop, Reason, State#state{modstate = NewModState}}
-    end.
+monitor({fsm, _, From}) ->
+    erlang:monitor(process, From);
+monitor({server, _, {Pid, _Ref}}) ->
+    erlang:monitor(process, Pid);
+monitor({raw, _, From}) ->
+    erlang:monitor(process, From);
+monitor(ignore) -> erlang:monitor(process, self()).
 
 %% ========================
 %% ========
@@ -761,189 +615,8 @@ active(_Event, _From, State) ->
      State,
      State#state.inactivity_timeout}.
 
-%% This code lives in riak_core_vnode rather than riak_core_vnode_manager
-%% because the ring_trans call is a synchronous call to the ring manager,
-%% and it is better to block an individual vnode rather than the vnode
-%% manager. Blocking the manager can impact all vnodes. This code is safe
-%% to execute on multiple parallel vnodes because of the synchronization
-%% afforded by having all ring changes go through the single ring manager.
-mark_handoff_complete(SrcIdx, Target, SeenIdxs, Mod,
-                      resize) ->
-    Prev = node(),
-    Source = {SrcIdx, Prev},
-    TransFun = fun (Ring, _) ->
-                       Owner = riak_core_ring:index_owner(Ring, SrcIdx),
-                       Status = riak_core_ring:resize_transfer_status(Ring,
-                                                                      Source,
-                                                                      Target,
-                                                                      Mod),
-                       case {Owner, Status} of
-                         {Prev, awaiting} ->
-                             F = fun (SeenIdx, RingAcc) ->
-                                         riak_core_ring:schedule_resize_transfer(RingAcc,
-                                                                                 Source,
-                                                                                 SeenIdx)
-                                 end,
-                             Ring2 = lists:foldl(F, Ring,
-                                                 ordsets:to_list(SeenIdxs)),
-                             Ring3 =
-                                 riak_core_ring:resize_transfer_complete(Ring2,
-                                                                         Source,
-                                                                         Target,
-                                                                         Mod),
-                             %% local ring optimization (see below)
-                             {set_only, Ring3};
-                         _ -> ignore
-                       end
-               end,
-    Result = riak_core_ring_manager:ring_trans(TransFun,
-                                               []),
-    case Result of
-      {ok, _NewRing} -> resize;
-      _ -> continue
-    end;
-mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
-    Prev = node(),
-    Result = riak_core_ring_manager:ring_trans(fun (Ring,
-                                                    _) ->
-                                                       Owner =
-                                                           riak_core_ring:index_owner(Ring,
-                                                                                      Idx),
-                                                       {_, NextOwner, Status} =
-                                                           riak_core_ring:next_owner(Ring,
-                                                                                     Idx,
-                                                                                     Mod),
-                                                       NewStatus =
-                                                           riak_core_ring:member_status(Ring,
-                                                                                        New),
-                                                       case {Owner, NextOwner,
-                                                             NewStatus, Status}
-                                                           of
-                                                         {Prev, New, _,
-                                                          awaiting} ->
-                                                             Ring2 =
-                                                                 riak_core_ring:handoff_complete(Ring,
-                                                                                                 Idx,
-                                                                                                 Mod),
-                                                             %% Optimization. Only alter the local ring without
-                                                             %% triggering a gossip, thus implicitly coalescing
-                                                             %% multiple vnode handoff completion events. In the
-                                                             %% future we should decouple vnode handoff state from
-                                                             %% the ring structure in order to make gossip independent
-                                                             %% of ring size.
-                                                             {set_only, Ring2};
-                                                         _ -> ignore
-                                                       end
-                                               end,
-                                               []),
-    case Result of
-      {ok, NewRing} -> NewRing = NewRing;
-      _ ->
-          {ok, NewRing} = riak_core_ring_manager:get_my_ring()
-    end,
-    Owner = riak_core_ring:index_owner(NewRing, Idx),
-    {_, NextOwner, Status} =
-        riak_core_ring:next_owner(NewRing, Idx, Mod),
-    NewStatus = riak_core_ring:member_status(NewRing, New),
-    case {Owner, NextOwner, NewStatus, Status} of
-      {_, _, invalid, _} ->
-          %% Handing off to invalid node, don't give-up data.
-          continue;
-      {Prev, New, _, _} -> forward;
-      {Prev, _, _, _} ->
-          %% Handoff wasn't to node that is scheduled in next, so no change.
-          continue;
-      {_, _, _, _} -> shutdown
-    end.
-
-finish_handoff(State) -> finish_handoff([], State).
-
-finish_handoff(SeenIdxs,
-               State = #state{mod = Module, modstate = ModState,
-                              index = Idx, handoff_target = Target,
-                              handoff_type = HOType}) ->
-    case mark_handoff_complete(Idx, Target, SeenIdxs,
-                               Module, HOType)
-        of
-      continue ->
-          continue(State#state{handoff_target = none,
-                               handoff_type = undefined});
-      resize ->
-          CurrentForwarding = resize_forwarding(State),
-          NewForwarding = [Target | CurrentForwarding],
-          State2 = mod_set_forwarding(NewForwarding, State),
-          continue(State2#state{handoff_target = none,
-                                handoff_type = undefined,
-                                forward = NewForwarding});
-      Res when Res == forward; Res == shutdown ->
-          {_, HN} = Target,
-          %% Have to issue the delete now.  Once unregistered the
-          %% vnode master will spin up a new vnode on demand.
-          %% Shutdown the async pool beforehand, don't want callbacks
-          %% running on non-existant data.
-          maybe_shutdown_pool(State),
-          {ok, NewModState} = Module:delete(ModState),
-          logger:debug("~p ~p vnode finished handoff and deleted.",
-                       [Idx, Module]),
-          riak_core_vnode_manager:unregister_vnode(Idx, Module),
-          logger:debug("vnode hn/fwd :: ~p/~p :: ~p -> ~p~n",
-                       [State#state.mod, State#state.index,
-                        State#state.forward, HN]),
-          State2 = mod_set_forwarding(HN, State),
-          continue(State2#state{modstate =
-                                    {deleted,
-                                     NewModState}, % like to fail if used
-                                handoff_target = none, handoff_type = undefined,
-                                forward = HN})
-    end.
-
-maybe_shutdown_pool(#state{pool_pid = Pool}) ->
-    case is_pid(Pool) of
-      true ->
-          %% state.pool_pid will be cleaned up by handle_info message.
-          riak_core_vnode_worker_pool:shutdown_pool(Pool, 60000);
-      _ -> ok
-    end.
-
-resize_forwarding(#state{forward = F})
-    when is_list(F) ->
-    F;
-resize_forwarding(_) -> [].
-
-mark_delete_complete(Idx, Mod) ->
-    Result = riak_core_ring_manager:ring_trans(fun (Ring,
-                                                    _) ->
-                                                       Type =
-                                                           riak_core_ring:vnode_type(Ring,
-                                                                                     Idx),
-                                                       {_, Next, Status} =
-                                                           riak_core_ring:next_owner(Ring,
-                                                                                     Idx),
-                                                       case {Type, Next, Status}
-                                                           of
-                                                         {resized_primary,
-                                                          '$delete',
-                                                          awaiting} ->
-                                                             Ring3 =
-                                                                 riak_core_ring:deletion_complete(Ring,
-                                                                                                  Idx,
-                                                                                                  Mod),
-                                                             %% Use local ring optimization like mark_handoff_complete
-                                                             {set_only, Ring3};
-                                                         {{fallback, _},
-                                                          '$delete',
-                                                          awaiting} ->
-                                                             Ring3 =
-                                                                 riak_core_ring:deletion_complete(Ring,
-                                                                                                  Idx,
-                                                                                                  Mod),
-                                                             %% Use local ring optimization like mark_handoff_complete
-                                                             {set_only, Ring3};
-                                                         _ -> ignore
-                                                       end
-                                               end,
-                                               []),
-    Result.
+%% handle_event
+%%%%%%%%%%%%%%%%
 
 handle_event({set_forwarding, undefined}, _StateName,
              State = #state{modstate = {deleted, _ModState}}) ->
@@ -1353,6 +1026,9 @@ vnode_coverage(Sender, Request, KeySpaces,
                                                     Work,
                                                     From),
             continue(State, NewModState);
+        {PoolName, _Work, _From, NewModState} ->
+            logger:error("Worker pools not supported: ~p", [PoolName]),
+            {stop, not_supported, State#state{modstate = NewModState}};
         {stop, Reason, NewModState} ->
             {stop, Reason, State#state{modstate = NewModState}}
     end.

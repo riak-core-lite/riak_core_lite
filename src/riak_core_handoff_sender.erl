@@ -24,11 +24,7 @@
 
 -export([start_link/4]).
 
--include("riak_core_vnode.hrl").
-
 -include("riak_core_handoff.hrl").
-
--define(ACK_COUNT, 1000).
 
 %% can be set with env riak_core, handoff_timeout
 -define(TCP_TIMEOUT, 60000).
@@ -242,19 +238,10 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
     %% otherwise it will wait forever but vnode crash will be
     %% caught by handoff manager.  I know, this is confusing, a
     %% new handoff system will be written soon enough.
-    AccRecord0 = case
-                     riak_core_vnode_master:sync_command({SrcPartition,
-                                                          SrcNode},
-                                                         Req,
-                                                         VMaster,
-                                                         infinity)
-                     of
-                     #ho_acc{} = Ret -> Ret;
-                     Ret ->
-                         logger:error("[handoff] Bad handoff record: ~p",
-                                      [Ret]),
-                         Ret
-                 end,
+    AccRecord0 = riak_core_vnode_master:sync_command({SrcPartition, SrcNode},
+                                                    Req,
+                                                    VMaster, infinity),
+
     %% Send any straggler entries remaining in the buffer:
     AccRecord = send_objects(AccRecord0#ho_acc.item_queue,
                              AccRecord0),

@@ -47,7 +47,8 @@
          all_nodes/1,
          equal/2,
          prune/3,
-         timestamp/0]).
+         timestamp/0,
+         last_modified/1]).
 
 -ifdef(TEST).
 
@@ -198,7 +199,7 @@ last_modified([]) ->
     undefined;
 last_modified(VClock) ->
     TSL = lists:map(fun({_, {_Ctr, TS}}) -> TS end, VClock),
-    calendar:gregorian_seconds_to_datetime(lists:last(lists:sort(TSL))). 
+    calendar:gregorian_seconds_to_datetime(lists:last(lists:sort(TSL))).
 
 % @doc Get the entry `dot()' for `vclock_node()' from `vclock()'.
 -spec get_dot(Node :: vclock_node(),
