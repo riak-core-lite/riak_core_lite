@@ -1,4 +1,4 @@
--type sender_type() :: fsm | server | raw.
+-type sender_type() :: fsm | server .
 
 -type sender() :: {sender_type(), reference() | tuple() | ignore_ref , pid()} | ignore.
 

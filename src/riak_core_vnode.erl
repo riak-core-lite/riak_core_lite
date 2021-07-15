@@ -391,8 +391,6 @@ reply({server, ignore_ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, Reply);
 reply({server, Ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, {Ref, Reply});
-reply({raw, Ref, From}, Reply) ->
-    riak_core_send_msg:bang_unreliable(From, {Ref, Reply});
 reply(ignore, _Reply) -> ok.
 
 %% @doc Set up a monitor for the pid named by a {@type sender()} vnode
@@ -401,13 +399,10 @@ reply(ignore, _Reply) -> ok.
 %% monitor reference.
 -spec monitor(Sender :: sender()) -> Monitor ::
                                          reference().
-
 monitor({fsm, _, From}) ->
     erlang:monitor(process, From);
 monitor({server, _, {Pid, _Ref}}) ->
     erlang:monitor(process, Pid);
-monitor({raw, _, From}) ->
-    erlang:monitor(process, From);
 monitor(ignore) -> erlang:monitor(process, self()).
 
 %% ========================

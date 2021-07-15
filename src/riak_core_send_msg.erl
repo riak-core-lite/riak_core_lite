@@ -46,7 +46,9 @@
 
 %% NOTE: We'ed peeked inside gen_server.erl's guts to see its internals.
 reply_unreliable({To, Tag}, Reply) ->
-    bang_unreliable(To, {Tag, Reply}).
+    bang_unreliable(To, {Tag, Reply});
+reply_unreliable(To, Reply) ->
+    bang_unreliable(To, Reply).
 
 cast_unreliable(Dest, Request) ->
     bang_unreliable(Dest, {'$gen_cast', Request}).
