@@ -1526,6 +1526,8 @@ pool_death_test() ->
     wait_for_process_death(Pid),
     meck:validate(test_pool_mod),
     meck:validate(test_vnode),
+    % TODO why is a short sleep needed to swallow crash message
+    timer:sleep(10),
     error_logger:tty(true).
 
 -endif.
