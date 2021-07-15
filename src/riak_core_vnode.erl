@@ -41,7 +41,7 @@
          terminate/3,
          code_change/4]).
 
--export([reply/2, monitor/1]).
+-export([reply/2]).
 
 -export([get_mod_index/1,
          get_modstate/1,
@@ -392,18 +392,6 @@ reply({server, ignore_ref, From}, Reply) ->
 reply({server, Ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, {Ref, Reply});
 reply(ignore, _Reply) -> ok.
-
-%% @doc Set up a monitor for the pid named by a {@type sender()} vnode
-%% argument.  If `Sender' was the atom `ignore', this function sets up
-%% a monitor on `self()' in order to return a valid (if useless)
-%% monitor reference.
--spec monitor(Sender :: sender()) -> Monitor ::
-                                         reference().
-monitor({fsm, _, From}) ->
-    erlang:monitor(process, From);
-monitor({server, _, {Pid, _Ref}}) ->
-    erlang:monitor(process, Pid);
-monitor(ignore) -> erlang:monitor(process, self()).
 
 %% ========================
 %% ========
