@@ -382,12 +382,12 @@ send_command_after(Time, Request) ->
 %%
 -spec reply(sender(), term()) -> any().
 
-reply({fsm, undefined, From}, Reply) ->
+reply({fsm, ignore_ref, From}, Reply) ->
     riak_core_send_msg:send_event_unreliable(From, Reply);
 reply({fsm, Ref, From}, Reply) ->
     riak_core_send_msg:send_event_unreliable(From,
                                              {Ref, Reply});
-reply({server, undefined, From}, Reply) ->
+reply({server, ignore_ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, Reply);
 reply({server, Ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, {Ref, Reply});
