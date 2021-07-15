@@ -23,34 +23,13 @@
 -module(riak_core_send_msg).
 
 -export([reply_unreliable/2,
-         cast_unreliable/2,
          send_event_unreliable/2]).
-
--ifdef(TEST).
-
--ifdef(PULSE).
-
--compile(export_all).
-
--compile({parse_transform, pulse_instrument}).
-
--compile({pulse_replace_module,
-          [{gen_fsm, pulse_gen_fsm},
-           {gen_fsm_compat, pulse_gen_fsm},
-           {gen_server, pulse_gen_server}]}).
-
--endif.
-
--endif.
 
 %% NOTE: We'ed peeked inside gen_server.erl's guts to see its internals.
 reply_unreliable({To, Tag}, Reply) ->
     bang_unreliable(To, {Tag, Reply});
 reply_unreliable(To, Reply) ->
     bang_unreliable(To, Reply).
-
-cast_unreliable(Dest, Request) ->
-    bang_unreliable(Dest, {'$gen_cast', Request}).
 
 %% NOTE: We'ed peeked inside gen_fsm.erl's guts to see its internals.
 send_event_unreliable({global, _Name} = GlobalTo,
