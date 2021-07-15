@@ -18,7 +18,7 @@
 
 -record(ho_stats,
         {interval_end :: erlang:timestamp(),
-         last_update :: erlang:timestamp() | undefined,
+         last_update = os:timestamp() :: erlang:timestamp(),
          objs = 0 :: non_neg_integer(),
          bytes = 0 :: non_neg_integer()}).
 
@@ -50,10 +50,10 @@
          type :: ho_type() | undefined,
          req_origin :: node(),
          filter_mod_fun :: {module(), atom()} | undefined,
-         size ::
+         size = {0, objects}::
              {function(), dynamic} |
-             {non_neg_integer(), bytes | objects} |
-             undefined}).
+             {non_neg_integer(), bytes | objects}
+        }).
 
 -type handoff_status() :: #handoff_status{}.
 

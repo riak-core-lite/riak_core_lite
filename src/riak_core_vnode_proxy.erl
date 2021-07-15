@@ -162,7 +162,7 @@ loop(Parent, State) ->
             {reply, Reply, NewState} = handle_call(Msg,
                                                    From,
                                                    State),
-            {_, Reply} = gen:reply(From, Reply),
+            gen:reply(From, Reply),
             loop(Parent, NewState);
         {'$vnode_proxy_cast', Msg} ->
             {noreply, NewState} = handle_cast(Msg, State),
@@ -406,20 +406,6 @@ fake_loop_slow() ->
     end.
 
 fake_loop_block() -> receive unblock -> fake_loop() end.
-
-% handle_overload_test() ->
-%     VnodePid = spawn(fun fake_loop/0),
-%     meck:new(riak_core_vnode_manager, [passthrough]),
-%               meck:expect(riak_core_vnode_manager, get_vnode_pid,
-%                           fun (_Index, fakemod) -> {ok, VnodePid};
-%                               (Index, Mod) -> meck:passthrough([Index, Mod])
-%                           end),
-%               meck:new(fakemod, [non_strict]),
-%               meck:expect(fakemod, handle_overload_info,
-%                           fun (hello, _Idx) -> ok end),
-%     {ok, ProxyPid} =
-%                   riak_core_vnode_proxy:start_link(fakemod, 0),
-%     ProxyPid!{}.
 
 overload_test_() ->
     {timeout,
