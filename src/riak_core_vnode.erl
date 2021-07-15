@@ -318,39 +318,39 @@ handoff_data(VNode, MsgData, VNodeTimeout) ->
 %% send_all_state_event
 %% =========================
 
-%% #5
+%% #4.1
 set_forwarding(VNode, ForwardTo) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         {set_forwarding, ForwardTo}).
 
-%% #6
+%% #4.2
 trigger_handoff(VNode, TargetIdx, TargetNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         {trigger_handoff,
                                          TargetIdx,
                                          TargetNode}).
 
-%% #7
+%% #4.3
 trigger_handoff(VNode, TargetNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         {trigger_handoff, TargetNode}).
 
-%% #8
+%% #4.4
 trigger_delete(VNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         trigger_delete).
 
-%% #11 - riak_core_vnode_manager - handle_vnode_event
+%% #4.5 - riak_core_vnode_manager - handle_vnode_event
 cast_finish_handoff(VNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         finish_handoff).
 
-%% #12 - riak_core_vnode_manager - handle_vnode_event
+%% #4.6 - riak_core_vnode_manager - handle_vnode_event
 cancel_handoff(VNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         cancel_handoff).
 
-%% #15 - riak_core_vnode_master - handle_call
+%% #4.7 - riak_core_vnode_master - handle_call
 send_all_proxy_req(VNode, Req) ->
     gen_fsm_compat:send_all_state_event(VNode, Req).
 
@@ -358,7 +358,7 @@ send_all_proxy_req(VNode, Req) ->
 %% send_event_after
 %% =========================
 
-%% #10
+%% #5
 %% Sends a command to the FSM that called it after Time
 %% has passed.
 -spec send_command_after(integer(),
@@ -385,8 +385,8 @@ send_command_after(Time, Request) ->
 reply({fsm, ignore_ref, From}, Reply) ->
     riak_core_send_msg:send_event_unreliable(From, Reply);
 reply({fsm, Ref, From}, Reply) ->
-    riak_core_send_msg:send_event_unreliable(From,
-                                             {Ref, Reply});
+    riak_core_send_msg:send_event_unreliable(From, {Ref, Reply});
+
 reply({server, ignore_ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, Reply);
 reply({server, Ref, From}, Reply) ->
@@ -1525,6 +1525,7 @@ pool_death_test() ->
     exit(Pid, normal),
     wait_for_process_death(Pid),
     meck:validate(test_pool_mod),
-    meck:validate(test_vnode).
+    meck:validate(test_vnode),
+    error_logger:tty(true).
 
 -endif.
