@@ -24,8 +24,7 @@
 
 -export([reply_unreliable/2,
          cast_unreliable/2,
-         send_event_unreliable/2,
-         bang_unreliable/2]).
+         send_event_unreliable/2]).
 
 -ifdef(TEST).
 
