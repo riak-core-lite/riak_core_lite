@@ -300,19 +300,39 @@ handle_overload(Msg,
     %% STATS
     %riak_core_stat:update(dropped_vnode_requests),
     case Msg of
-        {'$gen_event',
+        %for gen_fsm
+        {'$gen_event', %send_event
          #riak_vnode_req_v1{sender = Sender,
                             request = Request}} ->
             catch Module:handle_overload_command(Request,
                                                  Sender,
                                                  Index);
-        {'$gen_all_state_event',
+        {'$gen_all_state_event', %send_all_state_event
          #riak_vnode_req_v1{sender = Sender,
                             request = Request}} ->
             catch Module:handle_overload_command(Request,
                                                  Sender,
                                                  Index);
-        {'$gen_event',
+        {'$gen_event', %send_event
+         #riak_coverage_req_v1{sender = Sender,
+                               request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        %for gen_statem
+        {'$gen_cast',
+         #riak_vnode_req_v1{sender = Sender,
+                            request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        {'$gen_call',
+         #riak_vnode_req_v1{sender = Sender,
+                            request = Request}} ->
+            catch Module:handle_overload_command(Request,
+                                                 Sender,
+                                                 Index);
+        {'$gen_cast',
          #riak_coverage_req_v1{sender = Sender,
                                request = Request}} ->
             catch Module:handle_overload_command(Request,
