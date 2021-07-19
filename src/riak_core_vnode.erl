@@ -32,7 +32,7 @@
          terminate/3,
          code_change/4]).
 
--export([reply/2, monitor/1]).
+-export([reply/2]).
 
 -export([wait_for_init/1,
          send_command/2,
@@ -247,98 +247,106 @@ start_link(Mod, Index, InitialInactivityTimeout,
 wait_for_init(Vnode) ->
     gen_statem:call(Vnode, wait_for_init).
 
-%% #2 cast
+
+%% #2.1 cast
 %% Send a command message for the vnode module by Pid -
 %% typically to do some deferred processing after returning yourself
 send_command(Pid, Request) ->
     gen_statem:cast(Pid,
                     #riak_vnode_req_v1{request = Request}).
 
-%% #3 cast
+
+%% #2.2 cast
 handoff_error(Vnode, Err, Reason) ->
     gen_statem:cast(Vnode, {handoff_error, Err, Reason}).
 
-%% #4 call
-get_mod_index(VNode) ->
-    gen_statem:call(VNode, get_mod_index).
-
-%% #5 cast
-set_forwarding(VNode, ForwardTo) ->
-    gen_statem:cast(VNode, {set_forwarding, ForwardTo}).
-
-%% #6 cast
-trigger_handoff(VNode, TargetIdx, TargetNode) ->
-    gen_statem:cast(VNode,
-                    {trigger_handoff, TargetIdx, TargetNode}).
-
-%% #7 cast
-trigger_handoff(VNode, TargetNode) ->
-    gen_statem:cast(VNode, {trigger_handoff, TargetNode}).
-
-%% #8 cast
-trigger_delete(VNode) ->
-    gen_statem:cast(VNode, trigger_delete).
-
-%% #9 cast
-core_status(VNode) ->
-    gen_statem:call(VNode, core_status).
-
-%% #10 %TODO
-%% Sends a command to the FSM that called it after Time
-%% has passed.
--spec send_command_after(integer(),
-                         term()) -> reference().
-
-send_command_after(Time, Request) ->
-    %gen_fsm_compat:send_event_after(Time, #riak_vnode_req_v1{request = Request}).
-    erlang:start_timer(Time,
-                       self(),
-                       {'$gen_cast', #riak_vnode_req_v1{request = Request}}).
-
-%% #11 - riak_core_vnode_manager - handle_vnode_event
-cast_finish_handoff(VNode) ->
-    gen_statem:cast(VNode, finish_handoff).
-
-%% #12 - riak_core_vnode_manager - handle_vnode_event
-cancel_handoff(VNode) ->
-    gen_statem:cast(VNode, cancel_handoff).
-
-%% #13 - riak_core_vnode_master - send_an_event
+%% #2.3 - riak_core_vnode_master - send_an_event
 send_an_event(VNode, Event) ->
     gen_statem:cast(VNode, Event).
 
-%% #14 - riak_core_vnode_master - handle_cast/handle_call
+%% #2.4 - riak_core_vnode_master - handle_cast/handle_call
 %riak_core_vnode_master - command2
 %riak_core_vnode_proxy - handle_call
 send_req(VNode, Req) -> gen_statem:cast(VNode, Req).
 
-%% #15 - riak_core_vnode_master - handle_call
-send_all_proxy_req(VNode, Req) ->
-    gen_statem:call(VNode, Req).
 
-%% #16 - riak:core_handoff_sender - start_fold_
--spec handoff_complete(VNode :: pid()) -> ok.
-
+%% #2.5
 handoff_complete(VNode) ->
     gen_statem:cast(VNode, handoff_complete).
 
-%% #17 - riak:core_handoff_sender - start_fold_
--spec resize_transfer_complete(VNode :: pid(),
-                               NotSentAcc :: term()) -> ok.
 
+%% #2.6
 resize_transfer_complete(VNode, NotSentAcc) ->
     gen_statem:cast(VNode,
                     {resize_transfer_complete, NotSentAcc}).
 
-%% #18 - riak_core_handoff_receiver - process_message
+
+%% #2.7 - riak_core_vnode_proxy - handle_cast
+unregistered(VNode) ->
+    gen_statem:call(VNode, unregistered).
+
+
+%% #3.1 call
+get_mod_index(VNode) ->
+    gen_statem:call(VNode, get_mod_index).
+
+
+%% #3.2 cast
+core_status(VNode) ->
+    gen_statem:call(VNode, core_status).
+
+
+%% #3.3 - riak_core_handoff_receiver - process_message
 handoff_data(VNode, MsgData, VNodeTimeout) ->
     gen_statem:call(VNode,
                     {handoff_data, MsgData},
                     VNodeTimeout).
 
-%% #19 - riak_core_vnode_proxy - handle_cast
-unregistered(VNode) ->
-    gen_statem:call(VNode, unregistered).
+
+%% #4.1 cast
+set_forwarding(VNode, ForwardTo) ->
+    gen_statem:cast(VNode, {set_forwarding, ForwardTo}).
+
+
+%% #4.2 cast
+trigger_handoff(VNode, TargetIdx, TargetNode) ->
+    gen_statem:cast(VNode,
+                    {trigger_handoff, TargetIdx, TargetNode}).
+
+
+%% #4.3 cast
+trigger_handoff(VNode, TargetNode) ->
+    gen_statem:cast(VNode, {trigger_handoff, TargetNode}).
+
+%% #4.4 cast
+trigger_delete(VNode) ->
+    gen_statem:cast(VNode, trigger_delete).
+
+%% #4.5 - riak_core_vnode_manager - handle_vnode_event
+cast_finish_handoff(VNode) ->
+    gen_statem:cast(VNode, finish_handoff).
+
+%% #4.6 - riak_core_vnode_manager - handle_vnode_event
+cancel_handoff(VNode) ->
+    gen_statem:cast(VNode, cancel_handoff).
+
+%% #4.7 - riak_core_vnode_master - handle_call
+send_all_proxy_req(VNode, Req) ->
+    gen_statem:call(VNode, Req).
+
+
+
+%% #5 %TODO
+%% Sends a command to the FSM that called it after Time
+%% has passed.
+-spec send_command_after(integer(),
+                         term()) -> reference().
+send_command_after(Time, Request) ->
+    erlang:start_timer(Time,
+                       self(),
+                       {'$gen_cast', #riak_vnode_req_v1{request = Request}}).
+
+
 
 %% @doc Send a reply to a vnode request.  If
 %%      the Ref is undefined just send the reply
@@ -349,33 +357,16 @@ unregistered(VNode) ->
 %%
 -spec reply(sender(), term()) -> any().
 
-reply({fsm, undefined, From}, Reply) ->
+reply({fsm, ignore_ref, From}, Reply) ->
     riak_core_send_msg:send_event_unreliable(From, Reply);
 reply({fsm, Ref, From}, Reply) ->
-    riak_core_send_msg:send_event_unreliable(From,
-                                             {Ref, Reply});
-reply({server, undefined, From}, Reply) ->
+    riak_core_send_msg:send_event_unreliable(From, {Ref, Reply});
+
+reply({server, ignore_ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, Reply);
 reply({server, Ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, {Ref, Reply});
-reply({raw, Ref, From}, Reply) ->
-    riak_core_send_msg:bang_unreliable(From, {Ref, Reply});
 reply(ignore, _Reply) -> ok.
-
-%% @doc Set up a monitor for the pid named by a {@type sender()} vnode
-%% argument.  If `Sender' was the atom `ignore', this function sets up
-%% a monitor on `self()' in order to return a valid (if useless)
-%% monitor reference.
--spec monitor(Sender :: sender()) -> Monitor ::
-                                         reference().
-
-monitor({fsm, _, From}) ->
-    erlang:monitor(process, From);
-monitor({server, _, {Pid, _Ref}}) ->
-    erlang:monitor(process, Pid);
-monitor({raw, _, From}) ->
-    erlang:monitor(process, From);
-monitor(ignore) -> erlang:monitor(process, self()).
 
 %% ========================
 %% ========
