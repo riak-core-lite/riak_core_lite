@@ -41,7 +41,7 @@
          terminate/3,
          code_change/4]).
 
--export([reply/2, monitor/1]).
+-export([reply/2]).
 
 -export([get_mod_index/1,
          get_modstate/1,
@@ -260,57 +260,105 @@ start_link(Mod, Index, InitialInactivityTimeout,
                               [Mod, Index, InitialInactivityTimeout, Forward],
                               []).
 
-%% #1 - State started
-wait_for_init(Vnode) ->
-    gen_fsm_compat:sync_send_event(Vnode,
-                                   wait_for_init,
-                                   infinity).
+%% =========================
+%% sync_send_event
+%% =========================
 
-%% #2 -
+%% #1 - State started
+wait_for_init(Vnode) -> gen_fsm_compat:sync_send_event(Vnode, wait_for_init, infinity).
+
+%% =========================
+%% send_event
+%% =========================
+
+%% #2.1 -
 %% Send a command message for the vnode module by Pid -
 %% typically to do some deferred processing after returning yourself
-send_command(Pid, Request) ->
-    gen_fsm_compat:send_event(Pid,
-                              #riak_vnode_req_v1{request = Request}).
+send_command(Pid, Request) -> gen_fsm_compat:send_event(Pid, #riak_vnode_req_v1{request = Request}).
 
-%% #3 -
-handoff_error(Vnode, Err, Reason) ->
-    gen_fsm_compat:send_event(Vnode,
-                              {handoff_error, Err, Reason}).
+%% #2.2 -
+handoff_error(Vnode, Err, Reason) -> gen_fsm_compat:send_event(Vnode, {handoff_error, Err, Reason}).
 
-%% #4 -
+%% #2.3 - riak_core_vnode_master - send_an_event
+send_an_event(VNode, Event) -> gen_fsm_compat:send_event(VNode, Event).
+
+%% #2.4 - riak_core_vnode_master - handle_cast/handle_call
+%riak_core_vnode_master - command2
+%riak_core_vnode_proxy - handle_call
+send_req(VNode, Req) -> gen_fsm_compat:send_event(VNode, Req).
+
+%% #2.5 - riak:core_handoff_sender - start_fold_
+-spec handoff_complete(VNode :: pid()) -> ok.
+handoff_complete(VNode) -> gen_fsm_compat:send_event(VNode, handoff_complete).
+
+%% #2.6 - riak:core_handoff_sender - start_fold_
+-spec resize_transfer_complete(VNode :: pid(), NotSentAcc :: term()) -> ok.
+resize_transfer_complete(VNode, NotSentAcc) -> gen_fsm_compat:send_event(VNode, {resize_transfer_complete, NotSentAcc}).
+
+%% #2.7 - riak_core_vnode_proxy - handle_cast
+unregistered(VNode) -> gen_fsm_compat:send_event(VNode, unregistered).
+
+%% =========================
+%% sync_send_all_state_event
+%% =========================
+
+%% #3.1
 get_mod_index(VNode) ->
     gen_fsm_compat:sync_send_all_state_event(VNode,
                                              get_mod_index).
+%% #3.2
+core_status(VNode) ->
+    gen_fsm_compat:sync_send_all_state_event(VNode, core_status).
 
-%% #5
+%% #3.3 - riak_core_handoff_receiver - process_message
+handoff_data(VNode, MsgData, VNodeTimeout) ->
+    gen_fsm_compat:sync_send_all_state_event(VNode, {handoff_data, MsgData}, VNodeTimeout).
+
+%% =========================
+%% send_all_state_event
+%% =========================
+
+%% #4.1
 set_forwarding(VNode, ForwardTo) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         {set_forwarding, ForwardTo}).
 
-%% #6
+%% #4.2
 trigger_handoff(VNode, TargetIdx, TargetNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         {trigger_handoff,
                                          TargetIdx,
                                          TargetNode}).
 
-%% #7
+%% #4.3
 trigger_handoff(VNode, TargetNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         {trigger_handoff, TargetNode}).
 
-%% #8
+%% #4.4
 trigger_delete(VNode) ->
     gen_fsm_compat:send_all_state_event(VNode,
                                         trigger_delete).
 
-%% #9
-core_status(VNode) ->
-    gen_fsm_compat:sync_send_all_state_event(VNode,
-                                             core_status).
+%% #4.5 - riak_core_vnode_manager - handle_vnode_event
+cast_finish_handoff(VNode) ->
+    gen_fsm_compat:send_all_state_event(VNode,
+                                        finish_handoff).
 
-%% #10
+%% #4.6 - riak_core_vnode_manager - handle_vnode_event
+cancel_handoff(VNode) ->
+    gen_fsm_compat:send_all_state_event(VNode,
+                                        cancel_handoff).
+
+%% #4.7 - riak_core_vnode_master - handle_call
+send_all_proxy_req(VNode, Req) ->
+    gen_fsm_compat:send_all_state_event(VNode, Req).
+
+%% =========================
+%% send_event_after
+%% =========================
+
+%% #5
 %% Sends a command to the FSM that called it after Time
 %% has passed.
 -spec send_command_after(integer(),
@@ -320,55 +368,10 @@ send_command_after(Time, Request) ->
     gen_fsm_compat:send_event_after(Time,
                                     #riak_vnode_req_v1{request = Request}).
 
-%%%%%%% %new APIs
-%% #11 - riak_core_vnode_manager - handle_vnode_event
-cast_finish_handoff(VNode) ->
-    gen_fsm_compat:send_all_state_event(VNode,
-                                        finish_handoff).
 
-%% #12 - riak_core_vnode_manager - handle_vnode_event
-cancel_handoff(VNode) ->
-    gen_fsm_compat:send_all_state_event(VNode,
-                                        cancel_handoff).
 
-%% #13 - riak_core_vnode_master - send_an_event
-send_an_event(VNode, Event) ->
-    gen_fsm_compat:send_event(VNode, Event).
 
-%% #14 - riak_core_vnode_master - handle_cast/handle_call
 
-%riak_core_vnode_master - command2
-%riak_core_vnode_proxy - handle_call
-send_req(VNode, Req) ->
-    gen_fsm_compat:send_event(VNode, Req).
-
-%% #15 - riak_core_vnode_master - handle_call
-send_all_proxy_req(VNode, Req) ->
-    gen_fsm_compat:send_all_state_event(VNode, Req).
-
-%% #16 - riak:core_handoff_sender - start_fold_
--spec handoff_complete(VNode :: pid()) -> ok.
-
-handoff_complete(VNode) ->
-    gen_fsm_compat:send_event(VNode, handoff_complete).
-
-%% #17 - riak:core_handoff_sender - start_fold_
--spec resize_transfer_complete(VNode :: pid(),
-                               NotSentAcc :: term()) -> ok.
-
-resize_transfer_complete(VNode, NotSentAcc) ->
-    gen_fsm_compat:send_event(VNode,
-                              {resize_transfer_complete, NotSentAcc}).
-
-%% #18 - riak_core_handoff_receiver - process_message
-handoff_data(VNode, MsgData, VNodeTimeout) ->
-    gen_fsm_compat:sync_send_all_state_event(VNode,
-                                             {handoff_data, MsgData},
-                                             VNodeTimeout).
-
-%% #19 - riak_core_vnode_proxy - handle_cast
-unregistered(VNode) ->
-    gen_fsm_compat:send_event(VNode, unregistered).
 
 %% @doc Send a reply to a vnode request.  If
 %%      the Ref is undefined just send the reply
@@ -379,33 +382,16 @@ unregistered(VNode) ->
 %%
 -spec reply(sender(), term()) -> any().
 
-reply({fsm, undefined, From}, Reply) ->
+reply({fsm, ignore_ref, From}, Reply) ->
     riak_core_send_msg:send_event_unreliable(From, Reply);
 reply({fsm, Ref, From}, Reply) ->
-    riak_core_send_msg:send_event_unreliable(From,
-                                             {Ref, Reply});
-reply({server, undefined, From}, Reply) ->
+    riak_core_send_msg:send_event_unreliable(From, {Ref, Reply});
+
+reply({server, ignore_ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, Reply);
 reply({server, Ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, {Ref, Reply});
-reply({raw, Ref, From}, Reply) ->
-    riak_core_send_msg:bang_unreliable(From, {Ref, Reply});
 reply(ignore, _Reply) -> ok.
-
-%% @doc Set up a monitor for the pid named by a {@type sender()} vnode
-%% argument.  If `Sender' was the atom `ignore', this function sets up
-%% a monitor on `self()' in order to return a valid (if useless)
-%% monitor reference.
--spec monitor(Sender :: sender()) -> Monitor ::
-                                         reference().
-
-monitor({fsm, _, From}) ->
-    erlang:monitor(process, From);
-monitor({server, _, {Pid, _Ref}}) ->
-    erlang:monitor(process, Pid);
-monitor({raw, _, From}) ->
-    erlang:monitor(process, From);
-monitor(ignore) -> erlang:monitor(process, self()).
 
 %% ========================
 %% ========
@@ -1539,6 +1525,9 @@ pool_death_test() ->
     exit(Pid, normal),
     wait_for_process_death(Pid),
     meck:validate(test_pool_mod),
-    meck:validate(test_vnode).
+    meck:validate(test_vnode),
+    % TODO why is a short sleep needed to swallow crash message
+    timer:sleep(10),
+    error_logger:tty(true).
 
 -endif.
