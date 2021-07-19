@@ -77,7 +77,7 @@ deadlock_test() ->
                                                         {worker_init, self()},
                                                     receive continue -> ok end
                                             end,
-                                            {raw, 1, self()}),
+                                            {server, 1, self()}),
     CoordinatorLoop ! {wait_for_worker, self()},
     receive continue -> ok end,
     riak_core_vnode_worker_pool:handle_work(Pool,
@@ -86,7 +86,7 @@ deadlock_test() ->
                                                         {ready_to_crash},
                                                     erlang:error(-1)
                                             end,
-                                            {raw, 1, self()}),
+                                            {server, 1, self()}),
     % now we have to wait a bit
     % because handle_work is a cast and there is no way to check when it's in the queue
     timer:sleep(50),
@@ -98,7 +98,7 @@ deadlock_test() ->
                                                     CoordinatorLoop !
                                                         finish_test
                                             end,
-                                            {raw, 1, self()}),
+                                            {server, 1, self()}),
     receive finish_test -> ok end,
     unlink(Pool),
     ok = riak_core_vnode_worker_pool:stop(Pool, normal),
@@ -116,7 +116,7 @@ simple_reply_worker_pool() ->
                                                      timer:sleep(10),
                                                      1 / (N rem 2)
                                              end,
-                                             {raw, N, self()})
+                                             {server, N, self()})
      || N <- lists:seq(1, 10)],
     timer:sleep(200),
     %% make sure we got all replies
@@ -138,7 +138,7 @@ simple_noreply_worker_pool() ->
                                                      timer:sleep(10),
                                                      1 / (N rem 2)
                                              end,
-                                             {raw, N, self()})
+                                             {server, N, self()})
      || N <- lists:seq(1, 10)],
     timer:sleep(200),
     %% make sure that the non-crashing work calls receive timeouts
@@ -172,7 +172,7 @@ shutdown_pool_worker_finish_success() ->
                                                []),
     riak_core_vnode_worker_pool:handle_work(Pool,
                                             fun () -> timer:sleep(50) end,
-                                            {raw, 1, self()}),
+                                            {server, 1, self()}),
     unlink(Pool),
     ok = riak_core_vnode_worker_pool:shutdown_pool(Pool,
                                                    100),
@@ -188,7 +188,7 @@ shutdown_pool_force_timeout() ->
                                                []),
     riak_core_vnode_worker_pool:handle_work(Pool,
                                             fun () -> timer:sleep(100) end,
-                                            {raw, 1, self()}),
+                                            {server, 1, self()}),
     unlink(Pool),
     {error, vnode_shutdown} =
         riak_core_vnode_worker_pool:shutdown_pool(Pool, 50),
@@ -204,7 +204,7 @@ shutdown_pool_duplicate_calls() ->
                                                []),
     riak_core_vnode_worker_pool:handle_work(Pool,
                                             fun () -> timer:sleep(100) end,
-                                            {raw, 1, self()}),
+                                            {server, 1, self()}),
     unlink(Pool),
     %% request shutdown a bit later a second time
     spawn_link(fun () ->

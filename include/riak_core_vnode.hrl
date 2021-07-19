@@ -1,16 +1,6 @@
--type sender_type() :: fsm | server | raw.
+-type sender_type() :: fsm | server .
 
--type sender() :: {sender_type(), reference() | tuple(),
-                   pid()} |
-                  {fsm, undefined, pid()} |
-                  {server, undefined, undefined} |
-                  ignore.
-
-                                           %% TODO: Double-check that these special cases are kosher
-
-                                              % what are these special cases and what is the reference used for??
-
- % special case in riak_core_vnode_master.erl
+-type sender() :: {sender_type(), reference() | tuple() | ignore_ref , pid()} | ignore.
 
 -type partition() :: chash:index_as_int().
 
