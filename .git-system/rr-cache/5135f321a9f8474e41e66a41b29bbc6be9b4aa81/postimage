@@ -1,0 +1,42 @@
+%{cover_enabled, true}.
+{erl_opts, [warnings_as_errors,
+  debug_info]}.
+{edoc_opts, [{preprocess, true}]}.
+{xref_checks, []}.
+{xref_queries, [{"(XC - UC) || (XU - X - B - \"(cluster_info|dtrace)\" : Mod)", []}]}.
+
+{deps, [
+  % worker pool library
+  {poolboy, "~>1.5.2"},
+  % metric collection
+  {basho_stats, "~>1.0.3"},
+  % bloom filter
+  {blume, "~>0.1.0"},
+  % consistent hashing function
+  {chash, "~>0.1.2"},
+  % legacy gen_fsm behaviour
+  gen_fsm_compat
+]}.
+
+%%-------------------------------------------------------------------
+%% Profiles
+%%-------------------------------------------------------------------
+
+{profiles, [
+  {test, [
+    {erl_opts, [nowarn_export_all]},
+    {deps,
+      [
+        {mustache, ".*", {git, "https://github.com/mojombo/mustache.erl.git", {tag, "v0.1.1"}}},
+        % event framework for test cases
+        {goldrush, "~>0.1.8"}
+      ]}]},
+    {docs, [{deps, [{edown, "0.7.0"}]}]},
+    {eqc, [{erl_opts, [nowarn_export_all, {d, 'EQC'}, {d, 'TEST'}]}, {deps, [meck]}, {plugins, [{rebar_eqc, "~>0.1.0"}]}]},
+    {prod, [{relx, [{dev_mode, false}]}]},
+    {lint, [
+      {plugins, [
+        {rebar3_lint, {git, "https://github.com/project-fifo/rebar3_lint.git", {tag, "0.1.4"}}}
+      ]}
+    ]}
+  ]}.

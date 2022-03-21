@@ -247,22 +247,22 @@ reconcile(Ring0, [OtherRing0]) ->
     OtherStatus = riak_core_ring:member_status(Ring2,
                                                OtherNode),
     case {WrongCluster, OtherStatus, Changed} of
-        {true, _OS, _C} ->
+        {true, _, _} ->
             %% TODO: Tell other node to stop gossiping to this node.
             %% STATS
             % riak_core_stat:update(ignored_gossip),
             ignore;
-        {false, down, _C} ->
+        {_, down, _} ->
             %% Tell other node to rejoin the cluster.
             riak_core_gossip:rejoin(OtherNode, Ring2),
             ignore;
-        {false, invalid, _C} ->
+        {_, invalid, _} ->
             %% Exiting/Removed node never saw shutdown cast, re-send.
             ClusterName = riak_core_ring:cluster_name(Ring),
             riak_core_ring_manager:refresh_ring(OtherNode,
                                                 ClusterName),
             ignore;
-        {false, _OS, new_ring} ->
+        {_, _, new_ring} ->
             Ring3 = riak_core_ring:ring_changed(Node, Ring2),
             %% STATS
             % riak_core_stat:update(rings_reconciled),
@@ -331,6 +331,100 @@ remove_from_cluster(Ring, ExitingNode) ->
 
 remove_from_cluster(Ring, ExitingNode, Seed) ->
     % Transfer indexes to other nodes...
+<<<<<<<
+    ExitRing = case attempt_simple_transfer(Seed,
+                                            Ring,
+                                            AllOwners,
+                                            ExitingNode)
+                   of
+                   {ok, NR} -> NR;
+                   target_n_fail ->
+                       %% re-diagonalize
+                       %% first hand off all claims to *any* one else,
+                       %% just so rebalance doesn't include exiting node
+                       Members = riak_core_ring:claiming_members(Ring),
+                       Other = hd(lists:delete(ExitingNode, Members)),
+                       TempRing = lists:foldl(fun ({I, N}, R)
+                                                      when N == ExitingNode ->
+                                                      riak_core_ring:transfer_node(I,
+                                                                                   Other,
+                                                                                   R);
+                                                  (_, R) -> R
+                                              end,
+                                              Ring,
+                                              AllOwners),
+                       riak_core_claim:claim_rebalance_n(TempRing, Other)
+               end,
+    ExitRing.
+
+attempt_simple_transfer(Seed, Ring, Owners,
+                        ExitingNode) ->
+    TargetN = application:get_env(riak_core,
+                                  target_n_val,
+                                  undefined),
+    attempt_simple_transfer(Seed,
+                            Ring,
+                            Owners,
+                            TargetN,
+                            ExitingNode,
+                            0,
+                            [{O, -TargetN}
+                             || O <- riak_core_ring:claiming_members(Ring),
+                                O /= ExitingNode]).
+
+attempt_simple_transfer(Seed, Ring, [{P, Exit} | Rest],
+                        TargetN, Exit, Idx, Last) ->
+    %% handoff
+    case [N || {N, I} <- Last, Idx - I >= TargetN] of
+        [] -> target_n_fail;
+        Candidates ->
+            %% these nodes don't violate target_n in the reverse direction
+            StepsToNext = fun (Node) ->
+                                  length(lists:takewhile(fun ({_, Owner}) ->
+                                                                 Node /= Owner
+                                                         end,
+                                                         Rest))
+                          end,
+            case lists:filter(fun (N) ->
+                                      Next = StepsToNext(N),
+                                      Next + 1 >= TargetN orelse
+                                          Next == length(Rest)
+                              end,
+                              Candidates)
+                of
+                [] -> target_n_fail;
+                Qualifiers ->
+                    %% these nodes don't violate target_n forward
+                    {Rand, Seed2} = rand:uniform_s(length(Qualifiers),
+                                                   Seed),
+                    Chosen = lists:nth(Rand, Qualifiers),
+                    %% choose one, and do the rest of the ring
+                    attempt_simple_transfer(Seed2,
+                                            riak_core_ring:transfer_node(P,
+                                                                         Chosen,
+                                                                         Ring),
+                                            Rest,
+                                            TargetN,
+                                            Exit,
+                                            Idx + 1,
+                                            lists:keyreplace(Chosen,
+                                                             1,
+                                                             Last,
+                                                             {Chosen, Idx}))
+            end
+    end;
+attempt_simple_transfer(Seed, Ring, [{_, N} | Rest],
+                        TargetN, Exit, Idx, Last) ->
+    %% just keep track of seeing this node
+    attempt_simple_transfer(Seed,
+                            Ring,
+                            Rest,
+                            TargetN,
+                            Exit,
+                            Idx + 1,
+                            lists:keyreplace(N, 1, Last, {N, Idx}));
+attempt_simple_transfer(_, Ring, [], _, _, _, _) ->
+=======
     Owners = riak_core_ring:all_owners(Ring),
     Members = riak_core_ring:claiming_members(Ring),
     ExitRing =
@@ -381,12 +475,12 @@ remove_from_cluster(Ring, ExitingNode, Seed) ->
                                         force_rebalance.
 attempt_simple_transfer(Ring, ExitingNode, Seed, Owners, Members) ->
     ForceRebalance =
-        application:get_env(riak_core, full_rebalance_onleave, false),
+        app_helper:get_env(riak_core, full_rebalance_onleave, false),
     case ForceRebalance of
         true ->
             force_rebalance;
         false ->
-            TargetN = application:get_env(riak_core, target_n_val, undefined),
+            TargetN = app_helper:get_env(riak_core, target_n_val),
             Counts =
                 riak_core_claim:get_counts(Members, Owners),
             RingFun =
@@ -494,6 +588,7 @@ simple_transfer([{P, N}|Rest], Statics, Ring, {Seed, Prev, Counts}) ->
     %% simply transition to the Previous ring accumulator
     simple_transfer(Rest, Statics, Ring, {Seed, [{P, N}|Prev], Counts});
 simple_transfer([], _Statics, Ring, _LoopAccs) ->
+>>>>>>>
     {ok, Ring}.
 
 
@@ -502,7 +597,6 @@ simple_transfer([], _Statics, Ring, _LoopAccs) ->
 %% ===================================================================
 
 -ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
 
 test_ring_fun(P, N, R) ->
     lists:keyreplace(P, 1, R, {P, N}).
