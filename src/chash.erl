@@ -89,8 +89,8 @@
                     CHash :: chash()) -> boolean().
 
 contains_name(Name, CHash) ->
-    {_NumPartitions, Nodes} = CHash,
-    [X || {_, X} <- Nodes, X == Name] =/= [].
+    {_NumPartitions, NodeEntries} = CHash,
+    [Node || {_, Node} <- NodeEntries, Node == Name] =/= [].
 
 %% @doc Create a brand new ring.  The size and seednode are specified;
 %%      initially all partitions are owned by the seednode.  If NumPartitions
@@ -110,9 +110,9 @@ fresh(NumPartitions, SeedNode) ->
              CHash :: chash()) -> chash_node().
 
 lookup(IndexAsInt, CHash) ->
-    {_NumPartitions, Nodes} = CHash,
-    {IndexAsInt, X} = proplists:lookup(IndexAsInt, Nodes),
-    X.
+    {_NumPartitions, NodeEntries} = CHash,
+    {IndexAsInt, Node} = proplists:lookup(IndexAsInt, NodeEntries),
+    Node.
 
 sha(Bin) -> crypto:hash(sha, Bin).
 
@@ -127,8 +127,8 @@ key_of(ObjectName) -> sha(term_to_binary(ObjectName)).
 -spec members(CHash :: chash()) -> [chash_node()].
 
 members(CHash) ->
-    {_NumPartitions, Nodes} = CHash,
-    lists:usort([X || {_Idx, X} <- Nodes]).
+    {_NumPartitions, NodeEntries} = CHash,
+    lists:usort([Node || {_Idx, Node} <- NodeEntries]).
 
 %% @doc Return a randomized merge of two rings.
 %%      If multiple nodes are actively claiming nodes in the same
@@ -137,11 +137,11 @@ members(CHash) ->
                   CHashB :: chash()) -> chash().
 
 merge_rings(CHashA, CHashB) ->
-    {NumPartitions, NodesA} = CHashA,
-    {NumPartitions, NodesB} = CHashB,
+    {NumPartitions, NodeEntriesA} = CHashA,
+    {NumPartitions, NodeEntriesB} = CHashB,
     {NumPartitions,
-     [{I, random_node(A, B)}
-      || {{I, A}, {I, B}} <- lists:zip(NodesA, NodesB)]}.
+     [{I, random_node(NodeA, NodeB)}
+      || {{I, NodeA}, {I, NodeB}} <- lists:zip(NodeEntriesA, NodeEntriesB)]}.
 
 %% @doc Given the integer representation of a chash key,
 %%      return the next ring index integer value.
@@ -156,18 +156,18 @@ next_index(IntegerKey, {NumPartitions, _}) ->
 -spec nodes(CHash :: chash()) -> [node_entry()].
 
 nodes(CHash) ->
-    {_NumPartitions, Nodes} = CHash,
-    Nodes.
+    {_NumPartitions, NodeEntries} = CHash,
+    NodeEntries.
 
 %% @doc Given an object key, return all NodeEntries in order starting at Index.
 -spec ordered_from(Index :: index(),
                    CHash :: chash()) -> [node_entry()].
 
-ordered_from(Index, {NumPartitions, Nodes}) ->
+ordered_from(Index, {NumPartitions, NodeEntries}) ->
     <<IndexAsInt:160/integer>> = Index,
     Inc = ring_increment(NumPartitions),
-    {A, B} = lists:split(IndexAsInt div Inc + 1, Nodes),
-    B ++ A.
+    {NodeEntriesA, NodeEntriesB} = lists:split(IndexAsInt div Inc + 1, NodeEntries),
+    NodeEntriesB ++ NodeEntriesA.
 
 %% @doc Given an object key, return all NodeEntries in reverse order
 %%      starting at Index.
@@ -175,7 +175,7 @@ ordered_from(Index, {NumPartitions, Nodes}) ->
                    CHash :: chash()) -> [node_entry()].
 
 predecessors(Index, CHash) ->
-    {NumPartitions, _Nodes} = CHash,
+    {NumPartitions, _NodeEntries} = CHash,
     predecessors(Index, CHash, NumPartitions).
 
 %% @doc Given an object key, return the next N NodeEntries in reverse order
@@ -203,15 +203,15 @@ ring_increment(NumPartitions) ->
 -spec size(CHash :: chash()) -> integer().
 
 size(CHash) ->
-    {_NumPartitions, Nodes} = CHash,
-    length(Nodes).
+    {_NumPartitions, NodeEntries} = CHash,
+    length(NodeEntries).
 
 %% @doc Given an object key, return all NodeEntries in order starting at Index.
 -spec successors(Index :: index(),
                  CHash :: chash()) -> [node_entry()].
 
 successors(Index, CHash) ->
-    {NumPartitions, _Nodes} = CHash,
+    {NumPartitions, _NodeEntries} = CHash,
     successors(Index, CHash, NumPartitions).
 
 %% @doc Given an object key, return the next N NodeEntries in order
@@ -222,7 +222,7 @@ successors(Index, CHash) ->
 successors(Index, CHash, N) ->
     Num = max_n(N, CHash),
     Ordered = ordered_from(Index, CHash),
-    {NumPartitions, _Nodes} = CHash,
+    {NumPartitions, _NodeEntries} = CHash,
     if Num =:= NumPartitions -> Ordered;
        true ->
            {Res, _} = lists:split(Num, Ordered),
@@ -234,12 +234,12 @@ successors(Index, CHash, N) ->
              Name :: chash_node(), CHash :: chash()) -> chash().
 
 update(IndexAsInt, Name, CHash) ->
-    {NumPartitions, Nodes} = CHash,
-    NewNodes = lists:keyreplace(IndexAsInt,
+    {NumPartitions, NodeEntries} = CHash,
+    NewNodeEntries = lists:keyreplace(IndexAsInt,
                                 1,
-                                Nodes,
+                                NodeEntries,
                                 {IndexAsInt, Name}),
-    {NumPartitions, NewNodes}.
+    {NumPartitions, NewNodeEntries}.
 
 %% ====================================================================
 %% Internal functions
@@ -251,7 +251,7 @@ update(IndexAsInt, Name, CHash) ->
 -spec max_n(N :: integer(),
             CHash :: chash()) -> integer().
 
-max_n(N, {NumPartitions, _Nodes}) ->
+max_n(N, {NumPartitions, _NodeEntries}) ->
     erlang:min(N, NumPartitions).
 
 %% @private
@@ -277,8 +277,8 @@ update_test() ->
     NewNode = new@host,
     % Create a fresh ring...
     CHash = chash:fresh(5, Node),
-    GetNthIndex = fun (N, {_, Nodes}) ->
-                          {Index, _} = lists:nth(N, Nodes),
+    GetNthIndex = fun (N, {_, NodeEntries}) ->
+                          {Index, _} = lists:nth(N, NodeEntries),
                           Index
                   end,
 
