@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2007-2014 Basho Technologies, Inc.
-%% Copyright (c) 2020 Workday, Inc.
+%% Copyright (c) 2020-2022 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -35,8 +35,10 @@
     uncovered_preflists/4,
     covering_nodesets/3,
     covering_nodesets/4,
-    safe_node_partitions/3,
-    safe_node_partitions/4
+    find_maximal_chunks/3,
+    find_maximal_chunks/4,
+    find_stochastic_chunks/3,
+    find_stochastic_chunks/4
 ]). %% for testing in the field, only
 
 -export_type([partition_id/0]).
@@ -222,11 +224,11 @@ traverse(Nodes, PrefLists, CMin, K, Depth, Accum) ->
 %%
 %% FOR INTERNAL/DIAGNOSTIC USE ONLY
 %%
-%% Equivalent to safe_node_partitions(Ring, NVal, CMin, undefined).
+%% Equivalent to find_maximal_chunks(Ring, NVal, CMin, undefined).
 %%
--spec safe_node_partitions(Ring::riak_core_apl:ring(), NVal::riak_core_apl:n_val(), CMin::non_neg_integer()) -> [[node()]].
-safe_node_partitions(Ring, NVal, CMin) ->
-    safe_node_partitions(Ring, NVal, CMin, undefined).
+-spec find_maximal_chunks(Ring::riak_core_apl:ring(), NVal::riak_core_apl:n_val(), CMin::non_neg_integer()) -> [[node()]].
+find_maximal_chunks(Ring, NVal, CMin) ->
+    find_maximal_chunks(Ring, NVal, CMin, undefined).
 
 %%
 %% FOR INTERNAL/DIAGNOSTIC USE ONLY
@@ -238,8 +240,8 @@ safe_node_partitions(Ring, NVal, CMin) ->
 %% @return      a disjoint set of subsets of nodes in the Ring that are
 %%              safe to take down, while still preserving read-availability.
 %%
--spec safe_node_partitions(Ring::riak_core_apl:ring(), NVal::riak_core_apl:n_val(), CMin::non_neg_integer(), K::(undefined | non_neg_integer())) -> [[node()]].
-safe_node_partitions(Ring, NVal, CMin, K) ->
+-spec find_maximal_chunks(Ring::riak_core_apl:ring(), NVal::riak_core_apl:n_val(), CMin::non_neg_integer(), K::(undefined | non_neg_integer())) -> [[node()]].
+find_maximal_chunks(Ring, NVal, CMin, K) ->
     Nodes = riak_core_ring:all_members(Ring),
     CoveringNodeSets = covering_nodesets(Ring, NVal, CMin, K),
     SafeNodeSets = [Nodes -- NodeSet || NodeSet <- CoveringNodeSets],
@@ -284,6 +286,105 @@ find_partitioning([SafeNodeSet|Rest], Nodes, Accum) ->
                     end
             end
     end.
+
+
+%%
+%% FOR INTERNAL/DIAGNOSTIC USE ONLY
+%%
+%% Find a set of chunks (i.e., a partitioning of the nodes in the ring), such that
+%% for every chunk, C and set of nodes in the Ring, N, there are at least CMin replicas
+%% in N - C (given a specific NVal, almost always 3).
+%%
+%% @hidden
+find_stochastic_chunks(Ring, NVal, CMin) ->
+    Nodes = riak_core_ring:all_members(Ring),
+    find_stochastic_chunks(Ring, NVal, CMin, length(Nodes)).
+
+%% @hidden
+find_stochastic_chunks(_Ring, NVal, CMin, K) when NVal < 1 orelse K < 1 orelse CMin < 1 orelse CMin >= NVal->
+    {error, badarg};
+find_stochastic_chunks(Ring, NVal, CMin, K) ->
+    Nodes = riak_core_ring:all_members(Ring),
+    PrefLists = riak_core_ring:all_preflists(Ring, NVal),
+    AllNodes = randomize(Nodes),
+    {ok, find_chunks_dfs({PrefLists, CMin, K, AllNodes}, AllNodes, [])}.
+
+%% @private
+randomize(L) ->
+    lists:foldl(
+        fun(E, Accum) ->
+            case random:uniform(2) of
+                1 -> [E|Accum];
+                _-> Accum ++ [E]
+            end
+        end,
+        [],
+        L
+    ).
+
+
+%% @private
+find_chunks_dfs(_Fixed, [] = _CandidateNodes, Chunks) ->
+    Chunks;
+find_chunks_dfs(Fixed, CandidateNodes, Chunks) ->
+    {Chunk, RestCandidateNodes} = find_chunk_dfs(Fixed, CandidateNodes),
+    NewChunks = [Chunk | Chunks],
+    find_chunks_dfs(Fixed, RestCandidateNodes, NewChunks).
+
+
+%% @private
+find_chunk_dfs({_PrefLists, _CMin, K, AllNodes} = Fixed, CandidateNodes) ->
+    find_chunk_dfs(Fixed, CandidateNodes, K, AllNodes, []).
+
+%% @private
+find_chunk_dfs(_Fixed, [], _K, _Nodes, Chunk) ->
+    {Chunk, []};
+find_chunk_dfs(_Fixed, CandidateNodes, 0, _Nodes, Chunk) ->
+    {Chunk, CandidateNodes};
+find_chunk_dfs(Fixed, CandidateNodes, Depth, Nodes, Chunk) ->
+    case find_first_covering_candidate(Fixed, Nodes, CandidateNodes) of
+        none ->
+            {Chunk, CandidateNodes}; %% no children of this node cover the preflist
+        {SelectedNode, RestCandidates} ->
+            NewNodes = Nodes -- [SelectedNode],
+            find_chunk_dfs(Fixed, RestCandidates, Depth - 1, NewNodes, [SelectedNode|Chunk])
+    end.
+
+
+%% @private
+find_first_covering_candidate({PrefLists, CMin, _K, _AllNodes} = _Fixed, Nodes, CandidateNodes) ->
+    SearchFun = fun(Candidate) ->
+        covers_all_preflists(Nodes -- [Candidate], PrefLists, CMin)
+    end,
+    case search(SearchFun, CandidateNodes) of
+        false ->
+            none;
+        {value, Candidate} ->
+            {Candidate, CandidateNodes -- [Candidate]}
+    end.
+
+
+%% added in OTP21
+%% @private
+search(_Pred, []) ->
+    false;
+search(Pred, [H|T]) ->
+    case Pred(H) of
+        true ->
+            {value, H};
+        false ->
+            search(Pred, T)
+    end.
+
+
+%% @private
+covers_all_preflists(Nodes, PrefLists, CMin) ->
+    lists:all(
+        fun(Preflist) ->
+            covers(Nodes, Preflist, CMin)
+        end,
+        PrefLists
+    ).
 
 %% @private
 is_partitioning(N, P) ->
@@ -446,17 +547,17 @@ verify_covered(Key, Ring, CoveringNodeSet, CMin) ->
 
 %% safe nodes forms a partition of the members of the ring, and all partitions are "safe"
 %% (i.e., their complements all cover the ring)
-safe_node_partitions_test_() ->
+find_maximal_chunks_test_() ->
     {timeout, 60, [
         fun() ->
             NVal = 3,
             [begin
                  io:format(user, ".", []),
                  Ring = create_ring(256, 8),
-                 case riak_core_ring_util:safe_node_partitions(Ring, NVal, CMin, K) of
+                 case riak_core_ring_util:find_maximal_chunks(Ring, NVal, CMin, K) of
                      {ok, SafeNodePartitions} ->
                          verify_max_nodeset_size(SafeNodePartitions, K),
-                         verify_safe_node_partitions(Ring, SafeNodePartitions, CMin);
+                         find_maximal_chunks(Ring, SafeNodePartitions, CMin);
                      {error, {no_partitioning, Properties}} ->
                          SafeNodeSets = proplists:get_value(safe_node_sets, Properties),
                          case CMin of
@@ -473,6 +574,27 @@ safe_node_partitions_test_() ->
                          end
                  end
              end || CMin <- lists:seq(1, NVal), K <- [undefined] ++ lists:seq(0, NVal)]
+        end
+    ]}.
+
+%% chunks a partition of the members of the ring, and all partitions are "safe"
+%% (i.e., their complements all cover the ring)
+find_stochastic_chunks_test_() ->
+    {timeout, 720, [
+        fun() ->
+            NVal = 3,
+            [begin
+                 io:format(user, ".", []),
+                 Ring = create_ring(RingSize, NumNodes),
+                 case riak_core_ring_util:find_stochastic_chunks(Ring, NVal, CMin, K) of
+                     {ok, Chunks} ->
+                         verify_max_nodeset_size(Chunks, K),
+                         verify_safe_node_partitions(Ring, Chunks, CMin)
+                 end
+             end || CMin <- lists:seq(1, NVal - 1),
+                    RingSize <- [256, 1024],
+                    NumNodes <- [8, 16, 32, 64],
+                    K <- [8, 16, 24]]
         end
     ]}.
 
