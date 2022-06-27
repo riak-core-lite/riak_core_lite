@@ -306,22 +306,13 @@ find_stochastic_chunks(_Ring, NVal, CMin, K) when NVal < 1 orelse K < 1 orelse C
 find_stochastic_chunks(Ring, NVal, CMin, K) ->
     Nodes = riak_core_ring:all_members(Ring),
     PrefLists = riak_core_ring:all_preflists(Ring, NVal),
-    AllNodes = randomize(Nodes),
+    AllNodes = shuffle_list(Nodes),
     {ok, find_chunks_dfs({PrefLists, CMin, K, AllNodes}, AllNodes, [])}.
 
 %% @private
-randomize(L) ->
-    lists:foldl(
-        fun(E, Accum) ->
-            case random:uniform(2) of
-                1 -> [E|Accum];
-                _-> Accum ++ [E]
-            end
-        end,
-        [],
-        L
-    ).
-
+shuffle_list(L) ->
+    RandomZipList = lists:sort([{random:uniform(), E} || E <- L]),
+    [E || {_, E} <- RandomZipList].
 
 %% @private
 find_chunks_dfs(_Fixed, [] = _CandidateNodes, Chunks) ->
