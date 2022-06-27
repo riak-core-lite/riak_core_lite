@@ -37,35 +37,38 @@
                 sock,
                 server_state}).
 
--callback init(InitArgs::list()) -> 
-    {ok, State::term()} | 
+-callback init(InitArgs::list()) ->
+    {ok, State::term()} |
     {error, Reason::term()}.
 
--callback handle_call(Msg::term(), From::{pid(), term()}, State::term()) -> 
-    {reply, Reply::term(), State::term()} | 
-    {reply, Reply::term(), State::term(), number() | hibernate} | 
-    {noreply, State::term()} | 
-    {noreply, State::term(), number() | hibernate} | 
+-callback handle_call(Msg::term(), From::{pid(), term()}, State::term()) ->
+    {reply, Reply::term(), State::term()} |
+    {reply, Reply::term(), State::term(), number() | hibernate} |
+    {noreply, State::term()} |
+    {noreply, State::term(), number() | hibernate} |
     {stop, Reason::term(), State::term()}.
 
 -callback handle_cast(Msg::term(), State::term()) ->
-    {noreply, State::term()} | 
-    {noreply, State::term(), number() | hibernate} | 
+    {noreply, State::term()} |
+    {noreply, State::term(), number() | hibernate} |
     {stop, Reason::term(), State::term()}.
 
 -callback handle_info(Msg::term(), State::term()) ->
-    {noreply, State::term()} | 
-    {noreply, State::term(), number() | hibernate} | 
+    {noreply, State::term()} |
+    {noreply, State::term(), number() | hibernate} |
     {stop, Reason::term(), State::term()}.
 
--callback terminate(Reason::term(), State::term()) ->    
+-callback terminate(Reason::term(), State::term()) ->
     ok.
 
 -callback sock_opts() -> [gen_tcp:listen_option()].
 
 -callback new_connection(inet:socket(), State::term()) ->
-    {ok, NewState::term()} | 
+    {ok, NewState::term()} |
     {stop, Reason::term(), NewState::term()}.
+
+%% Optional callback, wait_for_listener_ready/0 should block until the port is ready to come up.
+% -callback wait_for_listener_ready() -> ok.
 
 %% @spec start_link(CallbackModule, IpAddr, Port, InitParams) -> Result
 %% CallbackModule = atom()
@@ -78,18 +81,13 @@ start_link(CallbackModule, IpAddr, Port, InitParams) ->
   gen_server:start_link(?MODULE, [CallbackModule, IpAddr, Port, InitParams], []).
 
 %% @hidden
-init([CallbackModule, IpAddr, Port, InitParams]) ->
-  case CallbackModule:init(InitParams) of
-    {ok, ServerState} ->
-      case listen_on(CallbackModule, IpAddr, Port) of
-        {ok, Sock} ->
-          {ok, #state{cb=CallbackModule, sock=Sock, server_state=ServerState}};
-        Error ->
-          CallbackModule:terminate(Error, ServerState),
-          Error
-      end;
-    Err ->
-      Err
+init([CallbackModule|_] = Args) ->
+  case is_wait_for_ready_implemented(CallbackModule) of
+    true ->
+      self() ! {init_tcp_server, Args},
+      {ok, #state{}};
+    false ->
+      init_tcp_server(Args, #state{})
   end.
 
 %% @hidden
@@ -120,6 +118,11 @@ handle_cast(Msg, #state{cb=Callback, server_state=ServerState}=State) ->
       {stop, Reason, State#state{server_state=NewServerState}}
   end.
 
+handle_info({init_tcp_server, [CallbackModule|_] = Args}, State1) ->
+  ok = maybe_wait_for_listener_ready(CallbackModule),
+  {ok, State2} = init_tcp_server(Args, State1),
+  {noreply, State2};
+
 %% @hidden
 handle_info({inet_async, ListSock, _Ref, {ok, CliSocket}}, #state{cb=Callback, server_state=ServerState}=State) ->
   inet_db:register_socket(CliSocket, inet_tcp),
@@ -142,6 +145,9 @@ handle_info(Info, #state{cb=Callback, server_state=ServerState}=State) ->
   end.
 
 %% @hidden
+terminate(_, #state{cb = undefined}) ->
+  % if the callback module is undefined then we were in the waiting_for_service state when the process was terminated
+  ok;
 terminate(Reason, #state{cb=Callback, sock=Sock, server_state=ServerState}) ->
   gen_tcp:close(Sock),
   Callback:terminate(Reason, ServerState),
@@ -153,6 +159,32 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Internal functions
 
+init_tcp_server([CallbackModule, IpAddr, Port, InitParams], State) ->
+  case CallbackModule:init(InitParams) of
+    {ok, ServerState} ->
+      case listen_on(CallbackModule, IpAddr, Port) of
+        {ok, Sock} ->
+          {ok, State#state{cb=CallbackModule, sock=Sock, server_state=ServerState}};
+        Error ->
+          CallbackModule:terminate(Error, ServerState),
+          Error
+      end;
+    Err ->
+      Err
+  end.
+
+maybe_wait_for_listener_ready(CallbackModule) ->
+  case is_wait_for_ready_implemented(CallbackModule) of
+    true ->
+      ok = CallbackModule:wait_for_listener_ready();
+    false ->
+      ok
+  end.
+
+is_wait_for_ready_implemented(CallbackModule) ->
+  Exports = CallbackModule:module_info(exports),
+  lists:member({wait_for_listener_ready, 0}, Exports).
+
 %% @hidden
 %% @spec listen_on(CallbackModule, IpAddr, Port) -> Result
 %% CallbackModule = atom()
@@ -163,6 +195,7 @@ listen_on(CallbackModule, IpAddr, Port) when is_tuple(IpAddr) andalso
                                              (8 =:= size(IpAddr) orelse
                                               4 =:= size(IpAddr)) ->
     SockOpts = [{ip, IpAddr}|CallbackModule:sock_opts()],
+    lager:info("Listening on ~p:~p for callback ~p", [IpAddr, Port, CallbackModule]),
     case gen_tcp:listen(Port, SockOpts) of
         {ok, LSock} ->
             {ok, _Ref} = prim_inet:async_accept(LSock, -1),
