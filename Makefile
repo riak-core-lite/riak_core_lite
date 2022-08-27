@@ -1,5 +1,5 @@
 .PHONY: compile rel cover test dialyzer eqc
-REBAR=./rebar3
+REBAR ?= ./rebar3
 
 compile:
 	$(REBAR) compile
@@ -7,7 +7,7 @@ compile:
 clean:
 	$(REBAR) clean
 
-cover: 
+cover:
 	$(REBAR) eunit --cover
 	$(REBAR) cover
 
