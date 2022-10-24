@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2012 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2014 Basho Technologies, Inc.
+%% Copyright (c) 2018-2022 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -23,7 +24,7 @@
 -module(riak_core_handoff_sender).
 -export([start_link/4, get_handoff_ssl_options/0]).
 
--compile({nowarn_deprecated_function, 
+-compile({nowarn_deprecated_function,
             [{gen_fsm, send_event, 2}]}).
 
 -include("riak_core_vnode.hrl").
@@ -206,7 +207,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                                                           VMaster, infinity),
 
          %% Send any straggler entries remaining in the buffer:
-         AccRecord = send_objects(AccRecord0#ho_acc.item_queue, AccRecord0),
+         AccRecord = send_objects(AccRecord0#ho_acc.item_queue, AccRecord0, true),
 
          if AccRecord == {error, vnode_shutdown} ->
                  ?log_info("because the local vnode was shutdown", []),
@@ -235,13 +236,16 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                  %% we receive the sync the remote side will be up to date.
                  lager:debug("~p ~p Sending final sync",
                              [SrcPartition, Module]),
-                 ok = TcpMod:send(Socket, <<?PT_MSG_SYNC:8>>),
-
-                 case TcpMod:recv(Socket, 0, RecvTimeout) of
-                     {ok,[?PT_MSG_SYNC|<<"sync">>]} ->
-                         lager:debug("~p ~p Final sync received",
-                                     [SrcPartition, Module]);
-                     {error, timeout} -> exit({shutdown, timeout})
+                 StartUs = current_us(),
+                 try
+                     ok = TcpMod:send(Socket, <<?PT_MSG_SYNC:8>>),
+                     case TcpMod:recv(Socket, 0, RecvTimeout) of
+                         {ok,[?PT_MSG_SYNC|<<"sync">>]} ->
+                             lager:debug("~p ~p Final sync received", [SrcPartition, Module]);
+                         {error, timeout} -> exit({shutdown, timeout})
+                     end
+                 after
+                     riak_core_stat:update(handoff_acksync_wait, current_us() - StartUs)
                  end,
 
                  FoldTimeDiff = end_fold_time(StartFoldTime),
@@ -336,19 +340,24 @@ visit_item2(K, V, Acc = #ho_acc{ack = _AccSyncThreshold, acksync_threshold = _Ac
     NumBytes = byte_size(M),
 
     Stats2 = incr_bytes(Stats, NumBytes),
-    Stats3 = maybe_send_status({Module, SrcPartition, TargetPartition}, Stats2),
 
-    case TcpMod:send(Sock, M) of
-        ok ->
-            case TcpMod:recv(Sock, 0, RecvTimeout) of
-                {ok,[?PT_MSG_OLDSYNC|<<"sync">>]} ->
-                    Acc2 = Acc#ho_acc{ack=0, error=ok, stats=Stats3},
-                    visit_item2(K, V, Acc2);
-                {error, Reason} ->
-                    Acc#ho_acc{ack=0, error={error, Reason}, stats=Stats3}
-            end;
-        {error, Reason} ->
-            Acc#ho_acc{ack=0, error={error, Reason}, stats=Stats3}
+    StartUs = current_us(),
+    try
+        case TcpMod:send(Sock, M) of
+            ok ->
+                Stats3 = maybe_send_status({Module, SrcPartition, TargetPartition}, Stats2),
+                case TcpMod:recv(Sock, 0, RecvTimeout) of
+                    {ok,[?PT_MSG_OLDSYNC|<<"sync">>]} ->
+                        Acc2 = Acc#ho_acc{ack=0, error=ok, stats=Stats3},
+                        visit_item2(K, V, Acc2);
+                    {error, Reason} ->
+                        Acc#ho_acc{ack=0, error={error, Reason}, stats=Stats3}
+                end;
+            {error, Reason} ->
+                Acc#ho_acc{ack=0, error={error, Reason}, stats=Stats2}
+        end
+    after
+        riak_core_stat:update(handoff_acksync_wait, current_us() - StartUs)
     end;
 visit_item2(K, V, Acc) ->
     #ho_acc{filter=Filter,
@@ -400,18 +409,17 @@ visit_item2(K, V, Acc) ->
                             NumBytes = byte_size(M),
 
                             Stats2 = incr_bytes(incr_objs(Stats), NumBytes),
-                            Stats3 = maybe_send_status({Module, SrcPartition,
-                                                        TargetPartition}, Stats2),
 
                             case TcpMod:send(Sock, M) of
                                 ok ->
+                                    Stats3 = maybe_send_status({Module, SrcPartition, TargetPartition}, Stats2),
                                     Acc#ho_acc{ack=Ack+1,
                                                error=ok,
                                                stats=Stats3,
                                                total_bytes=TotalBytes+NumBytes,
                                                total_objects=TotalObjects+1};
                                 {error, Reason} ->
-                                    Acc#ho_acc{error={error, Reason}, stats=Stats3}
+                                    Acc#ho_acc{error={error, Reason}, stats=Stats2}
                             end
                     end
             end;
@@ -427,9 +435,12 @@ handle_not_sent_item(NotSentFun, Acc, Key) when is_function(NotSentFun) ->
 handle_not_sent_item(undefined, _, _) ->
     undefined.
 
-send_objects([], Acc) ->
-    Acc;
 send_objects(ItemsReverseList, Acc) ->
+    send_objects(ItemsReverseList, Acc, false).
+
+send_objects([], Acc, _FlushStats) ->
+    Acc;
+send_objects(ItemsReverseList, Acc, FlushStats) ->
 
     Items = lists:reverse(ItemsReverseList),
 
@@ -452,10 +463,10 @@ send_objects(ItemsReverseList, Acc) ->
     NumBytes = byte_size(M),
 
     Stats2 = incr_bytes(incr_objs(Stats, NObjects), NumBytes),
-    Stats3 = maybe_send_status({Module, SrcPartition, TargetPartition}, Stats2),
 
     case TcpMod:send(Sock, M) of
         ok ->
+            Stats3 = maybe_send_status({Module, SrcPartition, TargetPartition}, Stats2, FlushStats),
             Acc#ho_acc{ack=Ack+1, error=ok, stats=Stats3,
                        total_objects=TotalObjects+NObjects,
                        total_bytes=TotalBytes+NumBytes,
@@ -463,7 +474,7 @@ send_objects(ItemsReverseList, Acc) ->
                        item_queue_length=0,
                        item_queue_byte_size=0};
         {error, Reason} ->
-            Acc#ho_acc{error={error, Reason}, stats=Stats3}
+            Acc#ho_acc{error={error, Reason}, stats=Stats2}
     end.
 
 get_handoff_ip(Node) when is_atom(Node) ->
@@ -552,15 +563,20 @@ incr_objs(Stats=#ho_stats{objs=Objs}, NObjs) ->
     Stats#ho_stats{objs=Objs+NObjs}.
 
 %% @private
+-spec maybe_send_status({module(), non_neg_integer(), non_neg_integer()}, ho_stats()) ->
+    NewStats::ho_stats().
+maybe_send_status(ModSrcTgt, Stats) ->
+    maybe_send_status(ModSrcTgt, Stats, false).
+
+%% @private
 %%
 %% @doc Check if the interval has elapsed and if so send handoff stats
 %%      for `ModSrcTgt' to the manager and return a new stats record
 %%      `NetStats'.
--spec maybe_send_status({module(), non_neg_integer(), non_neg_integer()},
-                        ho_stats()) ->
-                               NewStats::ho_stats().
-maybe_send_status(ModSrcTgt, Stats=#ho_stats{interval_end=IntervalEnd}) ->
-    case is_elapsed(IntervalEnd) of
+-spec maybe_send_status({module(), non_neg_integer(), non_neg_integer()}, ho_stats(), boolean()) ->
+    NewStats::ho_stats().
+maybe_send_status(ModSrcTgt, Stats=#ho_stats{interval_end=IntervalEnd}, FlushStats) ->
+    case FlushStats orelse is_elapsed(IntervalEnd) of
         true ->
             Stats2 = Stats#ho_stats{last_update=os:timestamp()},
             riak_core_handoff_manager:status_update(ModSrcTgt, Stats2),
@@ -640,3 +656,7 @@ maybe_call_handoff_started(Module, SrcPartition) ->
             %% optional callback not implemented, so we carry on, w/ no addition fold options
             []
     end.
+
+current_us() ->
+    {MegaSecs, Secs, MicroSecs} = os:timestamp(),
+    MegaSecs*1000000000000 + Secs*1000000 + MicroSecs.
