@@ -1,5 +1,7 @@
+%% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.
+%% Copyright (c) 2018-2022 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -19,7 +21,7 @@
 -module('riak_core_vnode').
 -behaviour(gen_fsm).
 
--compile({nowarn_deprecated_function, 
+-compile({nowarn_deprecated_function,
             [{gen_fsm, start_link, 3},
                 {gen_fsm, send_event, 2},
                 {gen_fsm, send_event_after, 2},
@@ -242,10 +244,10 @@ do_init(State = #state{index=Index, mod=Mod, forward=Forward}) ->
         {error, Reason} ->
             {error, Reason};
         _ ->
-            ModState0 = 
+            ModState0 =
                 case lists:keyfind(pool, 1, Props) of
                     {pool, WorkerMod, PoolSize, WorkerArgs}=PoolConfig ->
-                        lager:info("Starting vnode worker pool " ++ 
+                        lager:info("Starting vnode worker pool " ++
                                         "~p with size of ~p~n",
                                     [WorkerMod, PoolSize]),
                         {ok, PoolPid} =
@@ -254,7 +256,7 @@ do_init(State = #state{index=Index, mod=Mod, forward=Forward}) ->
                                                                 Index,
                                                                 WorkerArgs,
                                                                 worker_props),
-                        % If the vnode Module requires access to the vnode worker 
+                        % If the vnode Module requires access to the vnode worker
                         % pool, it should export a function add_vnode_pool/2
                         case erlang:function_exported(Mod, add_vnode_pool, 2) of
                             true ->
@@ -586,7 +588,10 @@ active(unregistered, State=#state{mod=Mod, index=Index}) ->
                 [Index, Mod]),
     {stop, normal, State#state{handoff_target=none,
                                handoff_type=undefined,
-                               pool_pid=undefined}}.
+                               pool_pid=undefined}};
+active(Other, State=#state{index=Index}) ->
+    lager:info("Vnode for patition ~p received unexpected message ~p", [Index, Other]),
+    continue(State).
 
 active(_Event, _From, State) ->
     Reply = ok,
