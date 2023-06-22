@@ -1,8 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% riak_core: Core Riak Application
-%%
-%% Copyright (c) 2007-2013 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2014 Basho Technologies, Inc.
+%% Copyright (c) 2023 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -59,7 +58,8 @@ init([]) ->
                    permanent, 30000, supervisor, [riak_ensemble_sup]},
 
     Children = lists:flatten(
-                 [?CHILD(riak_core_bg_manager, worker),
+                 [?CHILD(riak_core_epmd_watcher, worker),
+                  ?CHILD(riak_core_bg_manager, worker),
                   ?CHILD(riak_core_sysmon_minder, worker),
                   ?CHILD(riak_core_vnode_sup, supervisor, 305000),
                   ?CHILD(riak_core_eventhandler_sup, supervisor),
