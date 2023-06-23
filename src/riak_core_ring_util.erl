@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2014 Basho Technologies, Inc.
-%% Copyright (c) 2020-2022 Workday, Inc.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.
+%% Copyright (c) 2020-2023 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -27,7 +27,7 @@
          hash_to_partition_id/2,
          partition_id_to_hash/2,
          hash_is_partition_boundary/2,
-         uncovered_preflists/1
+         uncovered_preflists/2
 ]).
 
 -export([
@@ -118,19 +118,23 @@ hash_is_partition_boundary(CHashInt, RingSize) ->
 
 %%
 %% @param UpNodes list of currently running nodes
-%% @returns set of preflists that are uncovered if only UpNodes are running
+%% @param Min Minimum coverage requirement (<= current `n_val')
+%% @returns set of preflists that have fewer than Min replicas available if only UpNodes are running
 %% @doc
-%% Return the set of preflists that are uncovered if only the supplied list of
+%% Return the set of preflists that have fewer than Min replicas available if only the supplied list of
 %% nodes are running.  If this list is empty, then the cluster is available for
-%% reads and writes if all nodes in UpNodes are available.
+%% reads and writes for r=Min if all nodes in UpNodes are available.
 %% @end
 %%
--spec uncovered_preflists([node()]) -> [riak_core_apl:preflist()].
-uncovered_preflists(UpNodes) ->
-    uncovered_preflists(UpNodes, default_nval(), 1).
+-spec uncovered_preflists([node()], Min :: non_neg_integer()) -> [riak_core_apl:preflist()].
+uncovered_preflists(UpNodes, Min) ->
+    uncovered_preflists(UpNodes, default_nval(), Min).
 
 %% @hidden
-uncovered_preflists(Nodes, NVal, Min) ->
+uncovered_preflists(Nodes, NVal, Min)
+    when is_integer(NVal) andalso is_integer(Min) andalso 0 < NVal andalso 0 =< Min
+        andalso Min =< NVal
+->
     case riak_core_ring_manager:get_my_ring() of
         {ok, Ring} ->
             uncovered_preflists(Nodes, Ring, NVal, Min);
