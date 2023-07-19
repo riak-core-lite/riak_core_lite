@@ -128,6 +128,8 @@
 -export([code_change/3, terminate/2]).
 -endif.
 
+-include_lib("kernel/include/logger.hrl").
+
 %% Dialyzer correctly warns that the
 %%      check_epmd/1
 %%      ensure_epmd/1
@@ -292,7 +294,7 @@ status() ->
 init(#?STATE{} = State) ->
     %% If we try to start EPMD and it fails, we want to report it.
     erlang:process_flag(trap_exit, true),
-    lager:info("~s started with configuration ~p",
+    ?LOG_INFO("~s started with configuration ~p",
         [?MODULE, status_report(State)]),
     {ok, schedule_check(State)}.
 
@@ -355,7 +357,7 @@ config(?EPMD_COMMAND_KEY = Key) ->
                 ok ->
                     Command;
                 Error ->
-                    lager:error(
+                    ?LOG_ERROR(
                         "invalid ~p value, verification failed with ~p,"
                         " using default ERTS EPMD", [Key, Error])
             end;
@@ -388,7 +390,7 @@ config_int(Key, Min, Max, Default) ->
                 andalso Int >= Min andalso Int =< Max ->
             Int;
         {ok, BadVal} ->
-            lager:error("invalid ~p value: ~p,"
+            ?LOG_ERROR("invalid ~p value: ~p,"
                 " must be an integer in the range ~b through ~b,"
                 " using default ~b", [Key, BadVal, Min, Max, Default]),
             Default;
@@ -415,11 +417,11 @@ check_epmd(
                         {ok, Creation} when erlang:is_integer(Creation) ->
                             Result;
                         {error, already_registered = Info} ->
-                            lager:debug("~p:register_node(~p, ~p) returned ~p",
+                            ?LOG_DEBUG("~p:register_node(~p, ~p) returned ~p",
                                 [EpmdMod, Name, Port, Info]),
                             Result;
                         Error ->
-                            lager:error("~p:register_node(~p, ~p) returned ~p",
+                            ?LOG_ERROR("~p:register_node(~p, ~p) returned ~p",
                                 [EpmdMod, Name, Port, Error]),
                             Result
                     end;
@@ -435,7 +437,7 @@ ensure_epmd(#?STATE{epmd_mod = EpmdMod, active_cmd = Command} = State) ->
         {ok, _} ->
             {ok, State#?STATE{failures = 0}};
         _ ->
-            lager:warning(
+            ?LOG_WARNING(
                 "EPMD not running, restarting it with ~p", [Command]),
             ensure_epmd_running(State)
     end.
@@ -445,7 +447,7 @@ ensure_epmd(#?STATE{epmd_mod = EpmdMod, active_cmd = Command} = State) ->
 ensure_epmd_failover(#?STATE{default_cmd = ErtsEpmd} = OldState) ->
     NewState = update_timer(
         OldState#?STATE{active_cmd = ErtsEpmd, failures = 0}),
-    lager:info("configuration changed from ~p to ~p",
+    ?LOG_INFO("configuration changed from ~p to ~p",
         [status_report(OldState), status_report(NewState)]),
     ensure_epmd(NewState).
 
@@ -468,13 +470,13 @@ ensure_epmd_running(
                 _ ->
                     %% So it started, but it's not responding ...
                     %% We'll back off the check interval
-                    lager:warning("ERTS EPMD not servicing requests after"
+                    ?LOG_WARNING("ERTS EPMD not servicing requests after"
                         " restart, timed out", [Command]),
-                    lager:info("ERTS EPMD start output: ~p", [Output]),
+                    ?LOG_INFO("ERTS EPMD start output: ~p", [Output]),
                     {ok, State#?STATE{failures = (Failures + 1)}}
             end;
         Error ->
-            lager:error("start ERTS EPMD failed with ~p", [Error]),
+            ?LOG_ERROR("start ERTS EPMD failed with ~p", [Error]),
             {ok, State#?STATE{failures = (Failures + 1)}}
     end;
 ensure_epmd_running(
@@ -490,14 +492,14 @@ ensure_epmd_running(
                 true ->
                     {ok, State#?STATE{failures = 0}};
                 _ ->
-                    lager:warning("configured EPMD not servicing requests"
+                    ?LOG_WARNING("configured EPMD not servicing requests"
                         " after restart, reverting to ERTS EPMD."
                         " ~p timed out.", [Command]),
-                    lager:info("configured EPMD start output: ~p", [Output]),
+                    ?LOG_INFO("configured EPMD start output: ~p", [Output]),
                     ensure_epmd_failover(State)
             end;
         Error ->
-            lager:error("configured EPMD didn't start, reverting to ERTS EPMD."
+            ?LOG_ERROR("configured EPMD didn't start, reverting to ERTS EPMD."
                 " ~p failed with ~p.", [Command, Error]),
             ensure_epmd_failover(State)
     end.
@@ -524,13 +526,13 @@ ensure_epmd_started(Retries, #?STATE{epmd_mod = EpmdMod} = State, Errors)
             ensure_epmd_started((Retries - 1), State,
                 orddict:update_counter(Reason, 1, Errors));
         Unexpected ->
-            lager:warning("~p:names() returned ~p", [EpmdMod, Unexpected]),
+            ?LOG_WARNING("~p:names() returned ~p", [EpmdMod, Unexpected]),
             ensure_epmd_started((Retries - 1), State, Errors)
     end;
 ensure_epmd_started(_Retries, _State, []) ->
     false;
 ensure_epmd_started(_Retries, #?STATE{epmd_mod = EpmdMod}, Errors) ->
-    lager:info("~p:names() error counts: ~p", [EpmdMod, Errors]),
+    ?LOG_INFO("~p:names() error counts: ~p", [EpmdMod, Errors]),
     false.
 
 -spec init_state() -> {ok, state()} | error().
@@ -541,7 +543,7 @@ init_state() ->
             init_state(ErtsEpmdCmd);
         ErtsEpmdError ->
             %% This is VERY bad - fortunately it should never happen.
-            lager:alert(
+            ?LOG_ALERT(
                 "invalid ERTS EPMD, verification failed with ~p",
                 [ErtsEpmdError]),
             {error, ErtsEpmdError}
@@ -588,7 +590,7 @@ init_state(ErtsEpmdCmd) ->
                         node_name   = Name
                     }};
                 Bad ->
-                    lager:error(
+                    ?LOG_ERROR(
                         "~p:port_please(~p, ~p) returned ~p",
                         [EpmdMod, Name, Addr, Bad]),
                     {error, unknown_disterl_port}
@@ -659,7 +661,7 @@ update_state(OldState) ->
 
     NewStatus = status_report(NewState),
     NewStatus =:= OldStatus orelse
-        lager:info("updated state to ~p", [NewStatus]),
+        ?LOG_INFO("updated state to ~p", [NewStatus]),
     {ok, schedule_check(NewState)}.
 
 -spec update_timer(State :: state()) -> state().
@@ -697,7 +699,7 @@ validated_default_epmd() ->
             {ok, EpmdCmd};
         PosixError ->
             %% This is VERY bad - fortunately it should never happen.
-            lager:alert(
+            ?LOG_ALERT(
                 "invalid ERTS EPMD, verification failed with ~p",
                 [PosixError]),
             {error, PosixError}

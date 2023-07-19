@@ -2,9 +2,9 @@ name: Erlang CI
 
 on:
   push:
-    branches: [ develop-3.0 ]
+    branches: [ develop ]
   pull_request:
-    branches: [ develop-3.0 ]
+    branches: [ develop ]
 
 
 jobs:
@@ -13,8 +13,16 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        otp:
+          - "25.1"
+          - "24.3"
+          - "22.3"
+
     container:
-      image: erlang:22.3.3
+      image: erlang:${{ matrix.otp }}
 
     steps:
       - uses: lukka/get-cmake@latest

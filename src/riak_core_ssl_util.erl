@@ -36,36 +36,20 @@
          print_ciphers/1
         ]).
 
+-include_lib("kernel/include/logger.hrl").
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--ifdef(deprecated_21).
 ssl_handshake(Socket, SslOpts) ->
     ssl:handshake(Socket, SslOpts).
--else.
-ssl_handshake(Socket, SslOpts) ->
-    ssl:ssl_accept(Socket, SslOpts).
--endif.
 
--ifdef(deprecated_21).
-    -ifdef(deprecated_22).
-        openssl_suite(Cipher) ->
-            ssl_cipher_format:suite_openssl_str_to_map(Cipher).
-        openssl_suite_name(Cipher) ->
-            ssl_cipher_format:suite_map_to_openssl_str(ssl_cipher_format:suite_bin_to_map(Cipher)).
-    -else.
-        openssl_suite(Cipher) ->
-            ssl_cipher_format:openssl_suite(Cipher).
-        openssl_suite_name(Cipher) ->
-            ssl_cipher_format:openssl_suite_name(Cipher).
-    -endif.
--else.
 openssl_suite(Cipher) ->
-    ssl_cipher:openssl_suite(Cipher).
+    ssl_cipher_format:suite_openssl_str_to_map(Cipher).
 openssl_suite_name(Cipher) ->
-    ssl_cipher:openssl_suite_name(Cipher).
--endif.
+    ssl_cipher_format:suite_map_to_openssl_str(ssl_cipher_format:suite_bin_to_map(Cipher)).
+
 
 maybe_use_ssl(App) ->
     SSLOpts = [
@@ -90,7 +74,7 @@ maybe_use_ssl(App) ->
                 {ok, Options} ->
                     Options;
                 {error, Reason} ->
-                    lager:error("Error, invalid SSL configuration: ~s", [Reason]),
+                    ?LOG_ERROR("Error, invalid SSL configuration: ~s", [Reason]),
                     false
             end
     end.
@@ -175,14 +159,14 @@ load_certs(CertDirOrFile) ->
     end.
 
 load_certs([], Acc) ->
-    lager:debug("Successfully loaded ~p CA certificates", [length(Acc)]),
+    ?LOG_DEBUG("Successfully loaded ~p CA certificates", [length(Acc)]),
     Acc;
 load_certs([Cert|Certs], Acc) ->
     case filelib:is_dir(Cert) of
         true ->
             load_certs(Certs, Acc);
         _ ->
-            lager:debug("Loading certificate ~p", [Cert]),
+            ?LOG_DEBUG("Loading certificate ~p", [Cert]),
             load_certs(Certs, load_cert(Cert) ++ Acc)
     end.
 
@@ -226,24 +210,24 @@ verify_ssl(_, valid, UserState) ->
     %% this is the check for the CA cert
     {valid, UserState};
 verify_ssl(_, valid_peer, undefined) ->
-    lager:error("Unable to determine local certificate's common name"),
+    ?LOG_ERROR("Unable to determine local certificate's common name"),
     {fail, bad_local_common_name};
 verify_ssl(Cert, valid_peer, {App, MyCommonName}) ->
     CommonName = get_common_name(Cert),
     case invalid_cn_pair(CommonName, MyCommonName) of
         true ->
-            lager:error("Peer certificate's common name matches local "
+            ?LOG_ERROR("Peer certificate's common name matches local "
                 "certificate's common name: ~p", [CommonName]),
             {fail, duplicate_common_name};
         _ ->
             ACL = app_helper:get_env(App, peer_common_name_acl, "*"),
             case validate_common_name(CommonName, ACL) of
                 {true, Filter} ->
-                    lager:info("SSL connection from ~s granted by ACL \"~s\"",
+                    ?LOG_INFO("SSL connection from ~s granted by ACL \"~s\"",
                         [CommonName, Filter]),
                     {valid, MyCommonName};
                 false ->
-                    lager:error(
+                    ?LOG_ERROR(
                         "SSL connection from ~s denied, no matching ACL in ~p",
                         [CommonName, ACL]),
                     {fail, no_acl}

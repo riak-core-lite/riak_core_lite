@@ -35,30 +35,26 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, 
-    {sock :: port() | undefined,
-        peer :: term() | undefined,
-        ssl_opts :: [] | list(),
-        tcp_mod :: atom(),
-        recv_timeout_len :: non_neg_integer(),
-        vnode_timeout_len :: non_neg_integer(),
-        partition :: non_neg_integer() | undefined,
-        vnode_mod = riak_kv_vnode :: module(),
-        vnode :: pid() | undefined,
-        count = 0 :: non_neg_integer()}).
+-include_lib("kernel/include/logger.hrl").
+
+-record(state, {sock :: port() | undefined,
+                peer :: term() | undefined,
+                ssl_opts :: [] | list(),
+                tcp_mod :: atom(),
+                recv_timeout_len :: non_neg_integer(),
+                vnode_timeout_len :: non_neg_integer(),
+                partition :: non_neg_integer() | undefined,
+                vnode_mod = riak_kv_vnode :: module(),
+                vnode :: pid() | undefined,
+                count = 0 :: non_neg_integer()}).
 
 %% set the TCP receive timeout to five minutes to be conservative.
 -define(RECV_TIMEOUT, 300000).
 %% set the timeout for the vnode to process the handoff_data msg to 60s
 -define(VNODE_TIMEOUT, 60000).
 
--ifdef(deprecated_21).
 ssl_handshake(Socket, SslOpts, Timeout) ->
     ssl:handshake(Socket, SslOpts, Timeout).
--else.
-ssl_handshake(Socket, SslOpts, Timeout) ->
-    ssl:ssl_accept(Socket, SslOpts, Timeout).
--endif.
 
 start_link() ->
     start_link([]).
@@ -107,7 +103,7 @@ handle_call({set_socket, Socket0}, _From, State=#state{ssl_opts = SslOpts}) ->
 handle_info(
         {tcp_closed,_Socket},
         State=#state{partition=Partition, count=Count, peer=Peer}) ->
-    lager:info(
+    ?LOG_INFO(
         "Handoff receiver for partition ~p exited after processing ~p"
         " objects from ~p",
         [Partition, Count, Peer]),
@@ -115,7 +111,7 @@ handle_info(
 handle_info(
         {tcp_error, _Socket, Reason},
         State=#state{partition=Partition,count=Count, peer=Peer}) ->
-    lager:info(
+    ?LOG_INFO(
         "Handoff receiver for partition ~p exited after processing ~p"
         " objects from ~p: TCP error ~p",
         [Partition, Count, Peer, Reason]),
@@ -124,7 +120,7 @@ handle_info({tcp, Socket, Data}, State) ->
     [MsgType|MsgData] = Data,
     case catch(process_message(MsgType, MsgData, State)) of
         {'EXIT', Reason} ->
-            lager:error(
+            ?LOG_ERROR(
                 "Handoff receiver for partition ~p exited abnormally after "
                 "processing ~p objects from ~p: ~p",
                 [State#state.partition,
@@ -148,7 +144,7 @@ handle_info({ssl_error, Socket, Reason}, State) ->
 handle_info({ssl, Socket, Data}, State) ->
     handle_info({tcp, Socket, Data}, State);
 handle_info(timeout, State) ->
-    lager:error(
+    ?LOG_ERROR(
         "Handoff receiver for partition ~p timed out after "
         "processing ~p objects from ~p.",
         [State#state.partition, State#state.count, State#state.peer]),
@@ -159,9 +155,7 @@ process_message(
         MsgData,
         State=#state{vnode_mod=VNodeMod, peer=Peer}) ->
     <<Partition:160/integer>> = MsgData,
-    lager:info(
-        "Receiving handoff data for partition ~p:~p from ~p",
-        [VNodeMod, Partition, Peer]),
+    ?LOG_INFO("Receiving handoff data for partition ~p:~p from ~p", [VNodeMod, Partition, Peer]),
     {ok, VNode} = riak_core_vnode_master:get_vnode_pid(Partition, VNodeMod),
     Data =
         [{mod_src_tgt, {VNodeMod, undefined, Partition}}, {vnode_pid, VNode}],

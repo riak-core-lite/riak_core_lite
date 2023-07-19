@@ -133,13 +133,10 @@
 -export([compare2/4]).
 -export([multi_select_segment/3, safe_decode/1]).
 
--ifdef(namespaced_types).
+-include_lib("kernel/include/logger.hrl").
+
 -type hashtree_dict() :: dict:dict().
 -type hashtree_array() :: array:array().
--else.
--type hashtree_dict() :: dict().
--type hashtree_array() :: array().
--endif.
 
 -define(ALL_SEGMENTS, ['*', '*']).
 -define(BIN_TO_INT(B), list_to_integer(binary_to_list(B))).
@@ -430,7 +427,7 @@ clear_buckets(State=#state{id=Id, ref=Ref}) ->
             {break, AccFinal} ->
                 AccFinal
         end,
-    lager:debug("Tree ~p cleared ~p segments.\n", [Id, Removed]),
+    ?LOG_DEBUG("Tree ~p cleared ~p segments.\n", [Id, Removed]),
 
     %% Mark the tree as requiring a full rebuild (will be fixed
     %% reset at end of update_trees) AND dump the in-memory
@@ -447,7 +444,7 @@ update_tree(Segments, State=#state{next_rebuild=NextRebuild, width=Width,
     LastLevel = Levels,
     Hashes = orddict:from_list(hashes(State, Segments)),
     %% Paranoia to make sure all of the hash entries are updated as expected
-    lager:debug("segments ~p -> hashes ~p\n", [Segments, Hashes]),
+    ?LOG_DEBUG("segments ~p -> hashes ~p\n", [Segments, Hashes]),
     case Segments == ?ALL_SEGMENTS orelse
         length(Segments) == length(Hashes) of
         true ->
@@ -458,9 +455,7 @@ update_tree(Segments, State=#state{next_rebuild=NextRebuild, width=Width,
             %% the upper trees.  Alternative is to crash here, but that would
             %% lose updates and is the action taken on repair anyway.
             %% Save the customer some pain by doing that now and log.
-            %% Enable lager debug tracing with lager:trace_file(hashtree, "/tmp/ht.trace"
-            %% to get the detailed segment information.
-            lager:warning("Incremental AAE hash was unable to find all required data, "
+            ?LOG_WARNING("Incremental AAE hash was unable to find all required data, "
                           "forcing full rebuild of ~p", [State#state.path]),
             update_perform(State#state{next_rebuild = full})
     end.
@@ -638,7 +633,6 @@ get_bucket(Level, Bucket, State) ->
 %%% Internal functions
 %%%===================================================================
 
--ifndef(old_hash).
 md5(Bin) ->
     crypto:hash(md5, Bin).
 
@@ -655,25 +649,7 @@ esha_update(Ctx, Bin) ->
 
 esha_final(Ctx) ->
     crypto:hash_final(Ctx).
--else.
-md5(Bin) ->
-    crypto:md5(Bin).
 
--ifdef(TEST).
-esha(Bin) ->
-    crypto:sha(Bin).
--endif.
-
-esha_init() ->
-    crypto:sha_init().
-
-esha_update(Ctx, Bin) ->
-    crypto:sha_update(Ctx, Bin).
-
-esha_final(Ctx) ->
-    crypto:sha_final(Ctx).
-
--endif.
 
 -spec set_bucket(integer(), integer(), any(), hashtree()) -> hashtree().
 set_bucket(Level, Bucket, Val, State) ->
@@ -766,7 +742,7 @@ update_levels(0, _, State, _) ->
     State;
 update_levels(Level, Groups, State, Type) ->
     {_, _, NewState, NewBuckets} = rebuild_fold(Level, Groups, State, Type),
-    lager:debug("level ~p hashes ~w\n", [Level, NewBuckets]),
+    ?LOG_DEBUG("level ~p hashes ~w\n", [Level, NewBuckets]),
     Groups2 = group(NewBuckets, State#state.width),
     update_levels(Level - 1, Groups2, NewState, Type).
 
@@ -1128,7 +1104,7 @@ exchange_level(Level, Buckets, Local, Remote, _Opts) ->
                           B = Remote(get_bucket, {Level, Bucket}),
                           Delta = riak_core_util:orddict_delta(lists:keysort(1, A),
                                                                    lists:keysort(1, B)),
-              lager:debug("Exchange Level ~p Bucket ~p\nA=~p\nB=~p\nD=~p\n",
+              ?LOG_DEBUG("Exchange Level ~p Bucket ~p\nA=~p\nB=~p\nD=~p\n",
                       [Level, Bucket, A, B, Delta]),
 
                           Diffs = Delta,
@@ -1142,7 +1118,7 @@ exchange_final(_Level, Segments, Local, Remote, AccFun, Acc0, _Opts) ->
                         B = Remote(key_hashes, Segment),
                         Delta = riak_core_util:orddict_delta(lists:keysort(1, A),
                                                                  lists:keysort(1, B)),
-            lager:debug("Exchange Final\nA=~p\nB=~p\nD=~p\n",
+            ?LOG_DEBUG("Exchange Final\nA=~p\nB=~p\nD=~p\n",
                     [A, B, Delta]),
                         Keys = [begin
                                     {_Id, Segment, Key} = decode(KBin),
@@ -1165,7 +1141,7 @@ compare(Level, Bucket, Tree, Remote, AccFun, KeyAcc) ->
     Inter = ordsets:intersection(ordsets:from_list(HL1),
                                  ordsets:from_list(HL2)),
     Diff = ordsets:subtract(Union, Inter),
-    lager:debug("Tree ~p level ~p bucket ~p\nL=~p\nR=~p\nD=~p\n",
+    ?LOG_DEBUG("Tree ~p level ~p bucket ~p\nL=~p\nR=~p\nD=~p\n",
         [Tree, Level, Bucket, HL1, HL2, Diff]),
     KeyAcc3 =
         lists:foldl(fun({Bucket2, _}, KeyAcc2) ->
@@ -1180,7 +1156,7 @@ compare_segments(Segment, Tree=#state{id=Id}, Remote) ->
     HL1 = orddict:from_list(KeyHashes1),
     HL2 = orddict:from_list(KeyHashes2),
     Delta = riak_core_util:orddict_delta(HL1, HL2),
-    lager:debug("Tree ~p segment ~p diff ~p\n",
+    ?LOG_DEBUG("Tree ~p segment ~p diff ~p\n",
                 [Tree, Segment, Delta]),
     Keys = [begin
                 {Id, Segment, Key} = decode(KBin),

@@ -42,10 +42,10 @@
 
 
 -module(hashtree_eqc).
--compile([export_all, nowarn_export_all]).
 
 -ifdef(TEST).
 -ifdef(EQC).
+-compile([export_all, nowarn_export_all]).
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_statem.hrl").
 -define(QC_OUT(P),
@@ -66,13 +66,8 @@
 integer_to_binary(Int) ->
     list_to_binary(integer_to_list(Int)).
 
--ifndef(old_hash).
 sha(Bin) ->
     crypto:hash(sha, Bin).
--else.
-sha(Bin) ->
-    crypto:sha(Bin).
--endif.
 
 key() ->
     ?LET(Key, int(), ?MODULE:integer_to_binary(Key)).
@@ -490,17 +485,13 @@ next_state(S,_R,{call, _, local_compare1, []}) ->
 %%
 prop_correct() ->
     ?SETUP(fun() ->
-                   application:set_env(lager, handlers, [{lager_console_backend, info}]),
                    application:ensure_started(syntax_tools),
                    application:ensure_started(compiler),
                    application:ensure_started(goldrush),
-                   application:ensure_started(lager),
                    fun() ->
-                           application:stop(lager),
                            application:stop(goldrush),
                            application:stop(compiler),
                            application:stop(syntax_tools),
-                           application:unload(lager),
                            delete_ets()
                    end
            end,

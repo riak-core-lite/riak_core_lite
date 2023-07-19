@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2014 Basho Technologies, Inc.
-%% Copyright (c) 2018-2022 Workday, Inc.
+%% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2018-2022 Workday, Inc.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -39,6 +39,8 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
+
+-include_lib("kernel/include/logger.hrl").
 
 -compile({parse_transform, riak_core_stat_xform}).
 
@@ -157,7 +159,7 @@ handle_cast({update, Arg}, State) ->
 handle_cast({update, Arg, Value}, State) ->
     case exometer:update([prefix(), ?APP, update_metric(Arg)], update_value(Value)) of
         {error, not_found} ->
-            lager:debug("~p not found on update.", [Arg]);
+            ?LOG_DEBUG("~p not found on update.", [Arg]);
         ok ->
             ok
     end,
@@ -178,7 +180,7 @@ code_change(_OldVsn, State, _Extra) ->
 exometer_update(Name, Value) ->
     case exometer:update(Name, Value) of
         {error, not_found} ->
-            lager:debug("~p not found on update.", [Name]);
+            ?LOG_DEBUG("~p not found on update.", [Name]);
         ok ->
             ok
     end.
@@ -297,11 +299,11 @@ stats() ->
 
 nwp_stats() ->
     PoolNames = [vnode_pool, unregistered] ++ riak_core_node_worker_pool:pools(),
-
+    
     [nwp_stat(Pool) || Pool <- PoolNames] ++
-
+    
     [nwpqt_stat(Pool) || Pool <- PoolNames] ++
-
+    
     [nwpwt_stat(Pool) || Pool <- PoolNames].
 
 nwp_stat(Pool) ->

@@ -1,6 +1,5 @@
-%% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2017-2022 Martin Sumner.
+%% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -42,7 +41,7 @@
 
 -behaviour(gen_fsm).
 
--compile({nowarn_deprecated_function,
+-compile({nowarn_deprecated_function, 
             [{gen_fsm, start_link, 3},
                 {gen_fsm, send_event, 2},
                 {gen_fsm, sync_send_all_state_event, 2},
@@ -58,6 +57,8 @@
 -export([queueing/2, ready/2, ready/3, queueing/3, shutdown/2, shutdown/3]).
 
 -export([monitor_worker/4]).
+
+-include_lib("kernel/include/logger.hrl").
 
 -ifdef(PULSE).
 -compile(export_all).
@@ -115,7 +116,7 @@ init([PoolBoyArgs, CallbackMod, PoolName]) ->
         #state{pool=Pid,
                 callback_mod = CallbackMod,
                 pool_name = PoolName}}.
-
+	
 ready(_Event, _From, State) ->
     {reply, ok, ready, State}.
 
@@ -241,7 +242,7 @@ handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
 handle_sync_event({stop, Reason}, _From, _StateName, State) ->
-    {stop, Reason, ok, State};
+    {stop, Reason, ok, State}; 
 handle_sync_event({shutdown, Time}, From, _StateName, #state{queue=Q,
         monitors=Monitors} = State) ->
     discard_queued_work(Q, State#state.callback_mod),
@@ -270,8 +271,8 @@ handle_info(log_timer, StateName, State) ->
             LastCheckout =
                 timer:now_diff(os:timestamp(), LastChOutTime),
             QL = queue:len(State#state.queue),
-            _ =
-                lager:info(
+            _ = 
+                ?LOG_INFO(
                     "worker_pool=~w has qlen=~w with last_checkout=~w s ago",
                     [State#state.pool_name,
                         QL,
@@ -279,7 +280,7 @@ handle_info(log_timer, StateName, State) ->
             ok;
         {true, []} ->
             _ =
-                lager:debug(
+                ?LOG_INFO(
                     "worker_pool=~w has qlen=0 and no items checked out",
                     [State#state.pool_name]);
         _ ->
@@ -368,7 +369,7 @@ poolboy_checkin(Pool, Worker, PoolName, Checkouts) ->
                                     timer:now_diff(os:timestamp(), WT)}),
             {R, Checkouts0};
         _ ->
-            lager:warning(
+            ?LOG_WARNING(
                 "Unexplained poolboy behaviour - failure to track checkouts"),
             {R, Checkouts}
     end.
@@ -396,7 +397,7 @@ push_to_queue(Msg, Q) ->
     queue:in({QT, Msg}, Q).
 
 -spec consume_from_queue(queue:queue(), atom()) ->
-                            {empty | {value, {work, term(), term()}},
+                            {empty | {value, {work, term(), term()}}, 
                                 queue:queue()}.
 consume_from_queue(Q, PoolName) ->
     case queue:out(Q) of

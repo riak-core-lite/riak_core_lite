@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2014 Basho Technologies, Inc.
-%% Copyright (c) 2018-2022 Workday, Inc.
+%% Copyright (c) 2007-2012 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2018-2022 Workday, Inc.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -24,12 +24,15 @@
 -module(riak_core_handoff_sender).
 -export([start_link/4, get_handoff_ssl_options/0]).
 
--compile({nowarn_deprecated_function,
+-compile({nowarn_deprecated_function, 
             [{gen_fsm, send_event, 2}]}).
+
+-include_lib("kernel/include/logger.hrl").
 
 -include("riak_core_vnode.hrl").
 -include("riak_core_handoff.hrl").
--include("stacktrace.hrl").
+
+-define(ACK_COUNT, 1000).
 %% can be set with env riak_core, handoff_timeout
 -define(TCP_TIMEOUT, 60000).
 %% can be set with env riak_core, handoff_status_interval
@@ -38,11 +41,11 @@
 -define(MEGA, 1000000).
 
 -define(log_info(Str, Args),
-        lager:info("~p transfer of ~p from ~p ~p to ~p ~p failed " ++ Str,
+        ?LOG_INFO("~p transfer of ~p from ~p ~p to ~p ~p failed " ++ Str,
                    [Type, Module, SrcNode, SrcPartition, TargetNode,
                     TargetPartition] ++ Args)).
 -define(log_fail(Str, Args),
-        lager:error("~p transfer of ~p from ~p ~p to ~p ~p failed " ++ Str,
+        ?LOG_ERROR("~p transfer of ~p from ~p ~p to ~p ~p failed " ++ Str,
                     [Type, Module, SrcNode, SrcPartition, TargetNode,
                      TargetPartition] ++ Args)).
 
@@ -89,7 +92,7 @@
 
 start_link(TargetNode, Module, {Type, Opts}, Vnode) ->
     SslOpts = get_handoff_ssl_options(),
-    Pid =
+    Pid = 
         spawn_link(
             fun()->
                 start_fold(TargetNode, Module, {Type, Opts}, Vnode, SslOpts)
@@ -164,15 +167,15 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
             % fast).
 
         %% Since handoff_concurrency applies to both outbound and inbound
-        %% connections there is a chance that the receiver may decide to
+        %% connections there is a chance that the receiver may decide to 
         %% reject the senders attempt to start a handoff.
-        %% The sender must assume that a closed socket at this point is a
+        %% The sender must assume that a closed socket at this point is a 
         %% rejection by the receiver to enforce handoff_concurrency.
         case send_sync(TcpMod, Socket, RecvTimeout) of
             ok ->
                 ok;
             {error, DirectionS, timeout} ->
-                lager:error(
+                ?LOG_ERROR(
                     "Initial sync message returned ~w error timeout "
                     "between src_partition=~p trg_partition=~p "
                     "type=~w module=~w ",
@@ -184,7 +187,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                 exit({shutdown, max_concurrency})
         end,
 
-        lager:info("Starting ~p transfer of ~p from ~p ~p to ~p ~p",
+        ?LOG_INFO("Starting ~p transfer of ~p from ~p ~p to ~p ~p",
                 [Type, Module, SrcNode, SrcPartition,
                     TargetNode, TargetPartition]),
 
@@ -195,7 +198,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
         UnsentAcc0 = get_notsent_acc0(Opts),
         UnsentFun = get_notsent_fun(Opts),
 
-        Req =
+        Req = 
             riak_core_util:make_fold_req(
                 fun visit_item/3,
                 #ho_acc{
@@ -267,14 +270,14 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                 %% so handoff_complete can only be sent once all of the data is
                 %% written.  handle_handoff_data is a sync call, so once
                 %% we receive the sync the remote side will be up to date.
-                lager:debug(
+                ?LOG_DEBUG(
                     "~p ~p Sending final sync",
                     [SrcPartition, Module]),
                 case send_sync(TcpMod, Socket, RecvTimeout) of
                     ok ->
                         ok;
-                    {error, DirectionE, timeout} ->
-                        lager:error(
+                    {error, DirectionE, timeout} -> 
+                        ?LOG_ERROR("~p transfer of ~p from ~p ~p to ~p ~p"
                             "Final sync message returned ~w error timeout "
                             "between src_partition=~p trg_partition=~p "
                             "type=~w module=~w ",
@@ -288,19 +291,14 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                 FoldTimeDiff = end_fold_time(StartFoldTime),
                 ThroughputBytes = TotalBytes/FoldTimeDiff,
 
-                ok =
-                    lager:info(
-                        "~p transfer of ~p from ~p ~p to ~p ~p"
+                ok = 
+                ?LOG_INFO("~p transfer of ~p from ~p ~p to ~p ~p"
                         " completed: sent ~s bytes in ~p of ~p objects"
                         " in ~.2f seconds (~s/second)",
-                        [Type, Module,
-                            SrcNode, SrcPartition,
-                            TargetNode, TargetPartition,
-                        riak_core_format:human_size_fmt(
-                            "~.2f", TotalBytes),
-                        FinalStats#ho_stats.objs, TotalObjects, FoldTimeDiff,
-                        riak_core_format:human_size_fmt(
-                            "~.2f", ThroughputBytes)]),
+                        [Type, Module, SrcNode, SrcPartition, TargetNode, TargetPartition,
+                        riak_core_format:human_size_fmt("~.2f", TotalBytes),
+                         FinalStats#ho_stats.objs, TotalObjects, FoldTimeDiff,
+                         riak_core_format:human_size_fmt("~.2f", ThroughputBytes)]),
                 case Type of
                     repair ->
                         ok;
@@ -334,10 +332,10 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
              exit({shutdown, {error, Reason}});
          throw:{be_quiet, Err, Reason} ->
              gen_fsm:send_event(ParentPid, {handoff_error, Err, Reason});
-         ?_exception_(Err, Reason, StackToken) ->
+         Class:Reason:Stacktrace ->
              ?log_fail("because of ~p:~p ~p",
-                       [Err, Reason, ?_get_stacktrace_(StackToken)]),
-             gen_fsm:send_event(ParentPid, {handoff_error, Err, Reason})
+                       [Class, Reason, Stacktrace]),
+             gen_fsm:send_event(ParentPid, {handoff_error, Class, Reason})
      end.
 
 visit_item(K, V, Acc0) ->
@@ -357,8 +355,8 @@ visit_item(K, V, Acc0) ->
             case Module:encode_handoff_item(K, V) of
                 corrupted ->
                     {Bucket, Key} = K,
-                    lager:warning(
-                        "Unreadable object ~p/~p discarded", [Bucket, Key]),
+                    ?LOG_WARNING("Unreadable object ~p/~p discarded",
+                                  [Bucket, Key]),
                     Acc;
                 BinObj ->
                     ItemQueue2 = [BinObj | ItemQueue],
@@ -369,8 +367,8 @@ visit_item(K, V, Acc0) ->
                         Acc#ho_acc{
                             item_queue_length=ItemQueueLength2,
                             item_queue_byte_size=ItemQueueByteSize2},
-
-                    BatchReady =
+                    
+                    BatchReady = 
                         (ItemQueueByteSize2 > HandoffBatchThresholdSize) or
                             (ItemQueueLength2 > HandoffBatchThresholdCount),
                     case BatchReady of
@@ -408,7 +406,7 @@ maybe_keepalive_receiver(Acc = #ho_acc{keepalive_next=NextKeepalive}) ->
                 ok ->
                     Acc#ho_acc{keepalive_next=next_keepalive_time()};
                 {error, Direction, Reason} ->
-                    lager:error(
+                    ?LOG_ERROR(
                         "Keepalive message returned ~w error ~w "
                         "between src_partition=~p trg_partition=~p "
                         "type=~w module=~w ",
@@ -459,7 +457,7 @@ send_objects(ItemsReverseList, Acc, FlushStats) ->
                     ok ->
                         ok;
                     {error, Direction, Reason} ->
-                        lager:error(
+                        ?LOG_ERROR(
                             "Sync message returned ~w error ~w "
                             "between src_partition=~p trg_partition=~p "
                             "type=~w module=~w ",
@@ -475,7 +473,7 @@ send_objects(ItemsReverseList, Acc, FlushStats) ->
     UpdAckLogLast =
         case {ReceiverInSync, Ack rem AckLogThreshold} of
             {ok, 0} ->
-                lager:info(
+                ?LOG_INFO(
                     "Receiver in sync after batch_set=~w and total_batches=~w "
                     "with next batch having batch_size=~w item_count=~w "
                     "between src_partition=~p trg_partition=~p "
@@ -514,7 +512,7 @@ send_objects(ItemsReverseList, Acc, FlushStats) ->
                            item_queue_length=0,
                            item_queue_byte_size=0};
             {error, SendFailure} ->
-                lager:error(
+                ?LOG_ERROR(
                   "Send batch returned error ~w "
                   "between src_partition=~p trg_partition=~p "
                   "type=~w module=~w ",
@@ -539,7 +537,7 @@ get_handoff_ip(Node) when is_atom(Node) ->
             Node,
             riak_core_handoff_listener,
             get_handoff_ip,
-            [],
+            [], 
             infinity) of
         {badrpc, _} ->
             error;
@@ -570,11 +568,11 @@ get_handoff_ssl_options() ->
                 Props
             catch
                 error:{badmatch, {FailProp, BadMat}} ->
-                    lager:error("SSL handoff config error: property ~p: ~p.",
+                    ?LOG_ERROR("SSL handoff config error: property ~p: ~p.",
                                 [FailProp, BadMat]),
                     [];
                 X:Y ->
-                    lager:error("Failure processing SSL handoff config "
+                    ?LOG_ERROR("Failure processing SSL handoff config "
                                 "~p: ~p:~p",
                                 [Props, X, Y]),
                     []
@@ -586,7 +584,7 @@ get_handoff_timeout() ->
     %% Whenever a Sync message is sent, the process will wait for this
     %% timeout, and throw an exception closing the fold if the timeout is
     %% reached.
-    %% A sync message is sent every handoff_ack_sync_threshold batches, as
+    %% A sync message is sent every handoff_ack_sync_threshold batches, as 
     %% well as when initialising and closing the handoff.
     app_helper:get_env(riak_core, handoff_timeout, ?TCP_TIMEOUT).
 
@@ -728,7 +726,7 @@ maybe_call_handoff_started(Module, SrcPartition) ->
                     exit({shutdown, Error})
             end;
         false ->
-            %% optional callback not implemented, so we carry on, w/ no
+            %% optional callback not implemented, so we carry on, w/ no 
             %% additional fold options
             []
     end.
