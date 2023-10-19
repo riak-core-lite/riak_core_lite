@@ -45,10 +45,27 @@
 %% low value for the handoff_batch_threshold_count (e.g. 200), then raise the
 %% handoff_timeout.  Further, if using the leveled backend in Riak KV
 %% investigate raising the the backend_pause.
+%% Note that there is an additional cluster_transfer_limit configuration option
+%% which may prevent this limit from being reached.
 {mapping, "transfer_limit", "riak_core.handoff_concurrency", [
   {datatype, integer},
   {default, 2},
   {commented, 2}
+]}.
+
+%% @doc Number of concurrent cluster-wide prompted transfers allowed.
+%% Ownership handoffs may be prompted by vnode inactivity, or by the vnode
+%% manager's scheduled tick activity.  Should the vnodes never become inactive
+%% only the manager will prompt, and this configuration option acts as a
+%% cluster-wide limit on concurrent handoffs prompted by the management tick.
+%% Unless the current number of ongoing, or blocked, handoffs is below this
+%% limit in the cluster (regardless of the prompt for the handoff), the
+%% management tick on all nodes will be blocked from prompting further
+%% transfers.
+{mapping, "cluster_transfer_limit", "riak_core.forced_ownership_handoff", [
+  {datatype, integer},
+  {default, 8},
+  {commented, 8}
 ]}.
 
 %% @doc Handoff batch threshold count
