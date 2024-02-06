@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2012 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2012-2014 Basho Technologies, Inc.
+%% Copyright (c) 2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -31,6 +32,11 @@
          replace/2,
          resize_ring/1,
          abort_resize/0,
+         acquire_cluster_lock/3,
+         acquire_cluster_lock/2,
+         release_cluster_lock/2,
+         release_cluster_lock/1,
+         cluster_lock_status/0,
          plan/0,
          commit/0,
          clear/0,
@@ -75,6 +81,9 @@
           %% between plan and commit phases
           seed}).
 
+-define(CLUSTER_LOCK_TIMEOUT, 30000).
+-define(CLUSTER_LOCK_WAIT, 250). % Time in ms between attempts
+-define(CLUSTER_LOCK_ATTEMPTS, trunc(?CLUSTER_LOCK_TIMEOUT / ?CLUSTER_LOCK_WAIT)).
 -define(ROUT(S,A),ok).
 %%-define(ROUT(S,A),?debugFmt(S,A)).
 %%-define(ROUT(S,A),io:format(S,A)).
@@ -164,6 +173,94 @@ clear() ->
 %%          --------> riak_core_claimant:ring_changed/2
 ring_changed(Node, Ring) ->
     internal_ring_changed(Node, Ring).
+
+%% @doc A cluster lock is not a proper two-phase lock. It cannot
+%% guarantee that a lock action has been propagated to all nodes
+%% successfully.
+%%
+%% Instead, a cluster lock guarantees that when acquiring/releasing
+%% a lock, no subsequent acquire/release can be done. Race conditions
+%% cannot occur between multiple requests.
+%%
+%% If a lock has been acquired, that means the claimant has accepted it
+%% and will attempt to propagate it. If the claimant goes down or there is
+%% a network partition before the ring is received by at least one node,
+%% and a new node is set as claimant, the lock will be lost even
+%% though it has been "acquired". This also happens with release.
+%%
+-spec acquire_cluster_lock(string(), string()) -> ok | {error, term()}.
+acquire_cluster_lock(Ticket, Description) ->
+    acquire_cluster_lock(Ticket, Description, ?CLUSTER_LOCK_ATTEMPTS).
+
+-spec acquire_cluster_lock(string(), string(), integer()) -> {ok, term()} |
+                                                             {error, term()}.
+acquire_cluster_lock(Ticket, Description, _) when not is_binary(Ticket) or
+                                                  not is_binary(Description) ->
+    {error, ticket_description_not_binary};
+acquire_cluster_lock(Ticket, _Description, _) when byte_size(Ticket) > 50 ->
+    {error, ticket_too_long};
+acquire_cluster_lock(_Ticket, Description, _) when byte_size(Description) > 150 ->
+    {error, description_too_long};
+acquire_cluster_lock(_Ticket, _Description, 0) ->
+    {error, ring_not_ready};
+acquire_cluster_lock(Ticket, Description, Attempts) ->
+    Capable = riak_core_capability:get({riak_core, cluster_lock}, false),
+    case Capable of
+        true ->
+            Resp = gen_server:call(claimant(), {acquire_cluster_lock,
+                                                Ticket,
+                                                Description},
+                                   30000),
+            case Resp of
+                {error, ring_not_ready} ->
+                    timer:sleep(?CLUSTER_LOCK_WAIT),
+                    acquire_cluster_lock(Ticket, Description, Attempts - 1);
+                {ok, acquire_pending} ->
+                    {ok, lock_acquired};
+                Other ->
+                    Other
+            end;
+        _ ->
+            {error, not_capable}
+    end.
+
+-spec release_cluster_lock(string()) -> {ok, term()} | {error, term()}.
+release_cluster_lock(Ticket) ->
+    release_cluster_lock(Ticket, ?CLUSTER_LOCK_ATTEMPTS).
+
+-spec release_cluster_lock(string(), integer()) -> {ok, term()} |
+                                                   {error, term()}.
+release_cluster_lock(_Ticket, 0) ->
+    {error, ring_not_ready};
+release_cluster_lock(Ticket, Attempts) ->
+    Capable = riak_core_capability:get({riak_core, cluster_lock}, false),
+    case Capable of
+        true ->
+            Resp = gen_server:call(claimant(),
+                                   {release_cluster_lock, Ticket},
+                                   30000),
+            case Resp of
+                {error, ring_not_ready} ->
+                    timer:sleep(?CLUSTER_LOCK_WAIT),
+                    release_cluster_lock(Ticket, Attempts - 1);
+                {ok, release_pending} ->
+                    {ok, lock_released};
+                Other ->
+                    Other
+            end;
+        false ->
+            {error, not_capable}
+    end.
+
+-spec cluster_lock_status() -> {ok, term()} | {error, term()}.
+cluster_lock_status() ->
+    Capable = riak_core_capability:get({riak_core, cluster_lock}, false),
+    case Capable of
+        true ->
+            gen_server:call(claimant(), cluster_lock_status, 30000);
+        _ ->
+            {error, not_capable}
+    end.
 
 %% @doc {@see riak_core_bucket_type:create/2}
 -spec create_bucket_type(riak_core_bucket_type:bucket_type(), [{atom(), any()}]) ->
@@ -310,6 +407,21 @@ handle_call({activate_bucket_type, BucketType}, _From, State) ->
     Reply = maybe_activate_type(BucketType, Status, Existing),
     {reply, Reply, State};
 
+%%%===================================================================
+%%% start lock callbacks
+%%%===================================================================
+handle_call(cluster_lock_status, _From, State) ->
+    {reply, cluster_lock_status_async(), State};
+
+handle_call({acquire_cluster_lock, Ticket, Description}, _From, State) ->
+    {reply, acquire_cluster_lock_async(Ticket, Description), State};
+
+handle_call({release_cluster_lock, Ticket}, _From, State) ->
+    {reply, release_cluster_lock_async(Ticket), State};
+%%%===================================================================
+%%% end lock callbacks
+%%%===================================================================
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -439,6 +551,107 @@ maybe_commit_staged(Ring, NextRing, #state{next_ring=PlannedRing}) ->
 clear_staged(State) ->
     remove_joining_nodes(),
     State#state{changes=[], seed=erlang:now()}.
+
+%% private
+-spec cluster_lock_status_async() ->
+    {ok, acquire_pending} | {error, ring_not_ready}.
+cluster_lock_status_async() ->
+    {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
+    case riak_core_ring:ring_ready(Ring) of
+        false ->
+            {error, ring_not_ready};
+        _ ->
+            riak_core_ring:get_cluster_lock(Ring)
+    end.
+
+%% @private
+-spec acquire_cluster_lock_async(string(), string()) ->
+    {ok, acquire_pending} |
+    {error, ring_not_ready} | {error, lock_unavailable}.
+acquire_cluster_lock_async(Ticket, Description) ->
+    {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
+
+    case riak_core_ring:ring_ready(Ring) of
+        false ->
+            {error, ring_not_ready};
+        _ ->
+            case riak_core_ring:get_cluster_lock(Ring) of
+                {ok, {_Ticket, _Description, _Timestamp}} ->
+                    {error, lock_unavailable};
+                _ ->
+                    _ = riak_core_ring_manager:ring_trans(
+                          fun acquire_cluster_lock_trans/2,
+                          {Ticket, Description}
+                         ),
+                    {ok, acquire_pending}
+            end
+    end.
+
+%% @private
+-spec acquire_cluster_lock_trans(riak_core_ring(), {string(), string()}) ->
+    {new_ring, riak_core_ring()} | ignore.
+acquire_cluster_lock_trans(Ring, {Ticket, Description}) ->
+    IsReady = riak_core_ring:ring_ready(Ring),
+    IsClaimant = (riak_core_ring:claimant(Ring) == node()),
+    case IsReady and IsClaimant of
+        true ->
+            Result = riak_core_ring:set_cluster_lock(Ticket, Description, Ring),
+            case Result of
+                {error, _} ->
+                    lager:error("Attempted to acquire lock in trans when \
+                                lock is unavailable"),
+                    ignore;
+                Ring2 ->
+                    {new_ring, Ring2}
+            end;
+        false ->
+            ignore
+    end.
+
+%% @private
+-spec release_cluster_lock_async(string()) ->
+    {ok, release_pending} | {ok, no_lock} |
+    {error, ring_not_ready} | {error, wrong_ticket}.
+release_cluster_lock_async(Ticket) ->
+    {ok, Ring} = riak_core_ring_manager:get_raw_ring(),
+
+    case riak_core_ring:ring_ready(Ring) of
+        false ->
+            {error, ring_not_ready};
+        _ ->
+            case riak_core_ring:get_cluster_lock(Ring) of
+                {ok, {Ticket, _Description, _Timestamp}} ->
+                    _ = riak_core_ring_manager:ring_trans(
+                          fun release_cluster_lock_trans/2,
+                          Ticket
+                         ),
+                    {ok, release_pending};
+                {ok, {_Ticket, _Description, _Timestamp}} ->
+                    {error, wrong_ticket};
+                _ ->
+                    {ok, no_lock}
+            end
+    end.
+
+%% @private
+-spec release_cluster_lock_trans(riak_core_ring(), string()) ->
+    {new_ring, riak_core_ring()} | ignore.
+release_cluster_lock_trans(Ring, Ticket) ->
+    IsReady = riak_core_ring:ring_ready(Ring),
+    IsClaimant = (riak_core_ring:claimant(Ring) == node()),
+    case IsReady and IsClaimant of
+        true ->
+            Result = riak_core_ring:delete_cluster_lock(Ticket, Ring),
+            case Result of
+                {error, _} ->
+                    lager:error("Attempted to release lock in trans and failed"),
+                    ignore;
+                Ring2 ->
+                    {new_ring, Ring2}
+            end;
+        false ->
+            ignore
+    end.
 
 %% @private
 remove_joining_nodes() ->

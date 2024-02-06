@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2011 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2011-2014 Basho Technologies, Inc.
+%% Copyright (c) 2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -36,9 +37,11 @@
 %% New CLI API
 -export([command/1]).
 
--spec command([string()]) -> ok.
+%% Integer returned in error tuple is exit code reported to console.
+-spec command([string()]) -> ok | {error, integer()}.
 command(Cmd) ->
     clique:run(Cmd).
+
 
 %% @doc Return for a given ring and node, percentage currently owned and
 %% anticipated after the transitions have been completed.

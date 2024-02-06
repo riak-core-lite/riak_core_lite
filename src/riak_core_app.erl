@@ -1,8 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% riak_core: Core Riak Application
-%%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2015 Basho Technologies, Inc.
+%% Copyright (c) 2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -86,6 +85,9 @@ start(_StartType, _StartArgs) ->
                                           [true, false],
                                           false),
             riak_core_capability:register({riak_core, resizable_ring},
+                                          [true, false],
+                                          false),
+            riak_core_capability:register({riak_core, cluster_lock},
                                           [true, false],
                                           false),
             riak_core_capability:register({riak_core, fold_req_version},

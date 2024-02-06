@@ -2,7 +2,8 @@
 %%
 %% riak_core: Core Riak Application
 %%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2017 Basho Technologies, Inc.
+%% Copyright (c) 2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -38,6 +39,9 @@
          fresh/2,
          get_meta/2,
          get_buckets/1,
+         set_cluster_lock/3,
+         get_cluster_lock/1,
+         delete_cluster_lock/2,
          index_owner/2,
          my_indices/1,
          num_partitions/1,
@@ -135,7 +139,7 @@
          vnode_type/2,
          deletion_complete/3]).
 
--export_type([riak_core_ring/0]).
+-export_type([riak_core_ring/0, riak_core_cluster_lock/0]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -156,7 +160,7 @@
     claimant :: term(),
     seen     :: [{term(), vclock:vclock()}],
     rvsn     :: vclock:vclock()
-}). 
+}).
 
 %% Legacy chstate
 -record(chstate, {
@@ -164,18 +168,19 @@
     vclock,   % for this chstate object, entries are {Node, Ctr}
     chring :: chash:chash(),   % chash ring of {IndexAsInt, Node} mappings
     meta      % dict of cluster-wide other data (primarily bucket N-value, etc)
-}). 
+}).
 
 -type member_status() :: joining | valid | invalid | leaving | exiting | down.
 
 %% type meta_entry(). Record for each entry in #chstate.meta
 -record(meta_entry, {
     value,    % The value stored under this entry
-    lastmod   % The last modified time of this entry, 
+    lastmod   % The last modified time of this entry,
               %  from calendar:datetime_to_gregorian_seconds(
-              %                             calendar:universal_time()), 
+              %                             calendar:universal_time()),
 }).
 
+-type riak_core_cluster_lock() :: {string(), string(), string()}.
 %% riak_core_ring() is the opaque data type used for partition ownership
 -type riak_core_ring() :: ?CHSTATE{}.
 -type chstate() :: riak_core_ring().
@@ -294,6 +299,32 @@ all_members(?CHSTATE{members=Members}) ->
 members(?CHSTATE{members=Members}, Types) ->
     get_members(Members, Types).
 
+-spec set_cluster_lock(string(), string(), chstate()) ->
+    chstate() | {error, lock_already_exists}.
+set_cluster_lock(Ticket, Description, State) ->
+  case get_cluster_lock(State) of
+      {ok, {_Ticket, _Description, _Timestamp}} -> {error, lock_already_exists};
+      _ -> update_meta('$lock', {Ticket, Description, os:timestamp()}, State)
+  end.
+
+-spec get_cluster_lock(chstate()) -> {ok, riak_core_cluster_lock()} |
+                                     {ok, undefined}.
+get_cluster_lock(State) ->
+  case get_meta('$lock', State) of
+      undefined -> {ok, undefined};
+      Rest -> Rest
+  end.
+
+-spec delete_cluster_lock(string(), chstate()) -> chstate() |
+                                                  {error, wrong_ticket} |
+                                                  {error, no_change}.
+delete_cluster_lock(Ticket, State) ->
+  case get_cluster_lock(State) of
+      {ok, {Ticket, _, _}} -> remove_meta('$lock', State);
+      {ok, _Lock} -> {error, wrong_ticket};
+      _ -> {error, no_change}
+  end.
+
 %% @doc Produce a list of all active (not marked as down) cluster members
 active_members(?CHSTATE{members=Members}) ->
     get_members(Members, [joining, valid, leaving, exiting]).
@@ -373,9 +404,9 @@ resize(State, NewRingSize) ->
     set_chash(State, NewRing).
 
 % @doc Return a value from the cluster metadata dict
--spec get_meta(Key :: term(), State :: chstate()) -> 
+-spec get_meta(Key :: term(), State :: chstate()) ->
     {ok, term()} | undefined.
-get_meta(Key, State) -> 
+get_meta(Key, State) ->
     case dict:find(Key, State?CHSTATE.meta) of
         error -> undefined;
         {ok, '$removed'} -> undefined;
@@ -495,7 +526,7 @@ reconcile(ExternState, MyState) ->
     check_tainted(ExternState,
                   "Error: riak_core_ring/reconcile :: "
                   "reconciling tainted external ring"),
-    check_tainted(MyState, 
+    check_tainted(MyState,
                   "Error: riak_core_ring/reconcile :: "
                   "reconciling tainted internal ring"),
     case internal_reconcile(MyState, ExternState) of
@@ -515,7 +546,7 @@ rename_node(State=?CHSTATE{chring=Ring, nodename=ThisNode, members=Members,
       chring=lists:foldl(
                fun({Idx, Owner}, AccIn) ->
                        case Owner of
-                           OldNode -> 
+                           OldNode ->
                                chash:update(Idx, NewNode, AccIn);
                            _ -> AccIn
                        end
@@ -639,7 +670,7 @@ update_meta(Key, Val, State) ->
                      true
              end,
     if Change ->
-            M = #meta_entry { 
+            M = #meta_entry {
               lastmod = calendar:datetime_to_gregorian_seconds(
                           calendar:universal_time()),
               value = Val
@@ -726,7 +757,7 @@ get_member_meta(State, Member, Key) ->
                     Value
             end
     end.
-    
+
 %% @doc Set a key in the member metadata orddict
 update_member_meta(Node, State, Member, Key, Val) ->
     VClock = vclock:increment(Node, State?CHSTATE.vclock),
@@ -1241,7 +1272,7 @@ ring_ready_info(State0) ->
                                    and lists:member(Node, Members)
                        end, Seen),
     Outdated.
-    
+
 %% @doc Marks a pending transfer as completed.
 -spec handoff_complete(State :: chstate(), Idx :: integer(),
                        Mod :: module()) -> chstate().
@@ -1363,7 +1394,7 @@ cancel_transfers(Ring) ->
 %% @doc Incorporate another node's state into our view of the Riak world.
 legacy_reconcile(ExternState, MyState) ->
     case vclock:equal(MyState#chstate.vclock, vclock:fresh()) of
-        true -> 
+        true ->
             {new_ring, #chstate{nodename=MyState#chstate.nodename,
                                 vclock=ExternState#chstate.vclock,
                                 chring=ExternState#chstate.chring,
@@ -1381,7 +1412,7 @@ legacy_reconcile(ExternState, MyState) ->
                                       meta=ExternState#chstate.meta}};
                         false -> {no_change, MyState}
                     end;
-                [] -> 
+                [] ->
                     case legacy_equal_rings(ExternState,MyState) of
                         true -> {no_change, MyState};
                         false -> {new_ring,
@@ -1467,7 +1498,7 @@ log_meta_merge(M1, M2, Meta) ->
 %% subsequent log messages will allow us to track ring versions.
 %% Handle legacy rings as well.
 log_ring_result(#chstate_v2{vclock=V,members=Members,next=Next}) ->
-    lager:debug("Updated ring vclock: ~p, Members: ~p, Next: ~p", 
+    lager:debug("Updated ring vclock: ~p, Members: ~p, Next: ~p",
         [V, Members, Next]);
 log_ring_result(Ring) ->
     lager:debug("Ring: ~p", [Ring]).
@@ -1874,7 +1905,7 @@ rename_test() ->
     ?assertEqual('new@new', owner_node(Ring)),
     ?assertEqual(['new@new'], all_members(Ring)).
 
-exclusion_test() ->    
+exclusion_test() ->
     Ring0 = fresh(2, node()),
     Ring1 = transfer_node(0,x,Ring0),
     ?assertEqual(0, random_other_index(Ring1,[730750818665451459101842416358141509827966271488])),
@@ -1899,7 +1930,7 @@ membership_test() ->
 
     RingA4 = remove_member(nodeA, RingA3, nodeC),
     ?assertEqual([nodeA, nodeB], all_members(RingA4)),
-    
+
     %% Node should stay removed
     {_, RingA5} = reconcile(RingA3, RingA4),
     ?assertEqual([nodeA, nodeB], all_members(RingA5)),
@@ -1948,7 +1979,7 @@ membership_test() ->
      end || {StatusA, _} <- Priority,
             {StatusB, _} <- Priority],
     ok.
-    
+
 ring_version_test() ->
     Ring1 = fresh(nodeA),
     Ring2 = add_member(node(), Ring1, nodeA),
