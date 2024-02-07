@@ -1,8 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% riak_core: Core Riak Application
-%%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2017 Basho Technologies, Inc.
+%% Copyright (c) 2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -38,6 +37,9 @@
          fresh/2,
          get_meta/2,
          get_buckets/1,
+         set_cluster_lock/3,
+         get_cluster_lock/1,
+         delete_cluster_lock/2,
          index_owner/2,
          my_indices/1,
          num_partitions/1,
@@ -145,7 +147,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--export_type([riak_core_ring/0, ring_size/0, partition_id/0]).
+-export_type([riak_core_ring/0, ring_size/0, partition_id/0, riak_core_cluster_lock/0]).
 
 -include("riak_core.hrl").
 
@@ -189,6 +191,7 @@
               %                             calendar:universal_time()),
 }).
 
+-type riak_core_cluster_lock() :: {string(), string(), string()}.
 %% @type riak_core_ring(). Opaque data type used for partition ownership
 -type riak_core_ring() :: ?CHSTATE{}.
 -type chstate() :: riak_core_ring().
@@ -353,6 +356,32 @@ get_nodes_locations(?CHSTATE{members =Members} = ChState) ->
   {ok, Value} = get_meta('$nodes_locations', dict:new(), ChState),
   Nodes = get_members(Members),
   dict:filter(fun(Node, _) -> lists:member(Node, Nodes) end, Value).
+
+-spec set_cluster_lock(string(), string(), chstate()) ->
+    chstate() | {error, lock_already_exists}.
+set_cluster_lock(Ticket, Description, State) ->
+  case get_cluster_lock(State) of
+      {ok, {_Ticket, _Description, _Timestamp}} -> {error, lock_already_exists};
+      _ -> update_meta('$lock', {Ticket, Description, os:timestamp()}, State)
+  end.
+
+-spec get_cluster_lock(chstate()) -> {ok, riak_core_cluster_lock()} |
+                                     {ok, undefined}.
+get_cluster_lock(State) ->
+  case get_meta('$lock', State) of
+      undefined -> {ok, undefined};
+      Rest -> Rest
+  end.
+
+-spec delete_cluster_lock(string(), chstate()) -> chstate() |
+                                                  {error, wrong_ticket} |
+                                                  {error, no_change}.
+delete_cluster_lock(Ticket, State) ->
+  case get_cluster_lock(State) of
+      {ok, {Ticket, _, _}} -> remove_meta('$lock', State);
+      {ok, _Lock} -> {error, wrong_ticket};
+      _ -> {error, no_change}
+  end.
 
 %% @doc Produce a list of all active (not marked as down) cluster members
 active_members(?CHSTATE{members=Members}) ->
@@ -1532,7 +1561,7 @@ log_meta_merge(M1, M2, Meta) ->
 %% subsequent log messages will allow us to track ring versions.
 %% Handle legacy rings as well.
 log_ring_result(#chstate_v2{vclock=V,members=Members,next=Next}) ->
-    ?LOG_DEBUG("Updated ring vclock: ~p, Members: ~p, Next: ~p", 
+    ?LOG_DEBUG("Updated ring vclock: ~p, Members: ~p, Next: ~p",
         [V, Members, Next]);
 log_ring_result(Ring) ->
     ?LOG_DEBUG("Ring: ~p", [Ring]).
@@ -2099,7 +2128,7 @@ lasgasp_test() ->
     ?assertMatch(false, check_lastgasp(RingA)),
     ?assertMatch(true, check_lastgasp(RingA1)),
     ?assertMatch({no_change, RingB}, reconcile(RingA1, RingB)),
-    
+
     ?assertMatch(true, nearly_equal(RingA, unset_lastgasp(RingA1))),
     ?assertMatch(false, check_lastgasp(unset_lastgasp(RingA1))).
 
