@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2007-2015 Basho Technologies, Inc.
-%% Copyright (c) 2020-2023 Workday, Inc.
+%% Copyright (c) 2020-2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -183,7 +183,7 @@ find_stochastic_chunks(Ring, NVal, CMin, K) ->
     Nodes = riak_core_ring:all_members(Ring),
     PrefLists = riak_core_ring:all_preflists(Ring, NVal),
     AllNodes = shuffle_list(Nodes),
-    {ok, find_chunks_dfs({PrefLists, CMin, K, AllNodes}, AllNodes, [])}.
+    find_chunks_dfs({PrefLists, CMin, K, AllNodes}, AllNodes, []).
 
 %% @private
 shuffle_list(L) ->
@@ -193,11 +193,16 @@ shuffle_list(L) ->
 
 %% @private
 find_chunks_dfs(_Fixed, [] = _CandidateNodes, Chunks) ->
-    Chunks;
+    {ok, Chunks};
 find_chunks_dfs(Fixed, CandidateNodes, Chunks) ->
     {Chunk, RestCandidateNodes} = find_chunk_dfs(Fixed, CandidateNodes),
-    NewChunks = [Chunk | Chunks],
-    find_chunks_dfs(Fixed, RestCandidateNodes, NewChunks).
+    case Chunk of
+        [] ->
+            {error, {no_solution, Chunks, RestCandidateNodes}};
+        _ ->
+            NewChunks = [Chunk | Chunks],
+            find_chunks_dfs(Fixed, RestCandidateNodes, NewChunks)
+    end.
 
 %% @private
 find_chunk_dfs({_PrefLists, _CMin, K, AllNodes} = Fixed, CandidateNodes) ->
@@ -274,17 +279,20 @@ boundary_test() ->
     ?assertNot(riak_core_ring_util:hash_is_partition_boundary(<<(BoundaryIndex + 10):160>>, 32)).
 
 create_ring(RingSize, NumNodes) ->
+    create_ring(RingSize, NumNodes, 4).
+
+create_ring(RingSize, NumNodes, TargetNVal) ->
     SingletonRing = riak_core_ring:fresh(RingSize, 'test@127.0.0.1'),
     application:set_env(riak_core, wants_claim_fun, {riak_core_claim, default_wants_claim}),
     application:set_env(riak_core, choose_claim_fun, {riak_core_claim, default_choose_claim}),
     Commands = generate_commands(NumNodes - 1),
-    run_simulator(Commands, SingletonRing).
+    run_simulator(Commands, SingletonRing, TargetNVal).
 
-run_simulator([], Ring) ->
+run_simulator([], Ring, _TargetNVal) ->
     Ring;
-run_simulator([Command|Rest], Ring) ->
-    NewRing = riak_core_claim_sim:run([{ring, Ring}, {return_ring, true}, {print, false}, {cmds, [Command]}]),
-    run_simulator(Rest, NewRing).
+run_simulator([Command|Rest], Ring, TargetNVal) ->
+    NewRing = riak_core_claim_sim:run([{ring, Ring}, {return_ring, true}, {print, false}, {target_n_val, TargetNVal}, {cmds, [Command]}]),
+    run_simulator(Rest, NewRing, TargetNVal).
 
 generate_commands(N) ->
     case rand:uniform(N) of
@@ -338,6 +346,21 @@ verify_covered(Key, Ring, CoveringNodeSet, CMin) ->
     DocIdx = riak_core_util:chash_key({<<"test">>, Key}, BucketProps),
     PL = riak_core_apl:get_primary_apl(DocIdx, 3, Ring, CoveringNodeSet),
     ?assert(CMin =< length(PL)).
+
+no_solution_stochastic_chunks_test() ->
+    %% create a ring that won't satisfy CMin = 2 (using a target n_val of only 2)
+    RingSize = 16,
+    NumNodes = 5,
+    TargetNVal = 2,
+    Ring = create_ring(RingSize, NumNodes, TargetNVal),
+    %% The ring should have multiple partitions on the same node with
+    %% NVal=2, which should make result in no solution for CMin=2
+    NVal = 3,
+    CMin = 2,
+    case riak_core_ring_util:find_stochastic_chunks(Ring, NVal, CMin, NumNodes) of
+        {error, {no_solution, _Chunks, _Remaining}} ->
+            ok
+    end.
 
 %% chunks a partition of the members of the ring, and all partitions are "safe"
 %% (i.e., their complements all cover the ring)
