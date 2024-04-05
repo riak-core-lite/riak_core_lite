@@ -215,7 +215,7 @@ get(BucketType) when is_binary(BucketType) ->
 %% can be set using {@link update/2} and can only be performed on an active
 %% type.
 %%
-%% This is not currently hooked into `riak-admin' but can be invoked
+%% This is not currently hooked into `riak admin' but can be invoked
 %% from the console.
 -spec reset(bucket_type()) -> ok | {error, term()}.
 reset(BucketType) ->

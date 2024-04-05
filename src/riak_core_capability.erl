@@ -164,7 +164,7 @@ all() ->
     ets:tab2list(?ETS).
 
 %% @doc Add the local node's supported capabilities to the given
-%% ring. Currently used during the `riak-admin join' process
+%% ring. Currently used during the `riak admin join' process
 update_ring(Ring) ->
     %% If a join occurs immediately after a node has started, it is
     %% possible that the ETS table does not yet exist, or that the

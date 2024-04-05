@@ -231,7 +231,7 @@ where two nodes have 7 vnodes and the rest have 6.
 As well as fixing the two issues above and adding extra quickcheck
 property tests to verify the fixes, there is work to be done. The
 existing tests don't call the same code paths as the operator commands
-`riak-admin cluster join | plan | remove | etc` which means there may
+`riak admin cluster join | plan | remove | etc` which means there may
 well be edges undetected and code untested. There is no test for
 removing a node. To address this we've started work on a more thorough
 quickcheck statem test that models the full life cycle of the ring

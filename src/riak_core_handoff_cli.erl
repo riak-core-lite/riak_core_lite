@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2014 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2014-2016 Basho Technologies, Inc.
+%% Copyright (c) 2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -24,6 +25,13 @@
 
 -export([register_cli/0]).
 
+-define(HANDOFF_CMD,            ["riak", "admin", "handoff"]).
+-define(HANDOFF_SUMMARY_CMD,    ["riak", "admin", "handoff", "summary"]).
+-define(HANDOFF_DETAILS_CMD,    ["riak", "admin", "handoff", "details"]).
+-define(HANDOFF_CONFIG_CMD,     ["riak", "admin", "handoff", "config"]).
+-define(HANDOFF_ENABLE_CMD,     ["riak", "admin", "handoff", "enable"]).
+-define(HANDOFF_DISABLE_CMD,    ["riak", "admin", "handoff", "disable"]).
+
 -spec register_cli() -> ok.
 register_cli() ->
     register_cli_usage(),
@@ -34,11 +42,11 @@ register_cli() ->
 
 register_cli_cmds() ->
     register_enable_disable_commands(),
-    ok = clique:register_command(["riak-admin", "handoff", "summary"], [], [],
+    ok = clique:register_command(?HANDOFF_SUMMARY_CMD, [], [],
                                  fun riak_core_handoff_status:handoff_summary/3),
-    ok = clique:register_command(["riak-admin", "handoff", "details"], [],
+    ok = clique:register_command(?HANDOFF_DETAILS_CMD, [],
                                  node_and_all_flags(), fun riak_core_handoff_status:handoff_details/3),
-    ok = clique:register_command(["riak-admin", "handoff", "config"], [],
+    ok = clique:register_command(?HANDOFF_CONFIG_CMD, [],
                                  node_and_all_flags(), fun handoff_config/3).
 
 node_and_all_flags() ->
@@ -65,16 +73,16 @@ register_config_whitelist() ->
                                            "handoff.inbound"]).
 
 register_cli_usage() ->
-    clique:register_usage(["riak-admin", "handoff"], handoff_usage()),
-    clique:register_usage(["riak-admin", "handoff", "enable"], handoff_enable_disable_usage()),
-    clique:register_usage(["riak-admin", "handoff", "disable"], handoff_enable_disable_usage()),
-    clique:register_usage(["riak-admin", "handoff", "summary"], summary_usage()),
-    clique:register_usage(["riak-admin", "handoff", "details"], details_usage()),
-    clique:register_usage(["riak-admin", "handoff", "config"], config_usage()).
+    clique:register_usage(?HANDOFF_CMD,         handoff_usage()),
+    clique:register_usage(?HANDOFF_ENABLE_CMD,  handoff_enable_disable_usage()),
+    clique:register_usage(?HANDOFF_DISABLE_CMD, handoff_enable_disable_usage()),
+    clique:register_usage(?HANDOFF_SUMMARY_CMD, summary_usage()),
+    clique:register_usage(?HANDOFF_DETAILS_CMD, details_usage()),
+    clique:register_usage(?HANDOFF_CONFIG_CMD,  config_usage()).
 
 handoff_usage() ->
     [
-      "riak-admin handoff <sub-command>\n\n",
+      "riak admin handoff <sub-command>\n\n",
       "  Display handoff-related status and settings.\n\n",
       "  Sub-commands:\n",
       "    enable     Enable handoffs for the specified node(s)\n",
@@ -86,7 +94,7 @@ handoff_usage() ->
     ].
 
 config_usage() ->
-    ["riak-admin handoff config\n\n",
+    ["riak admin handoff config\n\n",
      "  Display handoff related configuration variables\n\n",
      "Options\n",
      "  -n <node>, --node <node>\n",
@@ -97,7 +105,7 @@ config_usage() ->
     ].
 
 handoff_enable_disable_usage() ->
-    ["riak-admin handoff <enable|disable> <inbound|outbound|both> ",
+    ["riak admin handoff <enable|disable> <inbound|outbound|both> ",
      "[-n <node>|--all]\n\n",
      "  Enable or disable handoffs on the local or specified node(s).\n",
      "  If handoffs are disabled in a direction, any currently\n",
@@ -111,7 +119,7 @@ handoff_enable_disable_usage() ->
     ].
 
 handoff_cmd_spec(EnOrDis, Direction) ->
-    Cmd = ["riak-admin", "handoff", atom_to_list(EnOrDis), atom_to_list(Direction)],
+    Cmd = ["riak", "admin", "handoff", atom_to_list(EnOrDis), atom_to_list(Direction)],
     Callback = fun(_, [], Flags) ->
                        handoff_change_enabled_setting(EnOrDis, Direction, Flags)
                end,
@@ -127,13 +135,13 @@ handoff_cmd_spec(EnOrDis, Direction) ->
 
 summary_usage() ->
     [
-     "riak-admin handoff summary\n\n",
+     "riak admin handoff summary\n\n",
      "  Display a summarized view of handoffs.\n"
     ].
 
 details_usage() ->
     [
-     "riak-admin handoff details [--node <node>|--all]\n\n",
+     "riak admin handoff details [--node <node>|--all]\n\n",
      "  Display a detailed list of handoffs. Defaults to local node.\n\n"
      "Options\n",
      "  -n <node>, --node <node>\n",

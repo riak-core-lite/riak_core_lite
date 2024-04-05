@@ -211,8 +211,8 @@ unreachable_status(Down) ->
     io:format("WARNING: The cluster state will not converge until all nodes~n"
               "are up. Once the above nodes come back online, convergence~n"
               "will continue. If the outages are long-term or permanent, you~n"
-              "can either mark the nodes as down (riak-admin down NODE) or~n"
-              "forcibly remove the nodes from the cluster (riak-admin~n"
+              "can either mark the nodes as down (riak admin down NODE) or~n"
+              "forcibly remove the nodes from the cluster (riak admin~n"
               "force-remove NODE) to allow the remaining nodes to settle.~n"),
     ok.
 
@@ -615,11 +615,11 @@ clear_staged([]) ->
     end.
 
 is_claimant_error(Node, Action) ->
-    io:format("Failed: ~p is the claimant (see: riak-admin ring_status).~n",
+    io:format("Failed: ~p is the claimant (see: riak admin ring_status).~n",
               [Node]),
     io:format(
       "The claimant is the node responsible for initiating cluster changes,~n"
-      "and cannot forcefully ~s itself. You can use 'riak-admin down' to~n"
+      "and cannot forcefully ~s itself. You can use 'riak admin down' to~n"
       "mark the node as offline, which will trigger a new claimant to take~n"
       "over.  However, this will clear any staged changes.~n", [Action]).
 
@@ -630,10 +630,10 @@ print_staged([]) ->
                       "support plan/commit.~n");
         {error, ring_not_ready} ->
             io:format("Cannot plan until cluster state has converged.~n"
-                      "Check 'Ring Ready' in 'riak-admin ring_status'~n");
+                      "Check 'Ring Ready' in 'riak admin ring_status'~n");
         {error, invalid_resize_claim} ->
             io:format("Unable to claim some partitions in resized ring.~n"
-                      "Check that there are no pending changes in 'riak-admin ring-status'~n"
+                      "Check that there are no pending changes in 'riak admin ring-status'~n"
                       "If there are, try again once they are completed~n"
                       "Otherwise try again shortly.~n");
         {ok, Changes, NextRings} ->
@@ -764,7 +764,7 @@ output(Ring, NextRing) ->
         {_, []} ->
             ok;
         {true, _} ->
-            io:format("Ring is resizing. see riak-admin ring-status for transfer details.~n");
+            io:format("Ring is resizing. see riak admin ring-status for transfer details.~n");
         _ ->
             io:format("Transfers resulting from cluster changes: ~p~n",
                       [length(Next)]),
@@ -791,16 +791,16 @@ commit_staged([]) ->
                       "support plan/commit.~n");
         {error, nothing_planned} ->
             io:format("You must verify the plan with "
-                      "'riak-admin cluster plan' before committing~n");
+                      "'riak admin cluster plan' before committing~n");
         {error, ring_not_ready} ->
             io:format("Cannot commit until cluster state has converged.~n"
-                      "Check 'Ring Ready' in 'riak-admin ring_status'~n");
+                      "Check 'Ring Ready' in 'riak admin ring_status'~n");
         {error, plan_changed} ->
             io:format("The plan has changed. Verify with "
-                      "'riak-admin cluster plan' before committing~n");
+                      "'riak admin cluster plan' before committing~n");
         {error, invalid_resize_claim} ->
             io:format("Unable to commit staged ring changes.~n"
-                      "Check that there are no pending changes in 'riak-admin ring-status'~n"
+                      "Check that there are no pending changes in 'riak admin ring-status'~n"
                       "If there are, try again once they are completed,~n"
                       "Otherwise try again shortly.~n");
         _ ->
@@ -824,8 +824,8 @@ transfer_limit([]) ->
                   end, Down),
     io:format("~79..-s~n", [""]),
     io:format("Note: You can change transfer limits with "
-              "'riak-admin transfer_limit <limit>'~n"
-              "      and 'riak-admin transfer_limit <node> <limit>'~n"),
+              "'riak admin transfer_limit <limit>'~n"
+              "      and 'riak admin transfer_limit <node> <limit>'~n"),
     ok;
 transfer_limit([LimitStr]) ->
     {Valid, Limit} = check_limit(LimitStr),
