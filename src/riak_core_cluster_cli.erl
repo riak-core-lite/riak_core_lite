@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2014 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2012-2015 Basho Technologies, Inc.
+%% Copyright (c) 2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -37,30 +38,194 @@
     partition/3
 ]).
 
+-define(CLUSTER_CMD,                    ["riak-admin", "cluster"]).
+-define(CLUSTER_STATUS_CMD,             ["riak-admin", "cluster", "status"]).
+-define(CLUSTER_PARTITION_CMD,          ["riak-admin", "cluster", "partition"]).
+-define(CLUSTER_PARTITIONS_CMD,         ["riak-admin", "cluster", "partitions"]).
+-define(CLUSTER_PARTITION_COUNT_CMD,    ["riak-admin", "cluster", "partition-count"]).
+-define(CLUSTER_LOCATION_CMD,           ["riak-admin", "cluster", "location"]).
+-define(LOCK_CMD,                       ["riak-admin", "cluster", "lock"]).
+-define(LOCK_STATUS_CMD,                ["riak-admin", "cluster", "lock", "status"]).
+-define(LOCK_RELEASE_CMD,               ["riak-admin", "cluster", "lock", "release"]).
+-define(LOCK_ACQUIRE_CMD,               ["riak-admin", "cluster", "lock", "acquire"]).
+
 register_cli() ->
     register_all_usage(),
     register_all_commands().
 
 register_all_usage() ->
-    clique:register_usage(["riak-admin", "cluster"], cluster_usage()),
-    clique:register_usage(["riak-admin", "cluster", "status"], status_usage()),
-    clique:register_usage(["riak-admin", "cluster", "partition"], partition_usage()),
-    clique:register_usage(["riak-admin", "cluster", "partitions"], partitions_usage()),
-    clique:register_usage(["riak-admin", "cluster", "partition_count"], partition_count_usage()),
-    clique:register_usage(["riak-admin", "cluster", "partition_count"], partition_count_usage()),
-    clique:register_usage(["riak-admin", "cluster", "location"], location_usage()).
+    clique:register_usage(?CLUSTER_CMD,                 cluster_usage()),
+    clique:register_usage(?CLUSTER_STATUS_CMD,          status_usage()),
+    clique:register_usage(?CLUSTER_PARTITION_CMD,       partition_usage()),
+    clique:register_usage(?CLUSTER_PARTITIONS_CMD,      partitions_usage()),
+    clique:register_usage(?CLUSTER_PARTITION_COUNT_CMD, partition_count_usage()),
+    clique:register_usage(?CLUSTER_LOCATION_CMD,        location_usage()),
+    clique:register_usage(?LOCK_CMD,                    lock_usage()),
+    clique:register_usage(?LOCK_STATUS_CMD,             lock_status_usage()),
+    clique:register_usage(?LOCK_RELEASE_CMD,            lock_release_usage()),
+    clique:register_usage(?LOCK_ACQUIRE_CMD,            lock_acquire_usage()).
 
 register_all_commands() ->
     lists:foreach(fun(Args) -> apply(clique, register_command, Args) end,
                   [status_register(), partition_count_register(),
-                   partitions_register(), partition_register(), location_register()]).
+                   partitions_register(), partition_register(), location_register(),
+                   lock_status_register(), lock_acquire_register(), lock_release_register()
+                  ]).
+
+%%%
+%% Lock
+%%%
+
+lock_usage() -> 
+    [
+     "riak-admin lock <sub-command>\n\n",
+     "  Sub-commands:\n",
+     "    acquire          Acquire a lock on a cluster\n",
+     "    release          Release a lock on a cluster\n",
+     "    status           Display status of current lock\n\n",
+     "  Use --help after a sub-command for more details.\n"
+    ].
+
+lock_status_usage() ->
+    [
+     "riak-admin cluster lock status\n\n",
+     "  Displays current lock on cluster.\n\n"
+    ].
+
+lock_release_usage() -> 
+    [
+     "riak-admin cluster lock release <Ticket>\n\n",
+     "  Releases the current lock when passed the correct <Ticket>\n\n"
+    ].
+
+lock_acquire_usage() -> 
+    [
+     "riak-admin cluster lock acquire <Ticket> <Description>\n\n",
+     "  Acquires a lock on a cluster if currently not locked.\n\n"
+    ].
+
+lock_status_register() ->
+    [?LOCK_STATUS_CMD,
+     [],
+     [],
+     fun lock_status/3].
+
+lock_status(_, _, _) ->
+    try
+        case riak_core_claimant:cluster_lock_status() of
+            {ok, {Ticket, Description, Timestamp}} ->
+                [clique_status:list(["Cluster has a lock:\n",
+                                    io_lib:format("Ticket:      ~s~n", [Ticket]),
+                                    io_lib:format("Description: ~s~n", [Description]),
+                                    io_lib:format("Acquired:    ~s~n", [format_utc_timestamp(Timestamp)])
+                                   ])];
+            {ok, undefined} ->
+                [clique_status:text("Cluster does not have a lock.")];
+            {error, ring_not_ready} ->
+                make_alert(["Ring is not ready, please try again soon."]);
+            {error, timed_out} ->
+                make_alert(["Timed out while attempting to release lock.",
+                           "The lock may still successfully be released.",
+                           "Ensure all nodes are up and check lock status."]);
+
+            {error, Error1} ->
+                lager:error("Getting lock status failed: ~p", [Error1]),
+                make_alert("Getting lock status failed, see log for details")
+
+        end
+    catch
+        Exception:Reason ->
+            lager:error("Getting lock status failed ~p:~p", [Exception, Reason]),
+            make_alert("Getting lock status failed, see log for details")
+    end.
+
+lock_acquire_register() ->
+    [?LOCK_ACQUIRE_CMD ++ ['*', '*'], %% Ticket, Description
+     [],
+     [],
+     fun lock_acquire/3].
+
+lock_acquire([_, _, _, _, TicketStr, DescriptionStr], _, _) ->
+    Ticket = list_to_binary(TicketStr),
+    Description = list_to_binary(DescriptionStr),
+    try
+        %% TODO aef- make actions blocking if possible with some timeout
+        case riak_core_claimant:acquire_cluster_lock(Ticket, Description) of
+            %% 1 is pending
+            {ok, lock_acquired} ->
+                [clique_status:list([
+                                    "Cluster has a lock:\n",
+                                    io_lib:format("Ticket:      ~s~n", [TicketStr]),
+                                    io_lib:format("Description: ~s~n", [DescriptionStr])
+                                   ])];
+            {error, lock_unavailable} ->
+                make_alert("Cluster already has lock.");
+            {error, ring_not_ready} ->
+                make_alert(["Ring is not ready, please try again soon."]);
+            {error, ticket_too_long} ->
+                make_alert("Ticket must be less than 51 characters.");
+            {error, description_too_long} ->
+                make_alert("Description must be less than 151 characters.");
+            {error, timed_out} ->
+                make_alert(["Timed out while attempting to acquire lock.",
+                            "The lock may still successfully be acquired.",
+                            "Ensure all nodes are up and check lock status."]);
+            {error, Error1} ->
+                lager:error("Acquiring lock failed ~p", [Error1]),
+                make_alert("Acquiring lock failed, see log for details.")
+        end
+    catch
+        Exception:Reason ->
+            lager:error("Acquiring lock failed ~p ~p", [Exception, Reason]),
+            make_alert("Acquiring lock failed, see log for details.")
+  end.
+
+lock_release_register() ->
+    [?LOCK_RELEASE_CMD ++ ['*'], %% Ticket
+     [],
+     [],
+     fun lock_release/3].
+
+lock_release([_, _, _, _, TicketStr], _, _) ->
+    Ticket = list_to_binary(TicketStr),
+    try
+        case riak_core_claimant:release_cluster_lock(Ticket) of
+            {ok, no_lock} ->
+                [clique_status:text("No lock exists on the cluster.")];
+            {ok, lock_released} ->
+                [clique_status:text("Lock has been released")];
+            {error, ring_not_ready} ->
+                make_alert(["Ring is not ready, please try again soon."]);
+            {error, timed_out} ->
+                make_alert(["Timed out while attempting to release lock.",
+                            "The lock may still successfully be released.",
+                            "Ensure all nodes are up and check lock status."]);
+            {error, wrong_ticket} ->
+                make_alert(
+                  ["Ticket does not match current lock."]
+                 );
+            {error, Error1} ->
+                lager:error("Releasing lock failed ~p", [Error1]),
+                make_alert("Releasing lock failed, see log for details.")
+        end
+    catch
+        Exception:Reason ->
+            lager:error("Releasing lock failed ~p ~p", [Exception, Reason]),
+            make_alert("Releasing lock failed, see log for details.")
+  end.
+
+format_utc_timestamp(TS) ->
+    {{Year,Month,Day}, {Hour,Minute,_Second}} = calendar:now_to_universal_time(TS),
+    Mstr = element(Month,{"Jan","Feb","Mar","Apr","May","Jun","Jul",
+                          "Aug","Sep","Oct","Nov","Dec"}),
+    io_lib:format("~2w ~s ~4w ~2w:~2..0w", [Day,Mstr,Year,Hour,Minute]).
 
 %%%
 %% Cluster status
 %%%
 
 status_register() ->
-    [["riak-admin", "cluster", "status"], % Cmd
+    [?CLUSTER_STATUS_CMD,
      [],                                  % KeySpecs
      [],                                  % FlagSpecs
      fun status/3].                       % Implementation callback.
@@ -147,7 +312,7 @@ node_availability(Node, Down, MarkedDown) ->
 %%%
 
 partition_count_register() ->
-    [["riak-admin", "cluster", "partition-count"], % Cmd
+    [?CLUSTER_PARTITION_COUNT_CMD,
      [],                                           % KeySpecs
      [{node, [{shortname, "n"}, {longname, "node"},
               {typecast,
@@ -180,7 +345,7 @@ partition_count(_CmdBase, [], []) ->
 %%%
 
 partitions_register() ->
-    [["riak-admin", "cluster", "partitions"],      % Cmd
+    [?CLUSTER_PARTITIONS_CMD,
      [],                                           % KeySpecs
      [{node, [{shortname, "n"}, {longname, "node"},
               {typecast,
@@ -228,7 +393,7 @@ generate_rows(RingSize, Type, Ids) ->
 %%%
 
 partition_register() ->
-    [["riak-admin", "cluster", "partition"],         % Cmd
+    [?CLUSTER_PARTITION_CMD,
      [{id,    [{typecast, fun list_to_integer/1}]},
       {index, [{typecast, fun list_to_integer/1}]}], % KeySpecs
      [],                                             % FlagSpecs
@@ -287,7 +452,7 @@ location_usage() ->
   ].
 
 location_register() ->
-  [["riak-admin", "cluster", "location", '*'],  % Cmd
+  [?CLUSTER_LOCATION_CMD ++ ['*'],
    [], % KeySpecs
    [{node, [{shortname, "n"}, {longname, "node"},
             {typecast, fun clique_typecast:to_node/1}]}], % FlagSpecs
@@ -319,7 +484,7 @@ stage_set_location([_, _, _, Location], _, Flags) ->
 
 make_alert(Iolist) ->
     Text = [clique_status:text(Iolist)],
-    clique_status:alert(Text).
+    {exit_status, 1, [clique_status:alert(Text)]}.
 
 hash_to_partition_id(Hash, RingSize) ->
     riak_core_ring_util:hash_to_partition_id(Hash, RingSize).
