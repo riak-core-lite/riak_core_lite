@@ -227,8 +227,13 @@ is_stable_ring() ->
 force_update() ->
     ring_trans(
       fun(Ring, _) ->
-              NewRing = riak_core_ring:update_member_meta(node(), Ring, node(),
-                                                          unused, os:timestamp()), %% normally, should be a vclock.
+              NewRing = 
+                riak_core_ring:update_member_meta(
+                    node(),
+                    Ring, node(),
+                    unused,
+                    os:timestamp() %% normally, should be a vclock.
+                ),
               {new_ring, NewRing}
       end, []),
     ok.

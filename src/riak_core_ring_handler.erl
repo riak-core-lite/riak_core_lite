@@ -17,6 +17,8 @@
 -module(riak_core_ring_handler).
 -behaviour(gen_event).
 
+-include_lib("kernel/include/logger.hrl").
+
 %% gen_event callbacks
 -export([init/1, handle_event/2, handle_call/2,
          handle_info/2, terminate/2, code_change/3]).
@@ -59,6 +61,10 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 
 ensure_vnodes_started(Ring) ->
+    ?LOG_INFO(
+        "Ring handler EVS due to ~0p",
+        [process_info(self(), current_stacktrace)]
+    ),
     case riak_core:vnode_modules() of
         [] ->
             ok;
