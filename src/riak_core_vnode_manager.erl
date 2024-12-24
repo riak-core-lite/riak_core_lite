@@ -643,21 +643,22 @@ get_vnode(IdxList, Mod, State) ->
     MaxStart =
         app_helper:get_env(
             riak_core, vnode_parallel_start, ?DEFAULT_VNODE_ROLLING_START),
-    ?LOG_INFO(
-        "Parallel starting ~w of ~w for ~w",
-        [MaxStart, length(NotStarted), Mod]
-    ),
     Pairs = Started ++ riak_core_util:pmap(StartFun, NotStarted, MaxStart),
     %% Return Pids in same order as input
     PairsDict = dict:from_list(Pairs),
-    _ = [begin
-             Pid = dict:fetch(Idx, PairsDict),
-             MonRef = erlang:monitor(process, Pid),
-             IdxRec = #idxrec{key={Idx,Mod},idx=Idx,mod=Mod,pid=Pid,
-                              monref=MonRef},
-             MonRec = #monrec{monref=MonRef, key={Idx,Mod}},
-             add_vnode_rec([IdxRec, MonRec], State)
-         end || Idx <- NotStarted],
+    _ = 
+        [
+            begin
+                Pid = dict:fetch(Idx, PairsDict),
+                MonRef = erlang:monitor(process, Pid),
+                IdxRec = #idxrec{key={Idx,Mod},idx=Idx,mod=Mod,pid=Pid,
+                                monref=MonRef},
+                MonRec = #monrec{monref=MonRef, key={Idx,Mod}},
+                ?LOG_INFO("Adding vnode rec ~w ~w", [Idx, Mod]),
+                add_vnode_rec([IdxRec, MonRec], State)
+            end
+            || Idx <- NotStarted
+        ],
     [ dict:fetch(Idx, PairsDict) || Idx <- IdxList].
 
 
@@ -907,15 +908,24 @@ update_never_started(Ring, State=#state{known_modules=KnownMods}) ->
             )
     end.
 
-update_never_started(Mod, Indices, MyIndices, State) ->
+update_never_started(Mod, IndicesL, MyIndicesL, State) ->
     IdxPids = get_all_index_pid(Mod, []),
-    AlreadyStarted = [Idx || {Idx, _Pid} <- IdxPids],
-    NeverStarted0 = lists:sort(lists:subtract(Indices, AlreadyStarted)),
-    NeverStarted1 = lists:subtract(NeverStarted0, MyIndices) ++ MyIndices, 
-    NeverStarted2 = [{Idx, Mod} || Idx <- NeverStarted1],
-    NeverStarted3 = NeverStarted2 ++ State#state.never_started,
+    AlreadyStartedS =
+        sets:from_list([Idx || {Idx, _Pid} <- IdxPids], [{version, 2}]),
+    MyIndicesS = sets:from_list(MyIndicesL, [{version, 2}]),
+    AllIndicesS = sets:from_list(IndicesL, [{version, 2}]),
+    NotMyIndicesS = sets:subtract(AllIndicesS, MyIndicesS),
+    NeverStarted =
+        sets:to_list(sets:subtract(NotMyIndicesS, AlreadyStartedS))
+        ++ sets:to_list(sets:subtract(MyIndicesS, AlreadyStartedS)),
+    NeverStarted1 = [{Idx, Mod} || Idx <- NeverStarted],
+    NeverStarted2 = NeverStarted1 ++ State#state.never_started,
+    ?LOG_INFO(
+        "Update never started for Mod ~w with count ~w to be added to ~w",
+        [Mod, length(NeverStarted1), length(State#state.never_started)]
+    ),
     KnownModules = [Mod | State#state.known_modules],
-    State#state{known_modules=KnownModules, never_started=NeverStarted3}.
+    State#state{known_modules=KnownModules, never_started=NeverStarted2}.
 
 maybe_start_vnodes(Ring, State) ->
     case riak_core_ring:check_lastgasp(Ring) of

@@ -245,9 +245,11 @@ do_init(State = #state{index=Index, mod=Mod, forward=Forward}) ->
             ModState0 = 
                 case lists:keyfind(pool, 1, Props) of
                     {pool, WorkerMod, PoolSize, WorkerArgs}=PoolConfig ->
-                        ?LOG_INFO("Starting vnode worker pool " ++ 
-                                        "~p with size of ~p~n",
-                                    [WorkerMod, PoolSize]),
+                        ?LOG_DEBUG(
+                            "Starting vnode worker pool " 
+                            "~p with size of ~p~n",
+                            [WorkerMod, PoolSize]
+                        ),
                         {ok, PoolPid} =
                             riak_core_vnode_worker_pool:start_link(WorkerMod,
                                                                 PoolSize,
@@ -258,8 +260,10 @@ do_init(State = #state{index=Index, mod=Mod, forward=Forward}) ->
                         % pool, it should export a function add_vnode_pool/2
                         case erlang:function_exported(Mod, add_vnode_pool, 2) of
                             true ->
-                                ?LOG_INFO("Adding vnode_pool ~w to ~w state",
-                                            [PoolPid, Mod]),
+                                ?LOG_DEBUG(
+                                    "Adding vnode_pool ~w to ~w state",
+                                    [PoolPid, Mod]
+                                ),
                                 Mod:add_vnode_pool(PoolPid, ModState);
                             false ->
                                 ModState
