@@ -26,7 +26,8 @@
 -export([af1/0, af2/0, af3/0, af4/0, be/0, nwp/0, dscp_pools/0, pools/0]).
 
 %% API
--export([start_link/5, stop/2, shutdown_pool/2, handle_work/3]).
+-export([start_link/5, stop/2, shutdown_pool/2, handle_work/3,
+         get_worker_pool_size/1, set_worker_pool_size/2]).
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -116,5 +117,25 @@ reply(From, Msg) ->
 
 do_work(Pid, Work, From) ->
     riak_core_vnode_worker:handle_work(Pid, Work, From).
+
+-spec get_worker_pool_size(worker_pool()) -> {ok, non_neg_integer()} | {error, invalid_pool}.
+get_worker_pool_size(P) ->
+    PP = supervisor:which_children(riak_core_node_worker_pool_sup),
+    case lists:keyfind(P, 1, PP) of
+        {P, Pid, worker, _} ->
+            riak_core_worker_pool:get_worker_pool_size(Pid);
+        false ->
+            {error, invalid_pool}
+    end.
+
+-spec set_worker_pool_size(worker_pool(), non_neg_integer()) -> ok | {error, invalid_pool}.
+set_worker_pool_size(P, A) ->
+    PP = supervisor:which_children(riak_core_node_worker_pool_sup),
+    case lists:keyfind(P, 1, PP) of
+        {P, Pid, worker, _} ->
+            riak_core_worker_pool:set_worker_pool_size(Pid, A);
+        false ->
+            {error, invalid_pool}
+    end.
 
 to_log() -> true.
