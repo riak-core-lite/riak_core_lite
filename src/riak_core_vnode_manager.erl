@@ -40,6 +40,7 @@
          kill_repairs/1]).
 -export([all_index_pid/1, get_vnode_pid/2, start_vnode/2,
          unregister_vnode/2, unregister_vnode/3, vnode_event/4]).
+-export([repair_pairs/2]).
 %% Field debugging
 -export([get_tab/0]).
 
