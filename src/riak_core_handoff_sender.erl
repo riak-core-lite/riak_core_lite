@@ -347,7 +347,7 @@ filter_foldopts(_HoType, [], FilteredOps) ->
     FilteredOps;
 filter_foldopts(HoType, [{HoType, TypeOpts}|Rest], FilteredOpts)
         when is_list(TypeOpts) ->
-    filter_foldopts(HoType, Rest,[TypeOpts] ++ FilteredOpts);
+    filter_foldopts(HoType, Rest, TypeOpts ++ FilteredOpts);
 filter_foldopts(HoType, [{_AltHoType, TypeOpts}|Rest], FilteredOpts)
         when is_list(TypeOpts) ->
     filter_foldopts(HoType, Rest, FilteredOpts);
