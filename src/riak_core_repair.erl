@@ -66,11 +66,8 @@ gen_filter(Target, Ring, NValMap, DefaultN, InfoFun) ->
 
 %% @doc Generate the hash `Range' for a given `Target' partition and
 %%      `NVal'.
-%%
-%% Note: The type of NVal should be pos_integer() but dialyzer says
-%%       success typing is integer() and I don't have time for games.
 -spec gen_range(
-    index(), riak_core_ring:riak_core_ring(), integer()) ->
+    index(), riak_core_ring:riak_core_ring(), pos_integer()) ->
         hash_range().
 gen_range(Target, Ring, NVal) ->
     CH = riak_core_ring:chash(Ring),
