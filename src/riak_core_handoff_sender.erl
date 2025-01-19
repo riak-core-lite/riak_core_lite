@@ -71,6 +71,7 @@
 
           total_objects        :: non_neg_integer(),
           total_bytes          :: non_neg_integer(),
+          filtered_objects = 0 :: non_neg_integer(),
 
           item_queue           :: [binary()],
           item_queue_length    :: non_neg_integer(),
@@ -209,13 +210,56 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                     "Initial sync message returned ~w error timeout "
                     "between src_partition=~p trg_partition=~p "
                     "type=~w module=~w ",
-                    [DirectionS,
-                        SrcPartition, TargetPartition,
-                        Type, Module]),
+                    [
+                        DirectionS,
+                        SrcPartition,
+                        TargetPartition,
+                        Type,
+                        Module
+                    ]
+                ),
                 exit({shutdown, timeout});
             {error, _, closed} ->
                 exit({shutdown, max_concurrency})
         end,
+
+        UpdFilter =
+            case {Type, lists:keyfind(origin, 1, Opts)} of
+                {repair, {origin, Origin}} ->
+                    NegativeFilters = 
+                        riak_core_vnode_manager:xfer_request_filter(
+                            Origin, 
+                            {Module, SrcPartition, TargetPartition}
+                        ),
+                    case NegativeFilters of
+                        ok ->
+                            Filter;
+                        NegativeFilters when is_list(NegativeFilters) ->
+                            ?LOG_INFO(
+                                "~w negative filters to be used in repair "
+                                "between ~w and ~w for ~w",
+                                [
+                                    length(NegativeFilters),
+                                    SrcPartition,
+                                    TargetPartition,
+                                    Module
+                                ]
+                            ),
+                            fun(K) ->
+                                case Filter(K) of
+                                    true ->
+                                        lists:all(
+                                            fun(F) -> not F(K) end,
+                                            NegativeFilters
+                                        );
+                                    NotTrue ->
+                                        NotTrue
+                                end
+                            end
+                    end;
+                _ ->
+                    Filter
+            end,
 
         ?LOG_INFO("Starting ~p transfer of ~p from ~p ~p to ~p ~p",
                 [Type, Module, SrcNode, SrcPartition,
@@ -226,7 +270,11 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
 
         Req = 
             riak_core_util:make_fold_req(
-                fun visit_item/3, HandoffAcc, false, FoldOpts),
+                fun visit_item/3,
+                HandoffAcc#ho_acc{filter=UpdFilter},
+                false,
+                FoldOpts
+            ),
 
         %% IFF the vnode is using an async worker to perform the fold
         %% then sync_command will return error on vnode crash,
@@ -253,9 +301,11 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
             module=Module,
             parent=ParentPid,
             tcp_mod=TcpMod,
-            total_objects=TotalObjects,
+            total_objects=TotalObjs,
             total_bytes=TotalBytes,
-            stats=FinalStats,
+            filtered_objects = SkippedObjs,
+            item_queue_length = LastBatchLength,
+            item_queue_byte_size = LastBatchSize,
             notsent_acc=NotSentAcc,
             rcv_timeout=RecvTimeout} = AccRecord,
 
@@ -277,29 +327,46 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                             "Final sync message returned ~w error timeout "
                             "between src_partition=~p trg_partition=~p "
                             "type=~w module=~w ",
-                            [DirectionE,
-                                SrcPartition, TargetPartition,
-                                Type, Module]
+                            [
+                                DirectionE,
+                                SrcPartition,
+                                TargetPartition,
+                                Type,
+                                Module
+                            ]
                         ),
                         exit({shutdown, timeout})
                 end,
 
                 FoldTimeDiff = end_fold_time(StartFoldTime),
-                ThroughputBytes = TotalBytes/FoldTimeDiff,
+                ThroughputBytes =
+                    (TotalBytes + LastBatchSize)/FoldTimeDiff,
 
                 ok = 
                     ?LOG_INFO(
                         "~p transfer of ~p from ~p ~p to ~p ~p"
                         " completed: sent ~s bytes in ~p of ~p objects"
                         " in ~.2f seconds (~s/second)",
-                        [Type, Module,
-                            SrcNode, SrcPartition,
-                            TargetNode, TargetPartition,
-                        riak_core_format:human_size_fmt(
-                            "~.2f", TotalBytes),
-                        FinalStats#ho_stats.objs, TotalObjects, FoldTimeDiff,
-                        riak_core_format:human_size_fmt(
-                            "~.2f", ThroughputBytes)]),
+                        [
+                            Type,
+                            Module,
+                            SrcNode,
+                            SrcPartition,
+                            TargetNode,
+                            TargetPartition,
+                            riak_core_format:human_size_fmt(
+                                "~.2f",
+                                TotalBytes + LastBatchSize
+                            ),
+                            TotalObjs + LastBatchLength - SkippedObjs,
+                            TotalObjs + LastBatchLength,
+                            FoldTimeDiff,
+                            riak_core_format:human_size_fmt(
+                                "~.2f",
+                                ThroughputBytes
+                            )
+                        ]
+                    ),
                 case Type of
                     repair ->
                         ok;
@@ -439,8 +506,10 @@ visit_item(K, V, Acc0) ->
             NewNotSentAcc = handle_not_sent_item(NotSentFun, NotSentAcc, K),
             Acc#ho_acc{
                 error=ok,
+                filtered_objects=Acc#ho_acc.filtered_objects + 1,
                 total_objects=TotalObjects+1,
-                notsent_acc=NewNotSentAcc}
+                notsent_acc=NewNotSentAcc
+            }
     end.
 
 handle_not_sent_item(NotSentFun, Acc, Key) when is_function(NotSentFun) ->
@@ -558,7 +627,7 @@ send_objects(ItemsReverseList, Acc) ->
     case TcpMod:send(Socket, M) of
         ok ->
             Acc0#ho_acc{ack=Ack+1, error=ok, stats=Stats3,
-                       total_objects=TotalObjects+NObjects,
+                       total_objects=TotalObjects+BatchCount,
                        total_bytes=TotalBytes+NumBytes,
                        keepalive_next=next_keepalive_time(),
                        item_queue=[],

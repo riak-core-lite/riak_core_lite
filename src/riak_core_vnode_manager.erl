@@ -35,9 +35,20 @@
 -export([start_link/0, stop/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
--export([all_vnodes/0, all_vnodes/1, all_vnodes_status/0,
-         force_handoffs/0, repair/3, all_handoffs/0, repair_status/1, xfer_complete/2,
-         kill_repairs/1]).
+-export(
+    [
+        all_vnodes/0,
+        all_vnodes/1,
+        all_vnodes_status/0,
+        force_handoffs/0,
+        repair/3,
+        all_handoffs/0,
+        repair_status/1,
+        xfer_complete/2,
+        kill_repairs/1,
+        xfer_request_filter/2
+    ]
+).
 -export([all_index_pid/1, get_vnode_pid/2, start_vnode/2,
          unregister_vnode/2, unregister_vnode/3, vnode_event/4]).
 -export([repair_pairs/2]).
@@ -65,6 +76,7 @@
           filter_mod_fun        :: {module(), atom()},
           minus_one_xfer        :: xfer_status(),
           plus_one_xfer         :: xfer_status(),
+          filter_list = []      :: list(fun((term()) -> boolean())),
           pairs                 :: [{index(), node()}]
         }).
 -type repair() :: #repair{}.
@@ -82,7 +94,7 @@
 
 -include("riak_core.hrl").
 -include("riak_core_handoff.hrl").
--include("riak_core_vnode.hrl").
+
 -define(XFER_EQ(A, ModSrcTgt), A#xfer_status.mod_src_target == ModSrcTgt).
 -define(XFER_COMPLETE(X), X#xfer_status.status == complete).
 -define(DEFAULT_OWNERSHIP_TRIGGER, 8).
@@ -105,9 +117,9 @@ all_vnodes_status() ->
 
 %% @doc Repair the given `ModPartition' pair for `Service' using the
 %%      given `FilterModFun' to filter keys.
--spec repair(atom(), {module(), partition()}, {module(), atom()}) ->
-                    {ok, Pairs::[{partition(), node()}]} |
-                    {down, Down::[{partition(), node()}]} |
+-spec repair(atom(), {module(), index()}, {module(), atom()}) ->
+                    {ok, Pairs::[{index(), node()}]} |
+                    {down, Down::[{index(), node()}]} |
                     ownership_change_in_progress.
 repair(Service, {_Module, Partition}=ModPartition, FilterModFun) ->
     %% Fwd the request to the partition owner to guarantee that there
@@ -132,9 +144,20 @@ all_handoffs() ->
 %% TODO: make cast with retry on handoff sender side and handshake?
 %%
 %% TODO: second arg has specific form but maybe make proplist?
--spec xfer_complete(node(), tuple()) -> ok.
+-spec xfer_complete(node(), {module(), index(), index()}) -> ok.
 xfer_complete(Origin, Xfer) ->
     gen_server:call({?MODULE, Origin}, {xfer_complete, Xfer}, ?LONG_TIMEOUT).
+
+-spec xfer_request_filter(
+    node(), {module(), index(), index()}) ->
+        list(fun((term()) -> boolean()))|ok.
+%% @doc request negative filters, so any objects already being sent are not
+%% double-sent.  Note if this call is not supported (i.e. as running 3.2 or
+%% earlier) then an 'ok' will be returned as that is returned to any
+%% unrecognised call.  the 'ok' is reused for the no filter scenario, to prove
+%% this scenario (i.e. reduce cluster upgrade testing).
+xfer_request_filter(Origin, Xfer) ->
+    gen_server:call({?MODULE, Origin}, {xfer_filter, Xfer}, ?LONG_TIMEOUT).
 
 kill_repairs(Reason) ->
     gen_server:cast(?MODULE, {kill_repairs, Reason}).
@@ -162,6 +185,7 @@ get_tab() ->
 
 get_vnode_pid(Index, VNodeMod) ->
     gen_server:call(?MODULE, {Index, VNodeMod, get_vnode}, infinity).
+
 
 %% ===================================================================
 %% ETS-based API: try to determine response by reading protected ETS
@@ -348,6 +372,35 @@ handle_call({xfer_complete, ModSrcTgt}, _From, State) ->
             end
     end;
 
+handle_call({xfer_filter, ModSrcTarget}, _From, State) ->
+    Repairs = State#state.repairs,
+    {Mod, SrcPartition, Partition} = ModSrcTarget,
+    ModPartition = {Mod, Partition},
+    case get_repair(ModPartition, Repairs) of
+        Repair when is_record(Repair, repair) ->
+            {FilterMod, FilterFun} = Repair#repair.filter_mod_fun,
+            NegativeFilter = FilterMod:FilterFun(SrcPartition),
+            CurrentFilterList = Repair#repair.filter_list,
+            NextFilterList = CurrentFilterList ++ [NegativeFilter],
+            UpdRepair = Repair#repair{filter_list = NextFilterList},
+            case CurrentFilterList of
+                [] ->
+                    {
+                        reply,
+                        ok,
+                        State#state{repairs=replace_repair(UpdRepair, Repairs)}
+                    };
+                FilterFuns ->
+                    {
+                        reply,
+                        FilterFuns,
+                        State#state{repairs=replace_repair(UpdRepair, Repairs)}
+                    }
+            end;
+        _ ->
+            {reply, ok, State}
+    end;
+
 handle_call(_, _From, State) ->
     {reply, ok, State}.
 
@@ -392,11 +445,14 @@ create_repair(Pairs, ModPartition, FilterModFun, Mod, Partition, Repairs, State)
                              mod_src_target = {Mod, MOP, Partition}},
     POXStatus = #xfer_status{status = pending,
                              mod_src_target = {Mod, POP, Partition}},
-    Repair = #repair{mod_partition = ModPartition,
-                     filter_mod_fun = FilterModFun,
-                     pairs = Pairs,
-                     minus_one_xfer = MOXStatus,
-                     plus_one_xfer = POXStatus},
+    Repair =
+        #repair{
+            mod_partition = ModPartition,
+            filter_mod_fun = FilterModFun,
+            pairs = Pairs,
+            minus_one_xfer = MOXStatus,
+            plus_one_xfer = POXStatus
+        },
     Repairs2 = Repairs ++ [Repair],
     State2 = State#state{repairs = Repairs2},
     ?LOG_DEBUG("add repair ~p", [ModPartition]),
