@@ -24,6 +24,7 @@
          gen_range_map/3]).
 
 -include("riak_core_handoff.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -type hash_range()
     :: 
@@ -31,7 +32,7 @@
         {gte, non_neg_integer()} |
         {between, {gte, non_neg_integer()}, {lt, non_neg_integer()}} |
         {either, {gte, non_neg_integer()}, {lt, non_neg_integer()}}.
--type range_map() :: #{term() => hash_range()}.
+-type range_map() :: #{pos_integer() => hash_range()}.
 
 %% ===================================================================
 %% Public API
@@ -47,21 +48,37 @@
 %%      have entries, everything else uses default.
 %%
 %%      `DefaultN' - The default `n_val'.
-gen_filter(Target, Ring, NValMap, DefaultN, InfoFun) ->
-    RangeMap = riak_core_repair:gen_range_map(Target, Ring, NValMap),
+gen_filter(Target, Ring, _NValMap, DefaultN, InfoFun) ->
+    AllN = riak_core_bucket_type:all_n(),
+    RangeMap = riak_core_repair:gen_range_map(Target, Ring, AllN),
     Default = riak_core_repair:gen_range(Target, Ring, DefaultN),
     fun(BKey) ->
-            {Bucket, <<Hash:160/integer>>} = InfoFun(BKey),
-            case maps:get(Bucket, RangeMap, Default) of
-                {lt, HighHash} ->
-                    Hash < HighHash;
-                {gte, LowHash} ->
-                    Hash > LowHash;
-                {between, {gte, LowHash}, {lt, HighHash}} ->
-                    Hash >= LowHash andalso Hash < HighHash;
-                {either, {gte, LowHash}, {lt, HighHash}} ->
-                    Hash >= LowHash orelse Hash < HighHash
-            end
+        {Bucket, <<Hash:16/integer, _Rest/binary>>} = InfoFun(BKey),
+        NVal =
+            case get(Bucket) of
+                N when is_integer(N), N > 1 ->
+                    N;
+                undefined ->
+                    BucketProps = riak_core_bucket:get_bucket(Bucket),
+                    BucketN = lists:keyfind(n_val, 1, BucketProps),
+                    case BucketN of
+                        {n_val, N} when is_integer(N), N > 1 ->
+                            put(Bucket, N),
+                            N;
+                        _ ->
+                            default
+                    end
+            end,
+        case maps:get(NVal, RangeMap, Default) of
+            {lt, HighHash} ->
+                Hash < HighHash;
+            {gte, LowHash} ->
+                Hash > LowHash;
+            {between, {gte, LowHash}, {lt, HighHash}} ->
+                Hash >= LowHash andalso Hash < HighHash;
+            {either, {gte, LowHash}, {lt, HighHash}} ->
+                Hash >= LowHash orelse Hash < HighHash
+        end
     end.
 
 %% @doc Generate the hash `Range' for a given `Target' partition and
@@ -74,7 +91,8 @@ gen_range(Target, Ring, NVal) ->
     [LowPredecessor|RestPredecessors] =
         lists:reverse(
             lists:map(
-                fun({I, _N}) -> I end,
+                fun({I, _N}) -> I bsr 144 end,
+                    % Use 16-bit integers for comparison not 160-bit
                 chash:predecessors(
                     <<Target:160/integer>>,
                     CH,
@@ -85,7 +103,8 @@ gen_range(Target, Ring, NVal) ->
     case Target of
         0 ->
             {gte, LowPredecessor};
-        _ ->
+        Target ->
+            T16 = Target bsr 144,
             {A, B} =
                 lists:splitwith(
                     fun(PB) -> PB > 0 end,
@@ -96,15 +115,15 @@ gen_range(Target, Ring, NVal) ->
                     {
                         between,
                         {gte, LowPredecessor},
-                        {lt, Target}
+                        {lt, T16}
                     };
                 {[], _B} ->
-                    {lt, Target};
+                    {lt, T16};
                 {A, _B} ->
                     {
                         either,
                         {gte, LowPredecessor},
-                        {lt, Target}
+                        {lt, T16}
                     }
             end
     end.
@@ -115,15 +134,8 @@ gen_range(Target, Ring, NVal) ->
 -spec gen_range_map(
     index(),
     riak_core_ring:riak_core_ring(),
-    list({term(), pos_integer()})) -> range_map().
+    list(pos_integer())) -> range_map().
 gen_range_map(Target, Ring, NValList) ->
-    Ns = lists:usort(lists:map(fun({_B, N}) -> N end, NValList)),
-    NToRange = lists:map(fun(N) -> {N, gen_range(Target, Ring, N)} end, Ns),
-    maps:from_list(
-        lists:map(
-            fun({B, N}) ->
-                {_N, Range} = lists:keyfind(N, 1, NToRange), {B, Range}
-            end,
-            NValList
-        )
-    ).
+    NToRange = 
+        lists:map(fun(N) -> {N, gen_range(Target, Ring, N)} end, NValList),
+    maps:from_list(NToRange).
