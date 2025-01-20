@@ -233,6 +233,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                         ),
                     case NegativeFilters of
                         ok ->
+                            put(last_hash, no_cache),
                             Filter;
                         NegativeFilters when is_list(NegativeFilters) ->
                             ?LOG_INFO(

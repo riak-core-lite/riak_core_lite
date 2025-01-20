@@ -53,7 +53,18 @@ gen_filter(Target, Ring, _NValMap, DefaultN, InfoFun) ->
     RangeMap = riak_core_repair:gen_range_map(Target, Ring, AllN),
     Default = riak_core_repair:gen_range(Target, Ring, DefaultN),
     fun(BKey) ->
-        {Bucket, <<Hash:16/integer, _Rest/binary>>} = InfoFun(BKey),
+        {Bucket, Hash} =
+            case get(last_hash) of
+                no_cache ->
+                    {B, <<H:16/integer, _Rest/binary>>} = InfoFun(BKey),
+                    {BKey, B, H};
+                {BKey, B, H} ->
+                    {B, H};
+                _ ->
+                    {B, <<H:16/integer, _Rest/binary>>} = InfoFun(BKey),
+                    put(last_hash, {BKey, B, H}),
+                    {B, H}
+            end,
         NVal =
             case get(Bucket) of
                 N when is_integer(N), N > 1 ->
