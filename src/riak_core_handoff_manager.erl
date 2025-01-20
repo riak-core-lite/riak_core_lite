@@ -300,10 +300,26 @@ handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
                     X when X == max_concurrency orelse
                            (element(1, X) == shutdown andalso
                             element(2, X) == max_concurrency) ->
-                        ?LOG_INFO("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
+                        ShouldILog =
+                        application:get_env(
+                            riak_core, handoff_log_max_concurrency, false),
+                        case ShouldILog of
+                            true ->
+                                ?LOG_INFO(
+                                    "An ~w handoff of partition ~w ~w "
+                                    "was terminated for reason: ~w",
+                                    [Dir, M, I, Reason]
+                                );
+                            false ->
+                                ok
+                        end,
                         true;
                     _ ->
-                        ?LOG_ERROR("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
+                        ?LOG_ERROR(
+                            "An ~w handoff of partition ~w ~w "
+                            "was terminated for reason: ~w",
+                            [Dir, M, I, Reason]
+                        ),
                         true
                 end,
 
