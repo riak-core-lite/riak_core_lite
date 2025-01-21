@@ -141,7 +141,6 @@ gen_filter(Target, RingBits, DefaultN, AllN, InfoFun, NValFinder) ->
                 _ ->
                     Default
             end,
-        io:format("Checking for ~w in ~w", [Hash, MembershipChecker]),
         lists:member(Hash, MembershipChecker)
     end.
 
