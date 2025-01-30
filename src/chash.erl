@@ -52,7 +52,9 @@
 
 -export_type([chash/0, index/0, index_as_int/0]).
     
--define(RINGTOP, trunc(math:pow(2,160)-1)).  % SHA-1 space
+-define(RINGTOP, (1 bsl 160)).
+    % SHA-1 space 0 to (2 ^ 160) - 1
+    % ?RINGTOP is size of this space i.e. 2 ^ 160
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
