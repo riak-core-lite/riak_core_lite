@@ -15,7 +15,7 @@ that’s well worth your time.
 This repository retains the history of the original [Basho repository](https://github.com/basho/riak_core/),
 but is no longer forked from it as the OpenRiak version evolves.
 
-The prior OpenRiak [fork](https://github.com/OpenRiak/riak_core-basho) is retained for historical purposes.
+The prior OpenRiak [fork](https://github.com/OpenRiak/riak_core-forked) is retained for historical purposes.
 
 ## Contributing
 
@@ -42,4 +42,3 @@ something Core related.
 * Riak Core development initiatives are located in this repo's [discussions](https://github.com/OpenRiak/riak_core/discussions) section.
 * Known issues are discussed in this repo's [issues](https://github.com/OpenRiak/riak_core/issues) section.
 * If you've found a bug in Riak Core, please [file](https://github.com/OpenRiak/riak_core/issues) a clear, concise, explanatory issue against this repo.
-* 
