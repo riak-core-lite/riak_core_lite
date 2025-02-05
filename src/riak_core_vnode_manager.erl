@@ -637,7 +637,7 @@ get_vnode(IdxList, Mod, State) ->
                     [Pid, Idx]
                 ),
                 ok = riak_core_vnode:wait_for_init(Pid),
-                ?LOG_INFO("VNode initialization ready ~0p, ~0p ~w", [Pid, Idx, Mod]),
+                ?LOG_INFO("VNode initialization ready ~0p ~0p ~w", [Pid, Idx, Mod]),
                 {Idx, Pid}
         end,
     MaxStart =
