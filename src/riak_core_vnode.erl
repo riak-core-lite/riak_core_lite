@@ -653,17 +653,25 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
                         %% the ring structure in order to make gossip independent
                         %% of ring size.
                         ?LOG_INFO(
-                            "Updating local ring as handoff for ~w to "
+                            "Updating local ring as handoff of ~w to "
                             "awaiting node ~w complete",
                             [Idx, New]
                         ),
                         {set_only, Ring2};
+                    {Prev, undefined, valid, undefined} ->
+                        ?LOG_INFO(
+                            "No ring transition for handoff of ~w "
+                            "as next owner is undefined",
+                            [Idx]
+                        ),
+                        ignore;
                     _ ->
                         ?LOG_INFO(
-                            "No ring transition for handoff from owner ~w "
+                            "No ring transition for handoff of ~w "
+                            "from owner ~w "
                             "where next owner is ~w and has status ~w "
                             "new owner is ~w and has status ~w",
-                            [Owner, NextOwner, Status, New, NewStatus]
+                            [Idx, Owner, NextOwner, Status, New, NewStatus]
                         ),
                         ignore
                 end
@@ -685,26 +693,32 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
     case {Owner, NextOwner, NewStatus, Status} of
         {_, _, invalid, _} ->
             ?LOG_WARNING(
-                "Handoff of ~w complete to invalid node",
+                "Handoff of ~w complete to invalid node - continue",
                 [Idx]
             ),
             continue;
         {Prev, New, _, _} ->
             ?LOG_INFO(
-                "Handoff of ~w complete to new owner and "
-                "future requests will be forwarded",
+                "Handoff of ~w complete to new owner - forward",
                 [Idx]
             ),
             forward;
         {Prev, _, _, _} ->
             ?LOG_INFO(
-                "Handoff of ~w complete to node which is not next owner",
+                "Handoff of ~w complete to node which is not next owner "
+                "- continue",
                 [Idx]
             ),
             continue;
-        {_, _, _, _} ->
-            ?LOG_INFO(
-                "Handoff of ~w resulted in direct shutdown - ~w ~w ~w ~w",
+        {_, undefined, valid, undefined} ->
+            ?LOG_DEBUG(
+                "Non-ownerhsip handoff of ~w resulted in shutdown",
+                [Idx]
+            ),
+            shutdown;
+        _ ->
+            ?LOG_WARNING(
+                "Handoff of ~w resulted in shutdown - ~w ~w ~w ~w",
                 [Idx, Owner, NextOwner, NewStatus, Status]
             ),
             shutdown
