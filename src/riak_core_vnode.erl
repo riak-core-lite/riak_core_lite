@@ -634,26 +634,42 @@ mark_handoff_complete(SrcIdx, Target, SeenIdxs, Mod, resize) ->
     end;
 mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
     Prev = node(),
-    Result = riak_core_ring_manager:ring_trans(
-      fun(Ring, _) ->
-              Owner = riak_core_ring:index_owner(Ring, Idx),
-              {_, NextOwner, Status} = riak_core_ring:next_owner(Ring, Idx, Mod),
-              NewStatus = riak_core_ring:member_status(Ring, New),
+    Result =
+        riak_core_ring_manager:ring_trans(
+            fun(Ring, _) ->
+                Owner = riak_core_ring:index_owner(Ring, Idx),
+                {_, NextOwner, Status} =
+                    riak_core_ring:next_owner(Ring, Idx, Mod),
+                NewStatus = riak_core_ring:member_status(Ring, New),
 
-              case {Owner, NextOwner, NewStatus, Status} of
-                  {Prev, New, _, awaiting} ->
-                      Ring2 = riak_core_ring:handoff_complete(Ring, Idx, Mod),
-                      %% Optimization. Only alter the local ring without
-                      %% triggering a gossip, thus implicitly coalescing
-                      %% multiple vnode handoff completion events. In the
-                      %% future we should decouple vnode handoff state from
-                      %% the ring structure in order to make gossip independent
-                      %% of ring size.
-                      {set_only, Ring2};
-                  _ ->
-                      ignore
-              end
-      end, []),
+                case {Owner, NextOwner, NewStatus, Status} of
+                    {Prev, New, _, awaiting} ->
+                        Ring2 =
+                            riak_core_ring:handoff_complete(Ring, Idx, Mod),
+                        %% Optimization. Only alter the local ring without
+                        %% triggering a gossip, thus implicitly coalescing
+                        %% multiple vnode handoff completion events. In the
+                        %% future we should decouple vnode handoff state from
+                        %% the ring structure in order to make gossip independent
+                        %% of ring size.
+                        ?LOG_INFO(
+                            "Updating local ring as handoff for ~w to "
+                            "awaiting node ~w complete",
+                            [Idx, New]
+                        ),
+                        {set_only, Ring2};
+                    _ ->
+                        ?LOG_INFO(
+                            "No ring transition for handoff from owner ~w "
+                            "where next owner is ~w and has status ~w "
+                            "new owner is ~w and has status ~w",
+                            [Owner, NextOwner, Status, New, NewStatus]
+                        ),
+                        ignore
+                end
+            end,
+            []
+    ),
 
     case Result of
         {ok, NewRing} ->
@@ -704,12 +720,17 @@ finish_handoff(SeenIdxs, State=#state{mod=Mod,
             %% Shutdown the async pool beforehand, don't want callbacks
             %% running on non-existant data.
             maybe_shutdown_pool(State),
-            {ok, NewModState} = Mod:delete(ModState),
-            ?LOG_DEBUG("~p ~p vnode finished handoff and deleted.",
-                        [Idx, Mod]),
+            {DeleteTime, {ok, NewModState}} =
+                timer:tc(Mod, delete, [ModState], millisecond),
+            ?LOG_INFO(
+                "~p ~p vnode finished handoff and deleted in ~w milliseconds",
+                [Idx, Mod, DeleteTime]
+            ),
             riak_core_vnode_manager:unregister_vnode(Idx, Mod),
-            ?LOG_DEBUG("vnode hn/fwd :: ~p/~p :: ~p -> ~p~n",
-                        [State#state.mod, State#state.index, State#state.forward, HN]),
+            ?LOG_INFO(
+                "vnode hn/fwd :: ~p/~p :: ~p -> ~p",
+                [State#state.mod, State#state.index, State#state.forward, HN]
+            ),
             State2 = mod_set_forwarding(HN, State),
             continue(State2#state{modstate={deleted,NewModState}, % like to fail if used
                                   handoff_target=none,
@@ -867,7 +888,6 @@ handle_sync_event(core_status, _From, StateName, State=#state{index=Index,
 handle_info({'$vnode_proxy_ping', From, Ref, Msgs}, StateName, State) ->
     riak_core_vnode_proxy:cast(From, {vnode_proxy_pong, Ref, Msgs}),
     {next_state, StateName, State, State#state.inactivity_timeout};
-
 handle_info({'EXIT', Pid, Reason},
             _StateName,
             State=#state{mod=Mod,
@@ -878,31 +898,42 @@ handle_info({'EXIT', Pid, Reason},
         Reason when Reason == normal; Reason == shutdown ->
             continue(State#state{pool_pid=undefined});
         _ ->
-            ?LOG_ERROR("~p ~p worker pool crashed ~p\n", [Index, Mod, Reason]),
+            ?LOG_ERROR("~p ~p worker pool crashed ~p", [Index, Mod, Reason]),
             {pool, WorkerModule, PoolSize, WorkerArgs}=PoolConfig,
-            ?LOG_DEBUG("starting worker pool ~p with size "
-                        "of ~p for vnode ~p.",
-                        [WorkerModule, PoolSize, Index]),
+            ?LOG_DEBUG(
+                "starting worker pool ~p with size "
+                "of ~p for vnode ~p.",
+                [WorkerModule, PoolSize, Index]
+            ),
             {ok, NewPoolPid} =
-                riak_core_vnode_worker_pool:start_link(WorkerModule,
-                                                       PoolSize,
-                                                       Index,
-                                                       WorkerArgs,
-                                                       worker_props),
+                riak_core_vnode_worker_pool:start_link(
+                    WorkerModule,
+                    PoolSize,
+                    Index,
+                    WorkerArgs,
+                    worker_props
+                ),
             continue(State#state{pool_pid=NewPoolPid})
         end;
-
-handle_info({'DOWN',_Ref,process,_Pid,normal}, _StateName,
-            State=#state{modstate={deleted, _}}) ->
-    %% these messages are produced by riak_kv_vnode's aae tree
-    %% monitors; they are harmless, so don't yell about them. also
-    %% only dustbin them in the deleted modstate, because pipe vnodes
-    %% need them in other states
-    continue(State);
 handle_info(Info, _StateName,
-            State=#state{mod=Mod,modstate={deleted, _},index=Index}) ->
-    ?LOG_INFO("~p ~p ignored handle_info ~p - vnode unregistering\n",
-               [Index, Mod, Info]),
+        State=#state{mod=Mod,modstate={deleted, _},index=Index}) ->
+    case Info of
+        {'DOWN', _Ref, process, _Pid, normal} ->
+            %% these messages are produced by riak_kv_vnode's aae tree
+            %% monitors; they are harmless, so don't yell about them. also
+            %% only dustbin them in the deleted modstate, because pipe vnodes
+            %% need them in other states
+            ok;
+        {'EXIT', _Pid, normal} ->
+            %% For the leveled bookie these messages are produced by the store
+            %% exiting.
+            ok;
+        Info ->
+            ?LOG_INFO(
+                "~p ~p ignored handle_info ~p - vnode unregistering\n",
+            [Index, Mod, Info]
+            )
+    end,
     continue(State);
 handle_info({'EXIT', Pid, Reason}, StateName, State=#state{mod=Mod,modstate=ModState}) ->
     %% A linked processes has died so use the
