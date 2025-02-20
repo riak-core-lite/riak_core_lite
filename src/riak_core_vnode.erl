@@ -684,14 +684,29 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
 
     case {Owner, NextOwner, NewStatus, Status} of
         {_, _, invalid, _} ->
-            %% Handing off to invalid node, don't give-up data.
+            ?LOG_WARNING(
+                "Handoff of ~w complete to invalid node",
+                [Idx]
+            ),
             continue;
         {Prev, New, _, _} ->
+            ?LOG_INFO(
+                "Handoff of ~w complete to new owner and "
+                "future requests will be forwarded",
+                [Idx]
+            ),
             forward;
         {Prev, _, _, _} ->
-            %% Handoff wasn't to node that is scheduled in next, so no change.
+            ?LOG_INFO(
+                "Handoff of ~w complete to node which is not next owner",
+                [Idx]
+            ),
             continue;
         {_, _, _, _} ->
+            ?LOG_INFO(
+                "Handoff of ~w resulted in direct shutdown - ~w ~w ~w ~w",
+                [Idx, Owner, NextOwner, NewStatus, Status]
+            ),
             shutdown
     end.
 
@@ -721,10 +736,10 @@ finish_handoff(SeenIdxs, State=#state{mod=Mod,
             %% running on non-existant data.
             maybe_shutdown_pool(State),
             {DeleteTime, {ok, NewModState}} =
-                timer:tc(Mod, delete, [ModState], millisecond),
+                timer:tc(Mod, delete, [ModState]),
             ?LOG_INFO(
                 "~p ~p vnode finished handoff and deleted in ~w milliseconds",
-                [Idx, Mod, DeleteTime]
+                [Idx, Mod, DeleteTime div 1000]
             ),
             riak_core_vnode_manager:unregister_vnode(Idx, Mod),
             ?LOG_INFO(
