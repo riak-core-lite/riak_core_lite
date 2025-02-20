@@ -653,25 +653,46 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
                         %% the ring structure in order to make gossip independent
                         %% of ring size.
                         ?LOG_INFO(
-                            "Updating local ring as handoff of ~w to "
+                            "Updating local ring as handoff of ~w ~w to "
                             "awaiting node ~w complete",
-                            [Idx, New]
+                            [Mod, Idx, New]
                         ),
                         {set_only, Ring2};
+                    {Prev, New, _, complete} ->
+                        ?LOG_DEBUG(
+                            "No ring transition for handoff of ~w ~w "
+                            "as handoffs already complete",
+                            [Mod, Idx]
+                        ),
+                        %% Assumption here is that this handoff has been
+                        %% triggered for a second time, so no update required
+                        %% to ring.
+                        %% This will happen continuously during handoffs in
+                        %% riak, due to riak_pipe_vnode hitting its inactivity
+                        %% timeout.  When it goes inactive this will trigger
+                        %% handoff - and the handoff will go straight to
+                        %% finish_handoff from start_handoff as the vnode
+                        %% is_empty - and so the handoff_manager is bypassed
+                        %% and there is no protection from duplicate passes
+                        %% through this loop.
+                        ignore;
                     {Owner, undefined, valid, undefined} when Owner =/= Prev ->
                         ?LOG_INFO(
-                            "No ring transition for handoff of ~w "
+                            "No ring transition for handoff of ~w ~w "
                             "as this node was not owner",
-                            [Idx]
+                            [Mod, Idx]
                         ),
                         ignore;
                     _ ->
                         ?LOG_INFO(
-                            "No ring transition for handoff of ~w "
+                            "No ring transition for handoff of ~w ~w "
                             "from owner ~w "
                             "where next owner is ~w and has status ~w "
                             "new owner is ~w and has status ~w",
-                            [Idx, Owner, NextOwner, Status, New, NewStatus]
+                            [
+                                Mod, Idx,
+                                Owner, NextOwner, Status, New, NewStatus
+                            ]
                         ),
                         ignore
                 end
