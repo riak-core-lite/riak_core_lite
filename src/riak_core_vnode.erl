@@ -658,10 +658,10 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
                             [Idx, New]
                         ),
                         {set_only, Ring2};
-                    {Prev, undefined, valid, undefined} ->
+                    {Owner, undefined, valid, undefined} when Owner =/= Prev ->
                         ?LOG_INFO(
                             "No ring transition for handoff of ~w "
-                            "as next owner is undefined",
+                            "as this node was not owner",
                             [Idx]
                         ),
                         ignore;
@@ -756,7 +756,7 @@ finish_handoff(SeenIdxs, State=#state{mod=Mod,
                 [Idx, Mod, DeleteTime div 1000]
             ),
             riak_core_vnode_manager:unregister_vnode(Idx, Mod),
-            ?LOG_INFO(
+            ?LOG_DEBUG(
                 "vnode hn/fwd :: ~p/~p :: ~p -> ~p",
                 [State#state.mod, State#state.index, State#state.forward, HN]
             ),
