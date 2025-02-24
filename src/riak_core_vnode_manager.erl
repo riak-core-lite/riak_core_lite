@@ -654,7 +654,7 @@ get_vnode(IdxList, Mod, State) ->
                 IdxRec = #idxrec{key={Idx,Mod},idx=Idx,mod=Mod,pid=Pid,
                                 monref=MonRef},
                 MonRec = #monrec{monref=MonRef, key={Idx,Mod}},
-                ?LOG_INFO("Adding vnode rec ~w ~w", [Idx, Mod]),
+                ?LOG_DEBUG("Adding vnode rec ~w ~w", [Idx, Mod]),
                 add_vnode_rec([IdxRec, MonRec], State)
             end
             || Idx <- NotStarted

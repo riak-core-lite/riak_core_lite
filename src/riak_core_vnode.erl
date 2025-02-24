@@ -632,7 +632,7 @@ mark_handoff_complete(SrcIdx, Target, SeenIdxs, Mod, resize) ->
         {ok, _NewRing} -> resize;
         _ -> continue
     end;
-mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
+mark_handoff_complete(Idx, {Idx, New}, [], Mod, HOType) ->
     Prev = node(),
     Result =
         riak_core_ring_manager:ring_trans(
@@ -640,10 +640,13 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
                 Owner = riak_core_ring:index_owner(Ring, Idx),
                 {_, NextOwner, Status} =
                     riak_core_ring:next_owner(Ring, Idx, Mod),
+                    % The status is the status with respect to this Mod only
+                    % i.e. it is complete if this Mod has already handed off -
+                    % other Mods may still need to handoff
                 NewStatus = riak_core_ring:member_status(Ring, New),
 
-                case {Owner, NextOwner, NewStatus, Status} of
-                    {Prev, New, _, awaiting} ->
+                case {Owner, NextOwner, NewStatus, Status, HOType} of
+                    {Prev, New, _, awaiting, _} ->
                         Ring2 =
                             riak_core_ring:handoff_complete(Ring, Idx, Mod),
                         %% Optimization. Only alter the local ring without
@@ -658,7 +661,7 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
                             [Mod, Idx, New]
                         ),
                         {set_only, Ring2};
-                    {Prev, New, _, complete} ->
+                    {Prev, New, _, complete, _} ->
                         ?LOG_DEBUG(
                             "No ring transition for handoff of ~w ~w "
                             "as handoffs already complete",
@@ -672,25 +675,35 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
                         %% timeout.  When it goes inactive this will trigger
                         %% handoff - and the handoff will go straight to
                         %% finish_handoff from start_handoff as the vnode
-                        %% is_empty - and so the handoff_manager is bypassed
-                        %% and there is no protection from duplicate passes
-                        %% through this loop.
+                        %% is_empty.
+                        %% The riak_core_handoff_manager has the concept of
+                        %% exclusions, which is intended to stop a vnode from
+                        %% restarting once its handoff is complete.  However,
+                        %% exclusions are per module when they are checked
+                        %% they are compared with "disowning indices" which is
+                        %% not module specific.  So unitl all modules have
+                        %% completed handoff for an index, and the claimant
+                        %% has updated the ring to indicate the ownerhsip has
+                        %% changed - the vnodes will continue to restart.
                         ignore;
-                    {Owner, undefined, valid, undefined} when Owner =/= Prev ->
-                        ?LOG_INFO(
+                    {Owner, undefined, valid, undefined, HOType}
+                            when Owner =/= Prev, HOType =/= ownership ->
+                        ?LOG_DEBUG(
                             "No ring transition for handoff of ~w ~w "
                             "as this node was not owner",
                             [Mod, Idx]
                         ),
+                        %% This is not an ownership handoff, so a ring
+                        %% transition would not be expected
                         ignore;
                     _ ->
                         ?LOG_INFO(
                             "No ring transition for handoff of ~w ~w "
-                            "from owner ~w "
+                            "of type ~w from owner ~w "
                             "where next owner is ~w and has status ~w "
                             "new owner is ~w and has status ~w",
                             [
-                                Mod, Idx,
+                                Mod, Idx, HOType,
                                 Owner, NextOwner, Status, New, NewStatus
                             ]
                         ),
@@ -714,33 +727,33 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, _) ->
     case {Owner, NextOwner, NewStatus, Status} of
         {_, _, invalid, _} ->
             ?LOG_WARNING(
-                "Handoff of ~w complete to invalid node - continue",
-                [Idx]
+                "~w handoff of ~w ~w complete to invalid node - continue",
+                [HOType, Mod, Idx]
             ),
             continue;
         {Prev, New, _, _} ->
             ?LOG_INFO(
-                "Handoff of ~w complete to new owner - forward",
-                [Idx]
+                "Handoff of ~w ~w complete to new owner - forward",
+                [Mod, Idx]
             ),
             forward;
         {Prev, _, _, _} ->
             ?LOG_INFO(
-                "Handoff of ~w complete to node which is not next owner "
+                "Handoff of ~w ~w complete to node which is not next owner "
                 "- continue",
-                [Idx]
+                [Mod, Idx]
             ),
             continue;
         {_, undefined, valid, undefined} ->
             ?LOG_DEBUG(
-                "Non-ownerhsip handoff of ~w resulted in shutdown",
-                [Idx]
+                "Non-ownerhsip handoff of ~w ~w resulted in shutdown",
+                [Mod, Idx]
             ),
             shutdown;
         _ ->
             ?LOG_WARNING(
-                "Handoff of ~w resulted in shutdown - ~w ~w ~w ~w",
-                [Idx, Owner, NextOwner, NewStatus, Status]
+                "~w handoff of ~w ~w resulted in shutdown - ~w ~w ~w ~w",
+                [HOType, Mod, Idx, Owner, NextOwner, NewStatus, Status]
             ),
             shutdown
     end.
