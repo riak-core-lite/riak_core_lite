@@ -37,6 +37,23 @@
   Size >= 8
  end}.
 
+%% @doc Whether the erlang kernel `global` application should prevent
+%% overlapping partitions.
+%% Without disabling, this will default to `on` in OTP 25.  As Riak is
+%% partition tolerant by design this should be set to `off`.
+%% There may be circumstances where partition tolerance is considered to be
+%% undesirable, e.g. when trying to strengthen the consistency when using the
+%% Token-based conditional PUTs, but reverting to `on` is still not tested even
+%% in these cases.
+%% Setting this prevention to `on` may cause errors in some standard cluster
+%% change operations due to delays in different nodes recognising nodes joining
+%% a cluster
+{mapping, "prevent_overlapping_partitions", "kernel.prevent_overlapping_partitions", [
+    {datatype, flag},
+    {default, off},
+    hidden
+]}.
+
 %% @doc Number of concurrent node-to-node transfers allowed.
 %% It is generally safe to raise this number to increase concurrency.  A
 %% common value to use would be 8.  However, it is necessary to monitor for
