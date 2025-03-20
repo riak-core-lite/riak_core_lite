@@ -414,12 +414,13 @@ get_size(S) ->
     non_neg_integer(),
     non_neg_integer(),
     db_size_result() | undefined) -> float() | undefined.
-calc_pct_done(_, _, undefined) ->
-    undefined;
-calc_pct_done(Objs, _, {Size, objects}) ->
+calc_pct_done(Objs, _, {Size, objects}) when is_integer(Size), Size > 0 ->
     Objs / Size;
-calc_pct_done(_, Bytes, {Size, bytes}) ->
-    Bytes / Size.
+calc_pct_done(_, Bytes, {Size, bytes})  when is_integer(Size), Size > 0 ->
+    Bytes / Size;
+calc_pct_done(_, _, _) ->
+    % Will normally expect in this case that db_size_result is undefined
+    undefined.
 
 filter(none) ->
     fun(_) -> true end;
