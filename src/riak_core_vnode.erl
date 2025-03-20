@@ -681,7 +681,7 @@ mark_handoff_complete(Idx, {Idx, New}, [], Mod, HOType) ->
                         %% restarting once its handoff is complete.  However,
                         %% exclusions are per module when they are checked
                         %% they are compared with "disowning indices" which is
-                        %% not module specific.  So unitl all modules have
+                        %% not module specific.  So until all modules have
                         %% completed handoff for an index, and the claimant
                         %% has updated the ring to indicate the ownerhsip has
                         %% changed - the vnodes will continue to restart.
