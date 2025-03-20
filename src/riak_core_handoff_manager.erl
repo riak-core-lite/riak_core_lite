@@ -404,17 +404,23 @@ calc_stats(#handoff_status{stats=Stats,timestamp=StartTS,size=Size}) ->
              {pct_done_decimal, Done}]
     end.
 
+-spec get_size(db_size()|undefined) -> db_size_result()|undefined.
 get_size({F, dynamic}) ->
     F();
 get_size(S) ->
     S.
 
-calc_pct_done(_, _, undefined) ->
-    undefined;
-calc_pct_done(Objs, _, {Size, objects}) ->
+-spec calc_pct_done(
+    non_neg_integer(),
+    non_neg_integer(),
+    db_size_result() | undefined) -> float() | undefined.
+calc_pct_done(Objs, _, {Size, objects}) when is_integer(Size), Size > 0 ->
     Objs / Size;
-calc_pct_done(_, Bytes, {Size, bytes}) ->
-    Bytes / Size.
+calc_pct_done(_, Bytes, {Size, bytes})  when is_integer(Size), Size > 0 ->
+    Bytes / Size;
+calc_pct_done(_, _, _) ->
+    % Will normally expect in this case that db_size_result is undefined
+    undefined.
 
 filter(none) ->
     fun(_) -> true end;
@@ -588,12 +594,17 @@ update_stats(StatsUpdate, Stats) ->
     Stats3 = dict:update_counter(bytes, Bytes, Stats2),
     dict:store(last_update, LU, Stats3).
 
-validate_size(Size={N, U}) when is_number(N) andalso
-                           N > 0 andalso
-                           (U =:= bytes orelse U =:= objects) ->
+
+-spec validate_size(
+    db_size()|{db_dynamic_size_fun(), async}) -> db_size()|undefined.
+validate_size(Size={N, U})
+    when 
+        is_number(N), N > 0, (U =:= bytes orelse U =:= objects) ->
     Size;
-validate_size(Size={F, dynamic}) when is_function(F) ->
+validate_size(Size={F, dynamic}) when is_function(F, 0) ->
     Size;
+validate_size({F, async}) when is_function(F, 0) ->
+    validate_size(F());
 validate_size(_) ->
     undefined.
 
