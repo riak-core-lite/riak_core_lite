@@ -247,7 +247,7 @@ handle_info(log_timer, StateName, State) ->
                     [
                         State#state.pool_name,
                         QL,
-                        LastCheckout  div 1000
+                        LastCheckout div 1000
                     ],
                     #{log_type => metric}
                 ),
