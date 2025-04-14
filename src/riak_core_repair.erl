@@ -222,8 +222,7 @@ basic_test() ->
     ?assert(Filter54Fun({<<"BucketN5">>, Hash49To50})),
     ?assert(Filter54Fun({<<"BucketN5">>, Hash49To50})),
     ?assertNot(Filter53Fun({<<"BucketDefault">>, Hash49To50})),
-    erase()
-    .
+    erase().
 
 wrapping_test() ->
     erase(),

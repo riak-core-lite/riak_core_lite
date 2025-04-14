@@ -306,7 +306,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
             total_bytes=TotalBytes,
             filtered_objects = SkippedObjs,
             item_queue_length = LastBatchLength,
-            item_queue_byte_size = LastBatchSize,
+            item_queue_byte_size = LastBatchByteSize,
             notsent_acc=NotSentAcc,
             rcv_timeout=RecvTimeout} = AccRecord,
 
@@ -341,7 +341,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
 
                 FoldTimeDiff = end_fold_time(StartFoldTime),
                 ThroughputBytes =
-                    (TotalBytes + LastBatchSize)/FoldTimeDiff,
+                    (TotalBytes + LastBatchByteSize)/FoldTimeDiff,
 
                 ok = 
                     ?LOG_INFO(
@@ -357,7 +357,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                             TargetPartition,
                             riak_core_format:human_size_fmt(
                                 "~.2f",
-                                TotalBytes + LastBatchSize
+                                TotalBytes + LastBatchByteSize
                             ),
                             TotalObjs + LastBatchLength - SkippedObjs,
                             TotalObjs + LastBatchLength,
