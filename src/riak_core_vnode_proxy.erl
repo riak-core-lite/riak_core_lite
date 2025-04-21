@@ -1,5 +1,7 @@
 %% -------------------------------------------------------------------
-%% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
+%%
+%% Copyright (c) 2011-2016 Basho Technologies, Inc.
+%% Copyright (c) 2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -159,6 +161,13 @@ loop(Parent, State) ->
             loop(Parent, NewState);
         {system, From, Msg} ->
             sys:handle_system_msg(Msg, From, Parent, ?MODULE, [], State);
+        {'$gen_event', #riak_vnode_req_v2{options = Options} = Rec} ->
+            % if it's a v2 request, evaluate timeouts to add req start time
+            {_, UpdatedOptions} = riak_core_util:evaluate_timeouts(Options),
+            {noreply, NewState} =
+                handle_proxy({'$gen_event',
+                    Rec#riak_vnode_req_v2{options=UpdatedOptions}}, State),
+            loop(Parent, NewState);
         Msg ->
             {noreply, NewState} = handle_proxy(Msg, State),
             loop(Parent, NewState)
@@ -294,8 +303,12 @@ handle_proxy(Msg, State=#state{check_counter=Counter,
 handle_overload(Msg, #state{mod=Mod, index=Index}) ->
     riak_core_stat:update(dropped_vnode_requests),
     case Msg of
+        {'$gen_event', ?VNODE_REQv2{sender=Sender, request=Request, options=Options}} ->
+            catch(Mod:handle_overload_command(Request, Sender, Index, Options));
         {'$gen_event', ?VNODE_REQ{sender=Sender, request=Request}} ->
             catch(Mod:handle_overload_command(Request, Sender, Index));
+        {'$gen_all_state_event', ?VNODE_REQv2{sender=Sender, request=Request, options=Options}} ->
+            catch(Mod:handle_overload_command(Request, Sender, Index, Options));
         {'$gen_all_state_event', ?VNODE_REQ{sender=Sender, request=Request}} ->
             catch(Mod:handle_overload_command(Request, Sender, Index));
         {'$gen_event', ?COVERAGE_REQ{sender=Sender, request=Request}} ->

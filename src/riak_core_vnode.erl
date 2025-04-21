@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2007-2015 Basho Technologies, Inc.
-%% Copyright (c) 2018-2022 Workday, Inc.
+%% Copyright (c) 2018-2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -89,7 +89,16 @@
     {ok, ModState::term(), [vnode_opt()]} |
     {error, Reason::term()}.
 
+%% Optional arity-3 handle_command. This is legacy.
 -callback handle_command(Request::term(), Sender::sender(), ModState::term()) ->
+    continue |
+    {reply, Reply::term(), NewModState::term()} |
+    {noreply, NewModState::term()} |
+    {async, Work::function(), From::sender(), NewModState::term()} |
+    {stop, Reason::term(), NewModState::term()}.
+
+%% Arity-4 handle_command. This is the future.
+-callback handle_command(Request::term(), Sender::sender(), Options::list(), ModState::term()) ->
     continue |
     {reply, Reply::term(), NewModState::term()} |
     {noreply, NewModState::term()} |
@@ -116,7 +125,17 @@
 -callback handoff_finished(handoff_dest(), ModState::term()) ->
     {ok, NewModState::term()}.
 
+%% Optional arity-3 handle_handoff_command. This is legacy.
 -callback handle_handoff_command(Request::term(), Sender::sender(), ModState::term()) ->
+    {reply, Reply::term(), NewModState::term()} |
+    {noreply, NewModState::term()} |
+    {async, Work::function(), From::sender(), NewModState::term()} |
+    {forward, NewModState::term()} |
+    {drop, NewModState::term()} |
+    {stop, Reason::term(), NewModState::term()}.
+
+%% Arity-4 handle_handoff_command. This is the future.
+-callback handle_handoff_command(Request::term(), Sender::sender(), Options::list(), ModState::term()) ->
     {reply, Reply::term(), NewModState::term()} |
     {noreply, NewModState::term()} |
     {async, Work::function(), From::sender(), NewModState::term()} |
@@ -138,6 +157,8 @@
     ok.
 
 -callback delete(ModState::term()) -> {ok, NewModState::term()}.
+
+-optional_callbacks([handle_handoff_command/3, handle_command/3]).
 
 %% handle_exit/3 is an optional behaviour callback that can be implemented.
 %% It will be called in the case that a process that is linked to the vnode
@@ -338,7 +359,7 @@ continue(State, NewModState) ->
 %% transfers with this vnode as the source. During this time requests that can be forwarded
 %% to a partition for which the transfer has already completed, are forwarded. All other
 %% requests are passed to handle_handoff_command.
-forward_or_vnode_command(Sender, Request, State=#state{forward=Forward,
+forward_or_vnode_command(Sender, Request, Options, State=#state{forward=Forward,
                                                        mod=Mod,
                                                        index=Index}) ->
     Resizing = is_list(Forward),
@@ -351,28 +372,28 @@ forward_or_vnode_command(Sender, Request, State=#state{forward=Forward,
     Forwardable = is_request_forwardable(Request),
     case {Forwardable, Forward, RequestHash} of
         %% Not a forwardable command, handle request locally
-        {false, _, _} -> vnode_command(Sender, Request, State);
+        {false, _, _} -> vnode_command(Sender, Request, Options, State);
         %% typical vnode operation, no forwarding set, handle request locally
-        {_, undefined, _} -> vnode_command(Sender, Request, State);
+        {_, undefined, _} -> vnode_command(Sender, Request, Options, State);
         %% implicit forwarding after ownership transfer/hinted handoff
         {_, F, _} when not is_list(F) ->
-            vnode_forward(implicit, {Index, Forward}, Sender, Request, State),
+            vnode_forward(implicit, {Index, Forward}, Sender, Request, Options, State),
             continue(State);
         %% during resize we can't forward a request w/o request hash, always handle locally
-        {_, _, undefined} -> vnode_command(Sender, Request, State);
+        {_, _, undefined} -> vnode_command(Sender, Request, Options, State);
         %% possible forwarding during ring resizing
         {_, _, _} ->
             {ok, R} = riak_core_ring_manager:get_my_ring(),
             FutureIndex = riak_core_ring:future_index(RequestHash, Index, R),
-            vnode_resize_command(Sender, Request, FutureIndex, State)
+            vnode_resize_command(Sender, Request, Options, FutureIndex, State)
     end.
 
-vnode_command(_Sender, _Request, State=#state{modstate={deleted,_}}) ->
+vnode_command(_Sender, _Request, _Options, State=#state{modstate={deleted,_}}) ->
     continue(State);
-vnode_command(Sender, Request, State=#state{mod=Mod,
+vnode_command(Sender, Request, Options, State=#state{mod=Mod,
                                             modstate=ModState,
                                             pool_pid=Pool}) ->
-    case catch Mod:handle_command(Request, Sender, ModState) of
+    case catch Mod:handle_command(Request, Sender, Options, ModState) of
         {'EXIT', ExitReason} ->
             reply(Sender, {vnode_error, ExitReason}),
             ?LOG_ERROR("~p command failed ~p", [Mod, ExitReason]),
@@ -447,13 +468,13 @@ vnode_coverage(Sender, Request, KeySpaces, State=#state{index=Index,
             {stop, Reason, State#state{modstate=NewModState}}
     end.
 
-vnode_handoff_command(Sender, Request, ForwardTo,
+vnode_handoff_command(Sender, Request, Options, ForwardTo,
                       State=#state{mod=Mod,
                                    modstate=ModState,
                                    handoff_target=HOTarget,
                                    handoff_type=HOType,
                                    pool_pid=Pool}) ->
-    case Mod:handle_handoff_command(Request, Sender, ModState) of
+    case Mod:handle_handoff_command(Request, Sender, Options, ModState) of
         {reply, Reply, NewModState} ->
             reply(Sender, Reply),
             continue(State, NewModState);
@@ -465,10 +486,10 @@ vnode_handoff_command(Sender, Request, ForwardTo,
             riak_core_vnode_worker_pool:handle_work(Pool, Work, From),
             continue(State, NewModState);
         {forward, NewModState} ->
-            forward_request(HOType, Request, HOTarget, ForwardTo, Sender, State),
+            forward_request(HOType, Request, Options, HOTarget, ForwardTo, Sender, State),
             continue(State, NewModState);
  	{forward, NewReq, NewModState} ->
-            forward_request(HOType, NewReq, HOTarget, ForwardTo, Sender, State),
+            forward_request(HOType, NewReq, Options, HOTarget, ForwardTo, Sender, State),
             continue(State, NewModState);
         {drop, NewModState} ->
             continue(State, NewModState);
@@ -478,31 +499,31 @@ vnode_handoff_command(Sender, Request, ForwardTo,
 
 %% @private wrap the request for resize forwards, and use the resize
 %% target.
-forward_request(resize, Request, _HOTarget, ResizeTarget, Sender, State) ->
+forward_request(resize, Request, Options, _HOTarget, ResizeTarget, Sender, State) ->
     %% resize op and transfer ongoing
-    vnode_forward(resize, ResizeTarget, Sender, {resize_forward, Request}, State);
-forward_request(undefined, Request, _HOTarget, ResizeTarget, Sender, State) ->
+    vnode_forward(resize, ResizeTarget, Sender, {resize_forward, Request}, Options, State);
+forward_request(undefined, Request, Options, _HOTarget, ResizeTarget, Sender, State) ->
     %% resize op ongoing, no resize transfer ongoing, arrive here
     %% via forward_or_vnode_command
-    vnode_forward(resize, ResizeTarget, Sender, {resize_forward, Request}, State);
-forward_request(_, Request, HOTarget, _ResizeTarget, Sender, State) ->
+    vnode_forward(resize, ResizeTarget, Sender, {resize_forward, Request}, Options, State);
+forward_request(_, Request, Options, HOTarget, _ResizeTarget, Sender, State) ->
     %% normal explicit forwarding during owhership transfer
-    vnode_forward(explicit, HOTarget, Sender, Request, State).
+    vnode_forward(explicit, HOTarget, Sender, Request, Options, State).
 
-vnode_forward(Type, ForwardTo, Sender, Request, State) ->
+vnode_forward(Type, ForwardTo, Sender, Request, Options, State) ->
     ?LOG_DEBUG("Forwarding (~p) {~p,~p} -> ~p~n",
                 [Type, State#state.index, node(), ForwardTo]),
-    riak_core_vnode_master:command_unreliable(ForwardTo, Request, Sender,
+    riak_core_vnode_master:command_unreliable(ForwardTo, Request, Sender, Options,
                                               riak_core_vnode_master:reg_name(State#state.mod)).
 
 %% @doc during ring resizing if we have completed a transfer to the index that will
 %% handle request in future ring we forward to it. Otherwise we delegate
 %% to the local vnode like other requests during handoff
-vnode_resize_command(Sender, Request, FutureIndex,
+vnode_resize_command(Sender, Request, Options, FutureIndex,
                      State=#state{forward=Forward}) when is_list(Forward) ->
     case lists:keyfind(FutureIndex, 1, Forward) of
-        false -> vnode_command(Sender, Request, State);
-        {FutureIndex, FutureOwner} -> vnode_handoff_command(Sender, Request,
+        false -> vnode_command(Sender, Request, Options, State);
+        {FutureIndex, FutureOwner} -> vnode_handoff_command(Sender, Request, Options,
                                                             {FutureIndex, FutureOwner},
                                                             State)
     end.
@@ -516,12 +537,16 @@ active(?COVERAGE_REQ{keyspaces=KeySpaces,
                      sender=Sender}, State) ->
     %% Coverage request handled in handoff and non-handoff.  Will be forwarded if set.
     vnode_coverage(Sender, Request, KeySpaces, State);
-active(?VNODE_REQ{sender=Sender, request={resize_forward, Request}}, State) ->
-    vnode_command(Sender, Request, State);
-active(?VNODE_REQ{sender=Sender, request=Request},
+active(?VNODE_REQ{sender=Sender, request=Request}, State) ->
+    active({vnode_request, Sender, Request, []}, State);
+active(?VNODE_REQv2{sender=Sender, request=Request, options=Options}, State) ->
+    active({vnode_request, Sender, Request, Options}, State);
+active({vnode_request, Sender, {resize_forward, Request}, Options}, State) ->
+    vnode_command(Sender, Request, Options, State);
+active({vnode_request, Sender, Request, Options},
        State=#state{handoff_target=HT}) when HT =:= none ->
-    forward_or_vnode_command(Sender, Request, State);
-active(?VNODE_REQ{sender=Sender, request=Request},
+    forward_or_vnode_command(Sender, Request, Options, State);
+active({vnode_request, Sender, Request, Options},
                   State=#state{handoff_type=resize,
                                handoff_target={HOIdx,HONode},
                                index=Index,
@@ -530,23 +555,23 @@ active(?VNODE_REQ{sender=Sender, request=Request},
     RequestHash = Mod:request_hash(Request),
     case RequestHash of
         %% will never have enough information to forward request so only handle locally
-        undefined -> vnode_command(Sender, Request, State);
+        undefined -> vnode_command(Sender, Request, Options, State);
         _ ->
             {ok, R} = riak_core_ring_manager:get_my_ring(),
             FutureIndex = riak_core_ring:future_index(RequestHash, Index, R),
             case FutureIndex of
                 %% request for portion of keyspace currently being transferred
-                HOIdx -> vnode_handoff_command(Sender, Request,
+                HOIdx -> vnode_handoff_command(Sender, Request, Options,
                                                {HOIdx, HONode}, State);
                 %% some portions of keyspace already transferred
                 _Other when is_list(Forward) ->
-                    vnode_resize_command(Sender, Request, FutureIndex, State);
+                    vnode_resize_command(Sender, Request, Options, FutureIndex, State);
                 %% some portions of keyspace not already transferred
-                _Other -> vnode_command(Sender, Request, State)
+                _Other -> vnode_command(Sender, Request, Options, State)
             end
     end;
-active(?VNODE_REQ{sender=Sender, request=Request},State) ->
-    vnode_handoff_command(Sender, Request, State#state.handoff_target, State);
+active({vnode_request, Sender, Request, Options},State) ->
+    vnode_handoff_command(Sender, Request, Options, State#state.handoff_target, State);
 active(handoff_complete, State) ->
     State2 = start_manager_event_timer(handoff_complete, State),
     continue(State2);
@@ -803,6 +828,8 @@ handle_event(trigger_delete, _StateName, State=#state{modstate={deleted,_}}) ->
     continue(State);
 handle_event(trigger_delete, _StateName, State) ->
     active(trigger_delete, State);
+handle_event(R=?VNODE_REQv2{}, _StateName, State) ->
+    active(R, State);
 handle_event(R=?VNODE_REQ{}, _StateName, State) ->
     active(R, State);
 handle_event(R=?COVERAGE_REQ{}, _StateName, State) ->

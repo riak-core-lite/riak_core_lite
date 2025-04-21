@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2007-2016 Basho Technologies, Inc.
-%% Copyright (c) 2024 Workday, Inc.
+%% Copyright (c) 2024-2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -102,6 +102,9 @@ start(_StartType, _StartArgs) ->
                                           [true, false],
                                           false),
             riak_core_capability:register({riak_core, net_ticktime},
+                                          [true, false],
+                                          false),
+            riak_core_capability:register({riak_core, dynamic_timeouts},
                                           [true, false],
                                           false),
 

@@ -1,8 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% mock_vnode: mock vnode for unit testing
-%%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2014 Basho Technologies, Inc.
+%% Copyright (c) 2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -40,7 +39,7 @@
          get_crash_reason/1,
          stop/1]).
 -export([init/1,
-         handle_command/3,
+         handle_command/4,
          terminate/2,
          handle_exit/3]).
 -export([init_worker/3,
@@ -121,48 +120,48 @@ init([Index]) ->
             {ok, S}
     end.
 
-handle_command(get_index, _Sender, State) ->
+handle_command(get_index, _Sender, _Options, State) ->
     {reply, {ok, State#state.index}, State};
-handle_command(get_counter, _Sender, State) ->
+handle_command(get_counter, _Sender, _Options, State) ->
     {reply, {ok, State#state.counter}, State};
-handle_command(get_crash_reason, _Sender, State) ->
+handle_command(get_crash_reason, _Sender, _Options, State) ->
     {reply, {ok, State#state.crash_reason}, State};
-handle_command({sync_error, error}, _Sender, State) ->
+handle_command({sync_error, error}, _Sender, _Options, State) ->
     erlang:error(core_breach),
     {reply, ok, State};
-handle_command({sync_error, exit}, _Sender, State) ->
+handle_command({sync_error, exit}, _Sender, _Options, State) ->
     erlang:exit(core_breach),
     {reply, ok, State};
-handle_command({sync_error, badthrow}, _Sender, State) ->
+handle_command({sync_error, badthrow}, _Sender, _Options, State) ->
     erlang:throw({reply, {error, terrible}, State}); %% emulate gen_server
-handle_command({sync_error, goodthrow}, _Sender, State) ->
+handle_command({sync_error, goodthrow}, _Sender, _Options, State) ->
     erlang:throw({reply, ok, State}); %% emulate gen_server
 
-handle_command(crash, _Sender, State) ->
+handle_command(crash, _Sender, _Options, State) ->
     spawn_link(fun() -> exit(State#state.index) end),
     {reply, ok, State};
-handle_command(stop, Sender, State = #state{counter=Counter}) ->
+handle_command(stop, Sender, _Options, State = #state{counter=Counter}) ->
     %% Send reply here as vnode_master:sync_command does a call
     %% which is cast on to the vnode process.  Returning {stop,...}
     %% does not provide for returning a response.
     riak_core_vnode:reply(Sender, stopped),
     {stop, normal, State#state{counter = Counter + 1}};
-handle_command(neverreply, _Sender, State = #state{counter=Counter}) ->
+handle_command(neverreply, _Sender, _Options, State = #state{counter=Counter}) ->
     {noreply, State#state{counter = Counter + 1}};
-handle_command(returnreply, _Sender, State = #state{counter=Counter}) ->
+handle_command(returnreply, _Sender, _Options, State = #state{counter=Counter}) ->
     {reply, returnreply, State#state{counter = Counter + 1}};
-handle_command(latereply, Sender, State = #state{counter=Counter}) ->
+handle_command(latereply, Sender, _Options, State = #state{counter=Counter}) ->
     spawn(fun() ->
                   timer:sleep(100),
                   riak_core_vnode:reply(Sender, latereply)
           end),
     {noreply, State#state{counter = Counter + 1}};
-handle_command({asyncnoreply, DonePid}, Sender, State = #state{counter=Counter}) ->
+handle_command({asyncnoreply, DonePid}, Sender, _Options, State = #state{counter=Counter}) ->
     {async, {noreply, DonePid}, Sender, State#state{counter = Counter + 1}};
-handle_command({asyncreply, DonePid}, Sender, State = #state{counter=Counter}) ->
+handle_command({asyncreply, DonePid}, Sender, _Options, State = #state{counter=Counter}) ->
     {async, {reply, DonePid}, Sender, State#state{counter = Counter + 1}};
-handle_command({asynccrash, DonePid}, Sender, State = #state{counter=Counter}) ->
-    {async, {crash, DonePid}, Sender, State#state{counter = Counter + 1}}.
+handle_command({asynccrash, DonePid}, Sender, _Options, State = #state{counter=Counter}) ->
+    {async, {crash, DonePid}, Sender, _Options, State#state{counter = Counter + 1}}.
 
 handle_exit(_Pid, Reason, State) ->
     {noreply, State#state{crash_reason=Reason}}.

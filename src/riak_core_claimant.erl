@@ -318,7 +318,7 @@ get_bucket_type(BucketType, Default) ->
 get_bucket_type(BucketType, Default, RequireActive) ->
     %% we resolve w/ last-write-wins because conflicts only occur
     %% during creation when the claimant is changed and create on a
-    %% new claimant happens before the original propogates. In this
+    %% new claimant happens before the original propagates. In this
     %% case we want the newest create. Updates can also result in
     %% conflicts so we choose the most recent as well.
     case riak_core_metadata:get(?BUCKET_TYPE_PREFIX, BucketType,

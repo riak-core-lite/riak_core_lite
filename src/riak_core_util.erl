@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2007-2016 Basho Technologies, Inc.
+%% Copyright (c) 2020-2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -21,64 +22,71 @@
 %% @doc Various functions that are useful throughout Riak.
 -module(riak_core_util).
 
--export([moment/0,
-         make_tmp_dir/0,
-         replace_file/2,
-         compare_dates/2,
-         reload_all/1,
-         integer_to_list/2,
-         unique_id_62/0,
-         str_to_node/1,
-         chash_key/1, chash_key/2,
-         chash_std_keyfun/1,
-         chash_bucketonly_keyfun/1,
-         mkclientid/1,
-         start_app_deps/1,
-         build_tree/3,
-         orddict_delta/2,
-         safe_rpc/4,
-         safe_rpc/5,
-         rpc_every_member/4,
-         rpc_every_member_ann/4,
-         keydelete/2,
-         multi_keydelete/2,
-         multi_keydelete/3,
-         compose/1,
-         compose/2,
-         pmap/2,
-         pmap/3,
-         multi_rpc/4,
-         multi_rpc/5,
-         multi_rpc_ann/4,
-         multi_rpc_ann/5,
-         multicall_ann/4,
-         multicall_ann/5,
-         shuffle/1,
-         is_arch/1,
-         format_ip_and_port/2,
-         peername/2,
-         sockname/2,
-         sha/1,
-         md5/1,
-         make_fold_req/1,
-         make_fold_req/2,
-         make_fold_req/4,
-         make_newest_fold_req/1,
-         proxy_spawn/1,
-         proxy/2,
-         enable_job_class/1,
-         enable_job_class/2,
-         disable_job_class/1,
-         disable_job_class/2,
-         job_class_enabled/1,
-         job_class_enabled/2,
-         job_class_disabled_message/2,
-         report_job_request_disposition/6
-        ]).
+-export([
+    moment/0,
+    make_tmp_dir/0,
+    replace_file/2,
+    compare_dates/2,
+    reload_all/1,
+    integer_to_list/2,
+    unique_id_62/0,
+    str_to_node/1,
+    chash_key/1, chash_key/2,
+    chash_std_keyfun/1,
+    chash_bucketonly_keyfun/1,
+    mkclientid/1,
+    start_app_deps/1,
+    build_tree/3,
+    orddict_delta/2,
+    safe_rpc/4,
+    safe_rpc/5,
+    rpc_every_member/4,
+    rpc_every_member_ann/4,
+    keydelete/2,
+    multi_keydelete/2,
+    multi_keydelete/3,
+    compose/1,
+    compose/2,
+    pmap/2,
+    pmap/3,
+    multi_rpc/4,
+    multi_rpc/5,
+    multi_rpc_ann/4,
+    multi_rpc_ann/5,
+    multicall_ann/4,
+    multicall_ann/5,
+    shuffle/1,
+    is_arch/1,
+    format_ip_and_port/2,
+    peername/2,
+    sockname/2,
+    sha/1,
+    md5/1,
+    make_fold_req/1,
+    make_fold_req/2,
+    make_fold_req/4,
+    make_newest_fold_req/1,
+    proxy_spawn/1,
+    proxy/2,
+    enable_job_class/1,
+    enable_job_class/2,
+    disable_job_class/1,
+    disable_job_class/2,
+    job_class_enabled/1,
+    job_class_enabled/2,
+    job_class_disabled_message/2,
+    report_job_request_disposition/6,
+    evaluate_timeouts/1,
+    evaluate_timeouts/2,
+    externalize_timeouts/1
+]).
+
+-on_load(init_persistent/0).
 
 -include_lib("kernel/include/logger.hrl").
 
 -include("riak_core_vnode.hrl").
+-include("riak_core_dynamic_timeouts.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -139,7 +147,7 @@ make_tmp_dir() ->
             TempDir
     end.
 
-%% @doc Atomically/safely (to some reasonable level of durablity)
+%% @doc Atomically/safely (to some reasonable level of durability)
 %% replace file `FN' with `Data'. NOTE: since 2.0.3 semantic changed
 %% slightly: If `FN' cannot be opened, will not error with a
 %% `badmatch', as before, but will instead return `{error, Reason}'
@@ -295,7 +303,7 @@ node_hostname() ->
     end.
 
 %% @spec start_app_deps(App :: atom()) -> ok
-%% @doc Start depedent applications of App.
+%% @doc Start dependent applications of App.
 start_app_deps(App) ->
     {ok, DepApps} = application:get_key(App, applications),
     _ = [ensure_started(A) || A <- DepApps],
@@ -837,6 +845,229 @@ report_job_request_disposition(true, Class, _Mod, _Func, _Line, Client) ->
 report_job_request_disposition(false, Class, _Mod, _Func, _Line, Client) ->
     ?LOG_WARNING("Request '~p' disabled from ~p", [Class, Client]).
 
+%% Dynamic timeouts functions
+
+%% @doc Prepare consistent timeout frame for use within a node.
+%% @equiv evaluate_timeouts(Options, ?DEFAULT_TIMEOUT)
+-spec evaluate_timeouts(Options)
+        -> Result when
+    Options :: map() | proplists:proplist(),
+    Result :: {Continue, Options},
+    Continue :: boolean().
+evaluate_timeouts(Options) ->
+    evaluate_timeouts(Options, ?DEFAULT_TIMEOUT_MS).
+
+%% @doc Prepare consistent timeout frame for use within a node.
+%%
+%% The result is a `Continue' boolean indicating whether to continue
+%% servicing the request, and the (possibly modified) `Options' to use for
+%% the current and nested operations.
+%%
+%% Because of semantic conflicts between the documentation of `timeout' and
+%% the historical implementation of `recv_timeout', if they're both present
+%% this function uses the larger as the "outer" timeout and ignores the
+%% smaller value.
+%%
+%% On return the result options are guaranteed to contain the appropriate
+%% timeout frame information for propagation within the current node.
+%%
+%% If the environment variable `{riak_core, use_dynamic_timeouts}' is set to
+%% `false', this function will set the same timeout every time, and only return
+%% `false' for Continue if the timeout is < 1. This allows legacy functionality.
+%% `{riak_core, use_dynamic_timeouts}' is `true' by default
+%% 
+%% If the incoming `Options' contain a `recv_time' and does not contain a 
+%% `finish-by' time yet, then use `recv_time' as the original entry time
+%% for calculating the finish time.  If the option is not present,
+%% then use the current monotonic time as the entry time. `recv_time' can be
+%% used if a message receive time is taken higher in the stack than this
+%% function is called, e.g. in the socket acceptor. This option is removed
+%% from the options returned when using dynamic timeouts.
+%%
+%% Use {@link externalize_timeouts/1} to prepare the result options for
+%% forwarding to a different node.
+%% @end
+-spec evaluate_timeouts(Options, Default)
+        -> Result when
+    Options :: map() | proplists:proplist(),
+    Default :: timeout(),
+    Result :: {Continue, Options},
+    Continue :: boolean().
+evaluate_timeouts(#{?INTERNAL_TIMEOUT_BY := FinishBy} = OptsIn, _Default)
+        when erlang:is_integer(FinishBy) ->
+    %% We can assume OptsIn was produced by the head below, and that dynamic
+    %% timeouts are enabled for the key to be in the map.
+    {(FinishBy > erlang:monotonic_time()), OptsIn};
+evaluate_timeouts(OptsIn, Default) when erlang:is_map(OptsIn),
+        not erlang:is_map_key(?INTERNAL_TIMEOUT_BY, OptsIn) ->
+    EntryTime = maps:get(recv_time, OptsIn, erlang:monotonic_time()),
+    Timeout = millisecond_timeout(
+        maps:get(timeout, OptsIn, undefined),
+        maps:get(recv_timeout, OptsIn, undefined), Default),
+    case persistent_term:get(riak_core_use_dynamic_timeouts) of
+        true ->
+            FinishBy = (EntryTime +
+                erlang:convert_time_unit(Timeout, millisecond, native)),
+            % Calling remove 3 times is faster than calling without as of OTP 24.
+            % In a future version of OTP, maps:without may become faster
+            % so we can use that instead at that time.
+            OptsOut1 = maps:remove(timeout, OptsIn),
+            OptsOut2 = maps:remove(recv_timeout, OptsOut1),
+            OptsOut3 = maps:remove(recv_time, OptsOut2),
+            OptsOut = OptsOut3#{?INTERNAL_TIMEOUT_BY => FinishBy},
+            {(FinishBy > EntryTime), OptsOut};
+        _ ->
+            {(Timeout > 0), OptsIn}
+    end;
+evaluate_timeouts(OptsIn, Default) when erlang:is_list(OptsIn) ->
+    EntryTime = proplists:get_value(recv_time, OptsIn, erlang:monotonic_time()),
+    case proplists:get_value(?INTERNAL_TIMEOUT_BY, OptsIn) of
+        FinishBy when erlang:is_integer(FinishBy) ->
+            %% Assume OptsIn was produced by the default clause below.
+            %% Note that this will never happen if dynamic timeouts are
+            %% disabled.
+            {(FinishBy > EntryTime), OptsIn};
+        undefined ->
+            Timeout = millisecond_timeout(
+                proplists:get_value(timeout, OptsIn),
+                proplists:get_value(recv_timeout, OptsIn), Default),
+            case persistent_term:get(riak_core_use_dynamic_timeouts) of
+                true ->
+                    FinishTS = (EntryTime + erlang:convert_time_unit(
+                        Timeout, millisecond, native)),
+                    OptsOut = [{?INTERNAL_TIMEOUT_BY, FinishTS}
+                        | [Opt || Opt <- OptsIn,
+                            (is_tuple(Opt) andalso
+                                not lists:member(element(1, Opt),
+                                    [recv_timeout, timeout, recv_time]))
+                            orelse not is_tuple(Opt)
+                          ]
+                        ],
+                    {(FinishTS > EntryTime), OptsOut};
+                _ ->
+                    OptsOut = lists:keystore(
+                        timeout, 1, OptsIn, {timeout, Timeout}),
+                    {(Timeout > 0), OptsOut}
+            end;
+        _ ->
+            erlang:error(badarg, [OptsIn, Default])
+    end;
+evaluate_timeouts(OptsIn, Default) ->
+    erlang:error(badarg, [OptsIn, Default]).
+
+%% @doc Prepare Options containing a timeout frame for sending to another node.
+%%
+%% `Options' <i>MUST</i> have been produced by {@link evaluate_timeouts/2}.
+%%
+%% The result is the modified `Options' suitable for sending to
+%% another node.
+-spec externalize_timeouts(Options)
+        -> Result when
+    Options :: map() | proplists:proplist(),
+    Result :: Options.
+externalize_timeouts(#{?INTERNAL_TIMEOUT_BY := FinishBy} = OptsIn)
+        when erlang:is_integer(FinishBy) ->
+    Timeout = milliseconds_remaining(FinishBy),
+    OptsOut = maps:remove(?INTERNAL_TIMEOUT_BY, OptsIn),
+    OptsOut#{timeout => Timeout};
+externalize_timeouts(OptsIn) when erlang:is_map(OptsIn),
+        not erlang:is_map_key(?INTERNAL_TIMEOUT_BY, OptsIn) ->
+    case persistent_term:get(riak_core_use_dynamic_timeouts) of
+        true ->
+            erlang:error(badarg, [OptsIn]);
+        _ ->
+            OptsIn
+    end;
+externalize_timeouts(OptsIn) when erlang:is_list(OptsIn) ->
+    % If dynamic timeouts are disabled then just send back the same timeout
+    % value every time (don't change the options).
+    case persistent_term:get(riak_core_use_dynamic_timeouts) of
+        true ->
+            Timeout = case proplists:get_value(?INTERNAL_TIMEOUT_BY, OptsIn) of
+                FinishBy when erlang:is_integer(FinishBy) ->
+                    milliseconds_remaining(FinishBy);
+                _ ->
+                    erlang:error(badarg, [OptsIn])
+            end,
+            CleanOpts = proplists:delete(?INTERNAL_TIMEOUT_BY, OptsIn),
+            [{timeout, Timeout} | CleanOpts];
+        _ ->
+            OptsIn
+    end;
+externalize_timeouts(OptsIn) ->
+    erlang:error(badarg, [OptsIn]).
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+
+%% @hidden Convert a Finish-By absolute instant in native time to a 'timeout'
+%% interval in milliseconds.
+-spec milliseconds_remaining(NativeRemain :: integer())
+        -> 0..?INFINITY_INTERVAL_MS.
+milliseconds_remaining(FinishBy) ->
+    Remain = (FinishBy - erlang:monotonic_time()),
+    case Remain > 0 of
+        true ->
+            Rounded = (Remain + persistent_term:get(riak_core_native_next_ms)),
+            Millis = erlang:convert_time_unit(Rounded, native, millisecond),
+            case Millis > 1 of
+                true ->
+                    Millis;
+                _ ->
+                    1
+            end;
+        _ ->
+            0
+    end.
+
+%% @hidden Return a legal integral timeout from specified choices.
+%% If Timeout1 or Timeout2 are 'infinity' returns ?INFINITY_INTERVAL_MS.
+%% If either of Timeout1 or Timeout2 are integers, returns the larger of them
+%% upper bounded to ?INFINITY_INTERVAL_MS.
+%% If the larger integer is less than zero, 'badarg' is raised.
+%% If neither Timeout1 or Timeout2 is an integer, Default is evaluated as if
+%% it was one of the TimeoutN parameters.
+-spec millisecond_timeout(
+    Timeout1 :: timeout() | undefined, Timeout2 :: timeout() | undefined,
+    Default :: timeout() ) -> 0..?INFINITY_INTERVAL_MS.
+millisecond_timeout(TO1, TO2, _) when TO1 =:= infinity; TO2 =:= infinity ->
+    ?INFINITY_INTERVAL_MS;
+millisecond_timeout(TO1, TO2, _)
+        when erlang:is_integer(TO1), erlang:is_integer(TO2), TO1 < TO2 ->
+    millisecond_timeout(TO2);
+millisecond_timeout(TO1, TO2, _)
+        when erlang:is_integer(TO1), erlang:is_integer(TO2) ->
+    millisecond_timeout(TO1);
+millisecond_timeout(TO1, _TO2, _) when erlang:is_integer(TO1) ->
+    millisecond_timeout(TO1);
+millisecond_timeout(_TO1, TO2, _) when erlang:is_integer(TO2) ->
+    millisecond_timeout(TO2);
+millisecond_timeout(_TO1, _TO2, Default) ->
+    millisecond_timeout(Default).
+
+%% @hidden Return a legal integral timeout from a specified timeout.
+-spec millisecond_timeout(Timeout :: timeout()) -> 0..?INFINITY_INTERVAL_MS.
+millisecond_timeout(Timeout) when erlang:is_integer(Timeout),
+        Timeout >= 0, Timeout =< ?INFINITY_INTERVAL_MS ->
+    Timeout;
+millisecond_timeout(Timeout)
+        when erlang:is_integer(Timeout), Timeout > ?INFINITY_INTERVAL_MS ->
+    ?INFINITY_INTERVAL_MS;
+millisecond_timeout(infinity) ->
+    ?INFINITY_INTERVAL_MS;
+millisecond_timeout(BadArg) ->
+    erlang:error(badarg, [BadArg]).
+
+%% @hidden Initialize persistent terms.
+%% This function is invoked when the module is loaded.
+-spec init_persistent() -> ok.
+init_persistent() ->
+    persistent_term:put(riak_core_use_dynamic_timeouts,
+        application:get_env(riak_core, use_dynamic_timeouts, true)),
+    persistent_term:put(riak_core_native_next_ms,
+        erlang:convert_time_unit(999, microsecond, native)).
+
 %% ===================================================================
 %% EUnit tests
 %% ===================================================================
@@ -1072,6 +1303,81 @@ proxy_spawn_test() ->
     after 1000 ->
         ok
     end.
+
+evaluate_timeouts_test() ->
+    %% Test with map options and default timeout
+    DefaultTimeout = 5000,
+    Options = #{timeout => 3000},
+    {Continue, ResultOpts} = evaluate_timeouts(Options, DefaultTimeout),
+    ?assertEqual(true, Continue),
+    ?assertMatch(#{?INTERNAL_TIMEOUT_BY := _}, ResultOpts),
+    %% Test that opts don't change if ?INTERNAL_TIMEOUT_BY is already present
+    {Continue, ResultOpts} = evaluate_timeouts(ResultOpts, DefaultTimeout),
+
+    %% Test with proplist options and default timeout
+    Options1 = [{timeout, 3000}, {recv_timeout, 2000}, single_opt],
+    {Continue1, ResultOpts1} = riak_core_util:evaluate_timeouts(Options1, DefaultTimeout),
+    ?assertEqual(true, Continue1),
+    ?assertEqual(undefined, proplists:get_value(timeout, ResultOpts1)),
+    ?assertEqual(undefined, proplists:get_value(recv_timeout, ResultOpts1)),
+    ?assertMatch({?INTERNAL_TIMEOUT_BY, _}, proplists:lookup(?INTERNAL_TIMEOUT_BY,
+                                            ResultOpts1)),
+    %% Make sure that single_opt is still present
+    ?assertEqual(true, lists:member(single_opt, ResultOpts1)),
+    %% Test that opts don't change if ?INTERNAL_TIMEOUT_BY is already present
+    {Continue, ResultOpts1} = evaluate_timeouts(ResultOpts1, DefaultTimeout),
+
+    %% Test with timeout less than 1
+    Options2 = #{timeout => 0},
+    {Continue2, _ResultOpts} = riak_core_util:evaluate_timeouts(Options2, DefaultTimeout),
+    ?assertEqual(false, Continue2),
+    Options2l = [{timeout, 0}],
+    {Continue2l, _ResultOptsl} = riak_core_util:evaluate_timeouts(Options2l, DefaultTimeout),
+    ?assertEqual(false, Continue2l),
+
+    %% Test with dynamic timeouts disabled
+    persistent_term:put(riak_core_use_dynamic_timeouts, false),
+    Options_off = #{timeout => 3000},
+    {Continue_off, ResultOpts_off} = riak_core_util:evaluate_timeouts(Options_off, DefaultTimeout),
+    ?assertEqual(true, Continue_off),
+    ?assertEqual(Options_off, ResultOpts_off),
+    Optionsl_off = [{timeout, 3000}],
+    {Continuel_off, ResultOptsl_off} = riak_core_util:evaluate_timeouts(Optionsl_off, DefaultTimeout),
+    ?assertEqual(true, Continuel_off),
+    ?assertEqual(Optionsl_off, ResultOptsl_off),
+
+    persistent_term:put(riak_core_use_dynamic_timeouts, true).
+
+externalize_timeouts_test() ->
+    %% Test with map options and default timeout
+    DefaultTimeout = 5000,
+    Options = #{timeout => 3000},
+    {Continue, ResultOpts} = evaluate_timeouts(Options, DefaultTimeout),
+    ?assertEqual(true, Continue),
+    ?assertMatch(#{?INTERNAL_TIMEOUT_BY := _}, ResultOpts),
+    ExternalOpts = externalize_timeouts(ResultOpts),
+    ?assertNotMatch(#{?INTERNAL_TIMEOUT_BY := _}, ExternalOpts),
+
+    %% Test with proplist options and default timeout
+    Optionsl = [{timeout, 3000}],
+    {Continue, ResultOptsl} = evaluate_timeouts(Optionsl, DefaultTimeout),
+    ?assertEqual(true, Continue),
+    ?assertMatch({?INTERNAL_TIMEOUT_BY, _}, proplists:lookup(?INTERNAL_TIMEOUT_BY,
+                                            ResultOptsl)),
+    ExternalOptsl = externalize_timeouts(ResultOptsl),
+    ?assertEqual(none, proplists:lookup(?INTERNAL_TIMEOUT_BY, ExternalOptsl)),
+    ?assertMatch({timeout, _}, proplists:lookup(timeout, ExternalOptsl)),
+
+    %% Test with dynamic timeouts disabled
+    persistent_term:put(riak_core_use_dynamic_timeouts, false),
+    Options_off = #{timeout => 3000},
+    ExternalOpts_off = externalize_timeouts(Options_off),
+    ?assertEqual(Options_off, ExternalOpts_off),
+    Optionsl_off = [{timeout, 3000}],
+    ExternalOptsl_off = externalize_timeouts(Optionsl_off),
+    ?assertEqual(Optionsl_off, ExternalOptsl_off),
+
+    persistent_term:put(riak_core_use_dynamic_timeouts, true).
 
 -endif.
 

@@ -1,3 +1,24 @@
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2010-2014 Basho Technologies, Inc.
+%% Copyright (c) 2025 Workday, Inc.
+%%
+%% This file is provided to you under the Apache License,
+%% Version 2.0 (the "License"); you may not use this file
+%% except in compliance with the License.  You may obtain
+%% a copy of the License at
+%%
+%%   http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing,
+%% software distributed under the License is distributed on an
+%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+%% KIND, either express or implied.  See the License for the
+%% specific language governing permissions and limitations
+%% under the License.
+%%
+%% -------------------------------------------------------------------
+
 -type sender_type() :: fsm | server | raw.
 -type sender() :: {sender_type(), reference() | tuple(), pid()} |
                   %% TODO: Double-check that these special cases are kosher
@@ -15,6 +36,12 @@
           sender=ignore :: sender(),
           request :: vnode_req()}).
 
+-record(riak_vnode_req_v2, {
+          index :: partition() | undefined,
+          sender=ignore :: sender(),
+          request :: vnode_req(),
+          options :: proplists:proplist()}).
+
 -record(riak_coverage_req_v1, {
           index :: partition(),
           keyspaces :: keyspaces(),
@@ -31,6 +58,7 @@
           opts = [] :: list()}).
 
 -define(VNODE_REQ, #riak_vnode_req_v1).
+-define(VNODE_REQv2, #riak_vnode_req_v2).
 -define(COVERAGE_REQ, #riak_coverage_req_v1).
 -define(FOLD_REQ, #riak_core_fold_req_v2).
 
