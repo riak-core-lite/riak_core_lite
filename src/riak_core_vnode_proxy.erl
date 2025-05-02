@@ -20,7 +20,7 @@
 %% -------------------------------------------------------------------
 -module(riak_core_vnode_proxy).
 -export([start_link/2, init/1, reg_name/2, reg_name/3, call/2, call/3, cast/2,
-         unregister_vnode/3, command_return_vnode/2, overloaded/1]).
+         unregister_vnode/3, command_return_vnode/2, overloaded/1, update_overload_config/3]).
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
 -export([soft_load_mailbox_check/2]).
 
@@ -121,6 +121,9 @@ overloaded({Mod, Index, Node}) ->
 overloaded(Pid) ->
     call(Pid, overloaded).
 
+update_overload_config({Mod, Index}, Key, Value) ->
+    call(reg_name(Mod, Index), {update_overload_config, Key, Value}).
+
 call(Name, Msg) ->
     call_reply(catch gen:call(Name, '$vnode_proxy_call', Msg)).
 
@@ -186,6 +189,13 @@ handle_call(mailbox_size, _From, State=#state{check_mailbox=Mailbox,
 					      check_request_interval=CRI}) ->
     Result = soft_load_mailbox_check(Mailbox, CRI),
     {reply, Result, State};
+handle_call({update_overload_config, vnode_check_interval, V}, _From, State = #state{check_threshold = CT}) when is_integer(V), V > 0, V < CT ->
+    {reply, {ok, V}, State#state{check_interval = V}};
+handle_call({update_overload_config, vnode_check_request_interval, V}, _From, State = #state{check_interval = CI}) when is_integer(V), V > 0, V < CI ->
+    {reply, {ok, V}, State#state{check_request_interval = V}};
+handle_call({update_overload_config, vnode_overload_threshold, V}, _From, State) when is_integer(V), V >= 0 ->
+    {reply, {ok, V}, State#state{check_threshold = V}};
+
 handle_call(_Msg, _From, State) ->
     {reply, ok, State}.
 

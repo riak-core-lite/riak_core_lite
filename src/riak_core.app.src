@@ -3,7 +3,7 @@
 {application, riak_core,
 [
   {description, "Riak Core"},
-  {vsn, "3.2.0.1"},
+  {vsn, "3.2.0.2"},
   {modules, []},
   {registered, []},
   {included_applications, [riak_ensemble]},

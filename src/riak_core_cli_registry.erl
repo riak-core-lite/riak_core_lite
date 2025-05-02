@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2014 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2014 Basho Technologies, Inc.
+%% Copyright (c) 2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -42,7 +43,30 @@ register_node_finder() ->
 
 -spec register_cli() -> ok.
 register_cli() ->
-    clique:register(?CLI_MODULES).
+    clique:register(?CLI_MODULES),
+    clique:register_config(["vnode_overload_threshold"], fun set_vnode_proxy_overload_config/2),
+    clique:register_config(["vnode_check_request_interval"], fun set_vnode_proxy_overload_config/2),
+    clique:register_config(["vnode_check_interval"], fun set_vnode_proxy_overload_config/2),
+    register_config_whitelist().
+
+set_vnode_proxy_overload_config([Key], ValueStr) when Key =:= "vnode_overload_threshold";
+                                                      Key =:= "vnode_check_request_interval";
+                                                      Key =:= "vnode_check_interval" ->
+    Key1 = list_to_atom(Key),
+    Value = list_to_integer(ValueStr),
+    ProxySpecs = supervisor:which_children(riak_core_vnode_proxy_sup),
+    [
+        {ok, Value} = riak_core_vnode_proxy:update_overload_config({Mod, Index}, Key1, Value)
+        || {{Mod, Index},_,_,_} <- ProxySpecs
+    ],
+
+    "".
+
+-spec register_config_whitelist() -> ok.
+register_config_whitelist() ->
+    ok = clique:register_config_whitelist(["vnode_overload_threshold",
+                                           "vnode_check_request_interval",
+                                           "vnode_check_interval"]).
 
 -spec load_schema() -> ok.
 load_schema() ->

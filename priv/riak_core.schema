@@ -244,6 +244,51 @@
     {default, off}
 ]}.
 
+%% @doc VNode Message Handling
+%%
+%% The VNode ensures it's able to handle a request by checking its backlog.
+%%
+%% If its backlog is greater than `vnode_overload_threshold`, it will
+%% drop the incoming request.
+%%
+%% In order to get the size of its backlog, it does a "soft" and a "hard"
+%% check at different intervals. The "soft" check is faster but not
+%% guaranteed to return if the VNode is backed-up. It performs this check
+%% every `vnode_check_interval` requests. This count is reset when it's performed
+%% successfully. In case it fails to return in an appropriate amount of time,
+%% the VNode performs a "hard" check after `vnode_check_request_interval` requests.
+%% This is guaranteed to return but is less performant.
+%%
+%% Number of requests in a VNode's backlog before it begins shedding
+%% incoming requests.
+{mapping, "vnode_overload_threshold", "riak_core.vnode_overload_threshold", [
+  {datatype, integer},
+  {default, 10000}
+]}.
+
+%% @doc Number of requests a VNode receives before it does a "soft" check
+%% of the count of its backlog.
+%%
+%% This value must be below `vnode_check_interval` otherwise it will default to
+%% half that value.
+%%
+%% @see vnode_overload_threshold
+{mapping, "vnode_check_request_interval", "riak_core.vnode_check_request_interval", [
+  {datatype, integer},
+  {default, 50}
+]}.
+
+%% @doc Number of requests a VNode receives before it does a "hard" check
+%% of the count of its backlog.
+%%
+%% This value must be below `vnode_overload_threshold` otherwise it will
+%% default to half that value.
+%%
+%% @see vnode_overload_threshold
+{mapping, "vnode_check_interval", "riak_core.vnode_check_interval", [
+  {datatype, integer},
+  {default, 5000}
+]}.
 
 %% Async Job Management
 %%
