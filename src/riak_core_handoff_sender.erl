@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2012 Basho Technologies, Inc.  All Rights Reserved.
-%% Copyright (c) 2018-2022 Workday, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2014 Basho Technologies, Inc.
+%% Copyright (c) 2018-2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -24,7 +24,7 @@
 -module(riak_core_handoff_sender).
 -export([start_link/4, get_handoff_ssl_options/0]).
 
--compile({nowarn_deprecated_function, 
+-compile({nowarn_deprecated_function,
             [{gen_fsm, send_event, 2}]}).
 
 -include_lib("kernel/include/logger.hrl").
@@ -41,11 +41,11 @@
 -define(MEGA, 1000000).
 
 -define(log_info(Str, Args),
-        ?LOG_INFO("~p transfer of ~p from ~p ~p to ~p ~p failed " ++ Str,
+        ?LOG_INFO("~0tp transfer of ~0tp from ~0tp ~0tp to ~0tp ~0tp failed " ++ Str,
                    [Type, Module, SrcNode, SrcPartition, TargetNode,
                     TargetPartition] ++ Args)).
 -define(log_fail(Str, Args),
-        ?LOG_ERROR("~p transfer of ~p from ~p ~p to ~p ~p failed " ++ Str,
+        ?LOG_ERROR("~0tp transfer of ~0tp from ~0tp ~0tp to ~0tp ~0tp failed " ++ Str,
                     [Type, Module, SrcNode, SrcPartition, TargetNode,
                      TargetPartition] ++ Args)).
 
@@ -92,7 +92,7 @@
 
 start_link(TargetNode, Module, {Type, Opts}, Vnode) ->
     SslOpts = get_handoff_ssl_options(),
-    Pid = 
+    Pid =
         spawn_link(
             fun()->
                 start_fold(TargetNode, Module, {Type, Opts}, Vnode, SslOpts)
@@ -167,17 +167,17 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
             % fast).
 
         %% Since handoff_concurrency applies to both outbound and inbound
-        %% connections there is a chance that the receiver may decide to 
+        %% connections there is a chance that the receiver may decide to
         %% reject the senders attempt to start a handoff.
-        %% The sender must assume that a closed socket at this point is a 
+        %% The sender must assume that a closed socket at this point is a
         %% rejection by the receiver to enforce handoff_concurrency.
         case send_sync(TcpMod, Socket, RecvTimeout) of
             ok ->
                 ok;
             {error, DirectionS, timeout} ->
                 ?LOG_ERROR(
-                    "Initial sync message returned ~w error timeout "
-                    "between src_partition=~p trg_partition=~p "
+                    "Initial sync message returned ~0tp error timeout "
+                    "between src_partition=~0tp trg_partition=~0tp "
                     "type=~w module=~w ",
                     [DirectionS,
                         SrcPartition, TargetPartition,
@@ -187,7 +187,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                 exit({shutdown, max_concurrency})
         end,
 
-        ?LOG_INFO("Starting ~p transfer of ~p from ~p ~p to ~p ~p",
+        ?LOG_INFO("Starting ~0tp transfer of ~0tp from ~0tp ~0tp to ~0tp ~0tp",
                 [Type, Module, SrcNode, SrcPartition,
                     TargetNode, TargetPartition]),
 
@@ -198,7 +198,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
         UnsentAcc0 = get_notsent_acc0(Opts),
         UnsentFun = get_notsent_fun(Opts),
 
-        Req = 
+        Req =
             riak_core_util:make_fold_req(
                 fun visit_item/3,
                 #ho_acc{
@@ -271,15 +271,14 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                 %% written.  handle_handoff_data is a sync call, so once
                 %% we receive the sync the remote side will be up to date.
                 ?LOG_DEBUG(
-                    "~p ~p Sending final sync",
+                    "~0tp ~0tp Sending final sync",
                     [SrcPartition, Module]),
                 case send_sync(TcpMod, Socket, RecvTimeout) of
                     ok ->
                         ok;
-                    {error, DirectionE, timeout} -> 
-                        ?LOG_ERROR("~p transfer of ~p from ~p ~p to ~p ~p"
-                            "Final sync message returned ~w error timeout "
-                            "between src_partition=~p trg_partition=~p "
+                    {error, DirectionE, timeout} ->
+                        ?LOG_ERROR("Final sync message returned ~0tp error timeout "
+                            "between src_partition=~0tp trg_partition=~0tp "
                             "type=~w module=~w ",
                             [DirectionE,
                                 SrcPartition, TargetPartition,
@@ -291,10 +290,10 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                 FoldTimeDiff = end_fold_time(StartFoldTime),
                 ThroughputBytes = TotalBytes/FoldTimeDiff,
 
-                ok = 
-                ?LOG_INFO("~p transfer of ~p from ~p ~p to ~p ~p"
-                        " completed: sent ~s bytes in ~p of ~p objects"
-                        " in ~.2f seconds (~s/second)",
+                ok =
+                ?LOG_INFO("~0tp transfer of ~0tp from ~0tp ~0tp to ~0tp ~0tp"
+                        " completed: sent ~ts bytes in ~0tp of ~0tp objects"
+                        " in ~.2f seconds (~ts/second)",
                         [Type, Module, SrcNode, SrcPartition, TargetNode, TargetPartition,
                         riak_core_format:human_size_fmt("~.2f", TotalBytes),
                          FinalStats#ho_stats.objs, TotalObjects, FoldTimeDiff,
@@ -326,14 +325,14 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
              ?log_fail("because of TCP recv timeout", []),
              exit({shutdown, timeout});
          exit:{shutdown, {error, Reason}} ->
-             ?log_fail("because of ~p", [Reason]),
+             ?log_fail("because of ~0tp", [Reason]),
              gen_fsm:send_event(
                 ParentPid, {handoff_error, fold_error, Reason}),
              exit({shutdown, {error, Reason}});
          throw:{be_quiet, Err, Reason} ->
              gen_fsm:send_event(ParentPid, {handoff_error, Err, Reason});
          Class:Reason:Stacktrace ->
-             ?log_fail("because of ~p:~p ~p",
+             ?log_fail("because of ~0tp:~0tp ~tp",
                        [Class, Reason, Stacktrace]),
              gen_fsm:send_event(ParentPid, {handoff_error, Class, Reason})
      end.
@@ -355,7 +354,7 @@ visit_item(K, V, Acc0) ->
             case Module:encode_handoff_item(K, V) of
                 corrupted ->
                     {Bucket, Key} = K,
-                    ?LOG_WARNING("Unreadable object ~p/~p discarded",
+                    ?LOG_WARNING("Unreadable object ~0tp/~0tp discarded",
                                   [Bucket, Key]),
                     Acc;
                 BinObj ->
@@ -367,8 +366,8 @@ visit_item(K, V, Acc0) ->
                         Acc#ho_acc{
                             item_queue_length=ItemQueueLength2,
                             item_queue_byte_size=ItemQueueByteSize2},
-                    
-                    BatchReady = 
+
+                    BatchReady =
                         (ItemQueueByteSize2 > HandoffBatchThresholdSize) or
                             (ItemQueueLength2 > HandoffBatchThresholdCount),
                     case BatchReady of
@@ -407,8 +406,8 @@ maybe_keepalive_receiver(Acc = #ho_acc{keepalive_next=NextKeepalive}) ->
                     Acc#ho_acc{keepalive_next=next_keepalive_time()};
                 {error, Direction, Reason} ->
                     ?LOG_ERROR(
-                        "Keepalive message returned ~w error ~w "
-                        "between src_partition=~p trg_partition=~p "
+                        "Keepalive message returned ~0tp error ~0tp "
+                        "between src_partition=~0tp trg_partition=~0tp "
                         "type=~w module=~w ",
                         [Direction, Reason,
                             SrcPartition, TargetPartition,
@@ -458,8 +457,8 @@ send_objects(ItemsReverseList, Acc, FlushStats) ->
                         ok;
                     {error, Direction, Reason} ->
                         ?LOG_ERROR(
-                            "Sync message returned ~w error ~w "
-                            "between src_partition=~p trg_partition=~p "
+                            "Sync message returned ~0tp error ~0tp "
+                            "between src_partition=~0tp trg_partition=~0tp "
                             "type=~w module=~w ",
                             [Direction, Reason,
                                 SrcPartition, TargetPartition,
@@ -476,7 +475,7 @@ send_objects(ItemsReverseList, Acc, FlushStats) ->
                 ?LOG_INFO(
                     "Receiver in sync after batch_set=~w and total_batches=~w "
                     "with next batch having batch_size=~w item_count=~w "
-                    "between src_partition=~p trg_partition=~p "
+                    "between src_partition=~0tp trg_partition=~0tp "
                     "type=~w module=~w "
                     "last_sync_time=~w ms batch_set_time=~w ms",
                     [min(Ack, AckLogThreshold), Ack,
@@ -513,8 +512,8 @@ send_objects(ItemsReverseList, Acc, FlushStats) ->
                            item_queue_byte_size=0};
             {error, SendFailure} ->
                 ?LOG_ERROR(
-                  "Send batch returned error ~w "
-                  "between src_partition=~p trg_partition=~p "
+                  "Send batch returned error ~0tp "
+                  "between src_partition=~0tp trg_partition=~0tp "
                   "type=~w module=~w ",
                   [SendFailure,
                    SrcPartition, TargetPartition,
@@ -537,7 +536,7 @@ get_handoff_ip(Node) when is_atom(Node) ->
             Node,
             riak_core_handoff_listener,
             get_handoff_ip,
-            [], 
+            [],
             infinity) of
         {badrpc, _} ->
             error;
@@ -568,12 +567,12 @@ get_handoff_ssl_options() ->
                 Props
             catch
                 error:{badmatch, {FailProp, BadMat}} ->
-                    ?LOG_ERROR("SSL handoff config error: property ~p: ~p.",
+                    ?LOG_ERROR("SSL handoff config error: property ~0tp: ~0tp.",
                                 [FailProp, BadMat]),
                     [];
                 X:Y ->
                     ?LOG_ERROR("Failure processing SSL handoff config "
-                                "~p: ~p:~p",
+                                "~0tp: ~0tp:~0tp",
                                 [Props, X, Y]),
                     []
             end
@@ -584,7 +583,7 @@ get_handoff_timeout() ->
     %% Whenever a Sync message is sent, the process will wait for this
     %% timeout, and throw an exception closing the fold if the timeout is
     %% reached.
-    %% A sync message is sent every handoff_ack_sync_threshold batches, as 
+    %% A sync message is sent every handoff_ack_sync_threshold batches, as
     %% well as when initialising and closing the handoff.
     app_helper:get_env(riak_core, handoff_timeout, ?TCP_TIMEOUT).
 
@@ -726,7 +725,7 @@ maybe_call_handoff_started(Module, SrcPartition) ->
                     exit({shutdown, Error})
             end;
         false ->
-            %% optional callback not implemented, so we carry on, w/ no 
+            %% optional callback not implemented, so we carry on, w/ no
             %% additional fold options
             []
     end.

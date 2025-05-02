@@ -1,4 +1,7 @@
-%% Copyright (c) 2011 Basho Technologies, Inc.  All Rights Reserved.
+%% -------------------------------------------------------------------
+%%
+%% Copyright (c) 2011-2015 Basho Technologies, Inc.
+%% Copyright (c) 2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -13,7 +16,8 @@
 %% KIND, either express or implied.  See the License for the
 %% specific language governing permissions and limitations
 %% under the License.
-
+%% -------------------------------------------------------------------
+%%
 %% @doc A custom event handler to the `riak_sysmon' application's
 %% `system_monitor' event manager.
 %%
@@ -91,12 +95,12 @@ handle_event({monitor, PidOrPort, Type, Info}, State=#state{timer_ref=TimerRef})
     %% Reset the inactivity timeout
     NewTimerRef = reset_timer(TimerRef),
     {Fmt, Args} = format_pretty_proc_or_port_info(PidOrPort, almost_current_function),
-    ?LOG_INFO("monitor ~w ~w "++ Fmt ++ " ~w",
+    ?LOG_INFO("monitor ~w ~w "++ Fmt ++ " ~0tp",
                           [Type, PidOrPort] ++ Args ++ [Info]),
     {ok, State#state{timer_ref=NewTimerRef}};
 handle_event(Event, State=#state{timer_ref=TimerRef}) ->
     NewTimerRef = reset_timer(TimerRef),
-    ?LOG_INFO("Monitor got ~p", [Event]),
+    ?LOG_INFO("Monitor got ~0tp", [Event]),
     {ok, State#state{timer_ref=NewTimerRef}}.
 
 %%--------------------------------------------------------------------
@@ -137,7 +141,7 @@ handle_info(inactivity_timeout, State) ->
     %% so hibernate to free up resources.
     {ok, State, hibernate};
 handle_info(Info, State) ->
-    ?LOG_INFO("handle_info got ~p", [Info]),
+    ?LOG_INFO("handle_info got ~0tp", [Info]),
     {ok, State}.
 
 %%--------------------------------------------------------------------
@@ -182,7 +186,7 @@ format_pretty_proc_or_port_info(PidOrPort, Acf) ->
                 Res
         end
     catch Class:Reason:Stacktrace ->
-        {"Pid ~w, ~W ~W at ~w\n",
+        {"Pid ~w, ~W ~W at ~0tp\n",
             [PidOrPort, Class, 20, Reason, 20, Stacktrace]}
     end.
 
@@ -208,7 +212,7 @@ get_pretty_proc_or_port_info(Pid, Acf) when is_pid(Pid) ->
             RNL = if RN0 == [] -> [];
                      true      -> [{name, RN0}]
                   end,
-            {"~w", [RNL ++ [ICT, {Acf, CF}, {message_queue_len, MQL}]]}
+            {"~0tp", [RNL ++ [ICT, {Acf, CF}, {message_queue_len, MQL}]]}
     end;
 get_pretty_proc_or_port_info(Port, _Acf) when is_port(Port) ->
     PortInfo = erlang:port_info(Port),
@@ -225,7 +229,7 @@ get_pretty_proc_or_port_info(Port, _Acf) when is_port(Port) ->
                                 [{initial_call, ICT}]
                         end
                 end,
-    {"name ~s ~w", [Name, lists:append([PortInfo2, QueueSize, Connected])]}.
+    {"name ~ts ~0tp", [Name, lists:append([PortInfo2, QueueSize, Connected])]}.
 
 
 %% @doc If the message type is due to a large heap warning

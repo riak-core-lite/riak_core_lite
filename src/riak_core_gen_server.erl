@@ -855,21 +855,21 @@ system_code_change([Name, State, Mod, Time, TimeoutState, Queue], _Module,
 print_event(Dev, {in, Msg}, Name) ->
     case Msg of
 	{'$gen_call', {From, _Tag}, Call} ->
-	    io:format(Dev, "*DBG* ~p got call ~p from ~w~n",
+	    io:format(Dev, "*DBG* ~0tp got call ~0tp from ~w~n",
 		      [Name, Call, From]);
 	{'$gen_cast', Cast} ->
-	    io:format(Dev, "*DBG* ~p got cast ~p~n",
+	    io:format(Dev, "*DBG* ~0tp got cast ~0tp~n",
 		      [Name, Cast]);
 	_ ->
-	    io:format(Dev, "*DBG* ~p got ~p~n", [Name, Msg])
+	    io:format(Dev, "*DBG* ~0tp got ~0tp~n", [Name, Msg])
     end;
 print_event(Dev, {out, Msg, To, State}, Name) ->
-    io:format(Dev, "*DBG* ~p sent ~p to ~w, new state ~w~n",
+    io:format(Dev, "*DBG* ~0tp sent ~0tp to ~w, new state ~w~n",
 	      [Name, Msg, To, State]);
 print_event(Dev, {noreply, State}, Name) ->
-    io:format(Dev, "*DBG* ~p new state ~w~n", [Name, State]);
+    io:format(Dev, "*DBG* ~0tp new state ~w~n", [Name, State]);
 print_event(Dev, Event, Name) ->
-    io:format(Dev, "*DBG* ~p dbg  ~p~n", [Name, Event]).
+    io:format(Dev, "*DBG* ~0tp dbg  ~0tp~n", [Name, Event]).
 
 
 %%% ---------------------------------------------------
@@ -918,10 +918,10 @@ error_info(Reason, Name, Msg, State, Debug) ->
 	    _ ->
 		Reason
 	end,
-    format("** Generic server ~p terminating \n"
-           "** Last message in was ~p~n"
-           "** When Server state == ~p~n"
-           "** Reason for termination == ~n** ~p~n",
+    format("** Generic server ~0tp terminating ~n"
+           "** Last message in was ~0tp~n"
+           "** When Server state == ~0tp~n"
+           "** Reason for termination == ~n** ~0tp~n",
 	   [Name, Msg, State, Reason1]),
     sys:print_log(Debug),
     ok.
@@ -958,7 +958,7 @@ dbg_options(Name, Opts) ->
 dbg_opts(Name, Opts) ->
     case catch sys:debug_options(Opts) of
 	{'EXIT',_} ->
-	    format("~p: ignoring erroneous debug options - ~p~n",
+	    format("~0tp: ignoring erroneous debug options - ~0tp~n",
 		   [Name, Opts]),
 	    [];
 	Dbg ->

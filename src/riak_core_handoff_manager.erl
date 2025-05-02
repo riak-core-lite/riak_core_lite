@@ -1,6 +1,7 @@
+%% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2012 Basho Technologies, Inc.  All Rights Reserved.
-%% Copyright (c) 2018-2022 Workday, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2014 Basho Technologies, Inc.
+%% Copyright (c) 2018-2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -15,6 +16,7 @@
 %% KIND, either express or implied.  See the License for the
 %% specific language governing permissions and limitations
 %% under the License.
+%% -------------------------------------------------------------------
 
 -module(riak_core_handoff_manager).
 -behaviour(gen_server).
@@ -264,7 +266,7 @@ handle_cast({add_exclusion, {Mod, Idx}}, State=#state{excl=Excl}) ->
 handle_cast({status_update, ModSrcTgt, StatsUpdate}, State=#state{handoffs=HS}) ->
     case lists:keyfind(ModSrcTgt, #handoff_status.mod_src_tgt, HS) of
         false ->
-            ?LOG_ERROR("status_update for non-existing handoff ~p", [ModSrcTgt]),
+            ?LOG_ERROR("status_update for non-existing handoff ~0tp", [ModSrcTgt]),
             {noreply, State};
         HO ->
             Stats2 = update_stats(StatsUpdate, HO),
@@ -309,10 +311,10 @@ handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
                     X when X == max_concurrency orelse
                            (element(1, X) == shutdown andalso
                             element(2, X) == max_concurrency) ->
-                        ?LOG_INFO("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
+                        ?LOG_INFO("An ~w handoff of partition ~w ~w was terminated for reason: ~0tp~n", [Dir,M,I,Reason]),
                         true;
                     _ ->
-                        ?LOG_ERROR("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
+                        ?LOG_ERROR("An ~w handoff of partition ~w ~w was terminated for reason: ~0tp~n", [Dir,M,I,Reason]),
                         true
                 end,
 
@@ -626,7 +628,7 @@ kill_xfer_i(ModSrcTarget, Reason, HS) ->
                             src_node=SrcNode,
                             transport_pid=TP
                            } = Xfer,
-            Msg = "~p transfer of ~p from ~p ~p to ~p ~p killed for reason ~p",
+            Msg = "~0tp transfer of ~0tp from ~0tp ~0tp to ~0tp ~0tp killed for reason ~0tp",
             case Type of
                 undefined ->
                     ok;

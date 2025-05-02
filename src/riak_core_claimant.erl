@@ -1,7 +1,7 @@
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2012-2015 Basho Technologies, Inc.
-%% Copyright (c) 2024 Workday, Inc.
+%% Copyright (c) 2024-2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -212,11 +212,11 @@ ring_changed(Node, Ring) ->
 %% and a new node is set as claimant, the lock will be lost even
 %% though it has been "acquired". This also happens with release.
 %%
--spec acquire_cluster_lock(string(), string()) -> ok | {error, term()}.
+-spec acquire_cluster_lock(binary(), binary()) -> {ok, term()} | {error, term()}.
 acquire_cluster_lock(Ticket, Description) ->
     acquire_cluster_lock(Ticket, Description, ?CLUSTER_LOCK_ATTEMPTS).
 
--spec acquire_cluster_lock(string(), string(), integer()) -> {ok, term()} |
+-spec acquire_cluster_lock(binary(), binary(), integer()) -> {ok, term()} |
                                                              {error, term()}.
 acquire_cluster_lock(Ticket, Description, _) when not is_binary(Ticket) or
                                                   not is_binary(Description) ->
@@ -248,11 +248,11 @@ acquire_cluster_lock(Ticket, Description, Attempts) ->
             {error, not_capable}
     end.
 
--spec release_cluster_lock(string()) -> {ok, term()} | {error, term()}.
+-spec release_cluster_lock(binary()) -> {ok, term()} | {error, term()}.
 release_cluster_lock(Ticket) ->
     release_cluster_lock(Ticket, ?CLUSTER_LOCK_ATTEMPTS).
 
--spec release_cluster_lock(string(), integer()) -> {ok, term()} |
+-spec release_cluster_lock(binary(), integer()) -> {ok, term()} |
                                                    {error, term()}.
 release_cluster_lock(_Ticket, 0) ->
     {error, ring_not_ready};
