@@ -209,14 +209,25 @@ start_link(Mod, Index, InitialInactivityTimeout, Forward) ->
 %% Send a command message for the vnode module by Pid -
 %% typically to do some deferred processing after returning yourself
 send_command(Pid, Request) ->
-    gen_fsm:send_event(Pid, ?VNODE_REQ{request=Request}).
-
+    case riak_core_capability:get({riak_core, dynamic_timeouts}, false) of
+        true ->
+            gen_fsm:send_event(Pid, ?VNODE_REQv2{request=Request,
+                                                      options=[]});
+        _ ->
+            gen_fsm:send_event(Pid, ?VNODE_REQ{request=Request})
+    end.
 
 %% Sends a command to the FSM that called it after Time
 %% has passed.
 -spec send_command_after(integer(), term()) -> reference().
 send_command_after(Time, Request) ->
-    gen_fsm:send_event_after(Time, ?VNODE_REQ{request=Request}).
+    case riak_core_capability:get({riak_core, dynamic_timeouts}, false) of
+        true ->
+            gen_fsm:send_event_after(Time, ?VNODE_REQv2{request=Request,
+                                                      options=[]});
+        _ ->
+            gen_fsm:send_event_after(Time, ?VNODE_REQ{request=Request})
+    end.
 
 
 init([Mod, Index, InitialInactivityTimeout, Forward]) ->
@@ -268,7 +279,7 @@ do_init(State = #state{index=Index, mod=Mod, forward=Forward}) ->
             ModState0 =
                 case lists:keyfind(pool, 1, Props) of
                     {pool, WorkerMod, PoolSize, WorkerArgs}=PoolConfig ->
-                        ?LOG_INFO("Starting vnode worker pool " ++ 
+                        ?LOG_INFO("Starting vnode worker pool " ++
                                         "~p with size of ~p~n",
                                     [WorkerMod, PoolSize]),
                         {ok, PoolPid} =
@@ -513,7 +524,9 @@ forward_request(_, Request, Options, HOTarget, _ResizeTarget, Sender, State) ->
 vnode_forward(Type, ForwardTo, Sender, Request, Options, State) ->
     ?LOG_DEBUG("Forwarding (~p) {~p,~p} -> ~p~n",
                 [Type, State#state.index, node(), ForwardTo]),
-    riak_core_vnode_master:command_unreliable(ForwardTo, Request, Sender, Options,
+    {_, UpdatedOptions} = riak_core_util:evaluate_timeouts(Options, ?DEFAULT_TIMEOUT),
+    ExternalOptions = riak_core_util:externalize_timeouts(UpdatedOptions),
+    riak_core_vnode_master:command_unreliable(ForwardTo, Request, Sender, ExternalOptions,
                                               riak_core_vnode_master:reg_name(State#state.mod)).
 
 %% @doc during ring resizing if we have completed a transfer to the index that will
