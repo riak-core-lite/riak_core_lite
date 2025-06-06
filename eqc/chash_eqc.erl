@@ -1,8 +1,7 @@
+%% -*- mode: erlang; erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %% -------------------------------------------------------------------
 %%
-%% chash_eqc: QuickCheck tests for the chash module.
-%%
-%% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2011-2012 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -19,12 +18,13 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-
+%%
 %% @doc  QuickCheck tests for the chash module
-
+%%
 -module(chash_eqc).
 
 -ifdef(EQC).
+
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
@@ -67,18 +67,10 @@ eqc_test_() ->
 
 setup() ->
     %% Remove the logger noise.
-    application:load(sasl),
-    error_logger:tty(false),
-    %% Uncomment the following lines to send log output to files.
-    %% application:set_env(sasl, sasl_error_logger, {file, "chash_eqc_sasl.log"}),
-    %% error_logger:logfile({open, "chash_eqc.log"}),
+    riak_core_test_util:logger_silence().
 
-    %% TODO: Perform any required setup
-    ok.
-
-cleanup(_) ->
-    %% TODO: Perform any required cleanup
-    ok.
+cleanup(Level) ->
+    logger:set_handler_config(default, level, Level).
 
 %% ====================================================================
 %% eqc property

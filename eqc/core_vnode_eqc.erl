@@ -1,8 +1,7 @@
+%% -*- mode: erlang; erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %% -------------------------------------------------------------------
 %%
-%% core_vnode_eqc: QuickCheck tests for riak_core_vnode code
-%%
-%% Copyright (c) 2007-2010 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -19,16 +18,19 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-
+%%
 %% @doc  QuickCheck tests for riak_core_vnode code
-
+%%
 -module(core_vnode_eqc).
+
 -ifdef(EQC).
+
+-compile([export_all, nowarn_export_all]).
+
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_fsm.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("include/riak_core_vnode.hrl").
--compile([export_all, nowarn_export_all]).
 
 -define(POST_COND(PC, ErrTuple),
         case PC of
@@ -49,9 +51,7 @@
                async_work=[]}). % {Index, AsyncRef} async work submitted to each vnode
 
 setup_simple() ->
-    error_logger:tty(false),
-    application:set_env(sasl, sasl_error_logger, {file, "core_vnode_eqc_sasl.log"}),
-    error_logger:logfile({open, "core_vnode_eqc.log"}),
+    riak_core_test_util:logger_redirect(?MODULE),
 
     Vars = [{ring_creation_size, 8},
             {ring_state_dir, "<nostore>"},

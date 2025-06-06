@@ -1,7 +1,7 @@
+%% -*- mode: erlang; erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %% -------------------------------------------------------------------
 %%
-%%
-%% Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2013-2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -18,14 +18,16 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
+%%
 -module(btypes_eqc).
 
 -ifdef(EQC).
+
+-compile([export_all, nowarn_export_all]).
+
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eqc/include/eqc_statem.hrl").
 -include_lib("eunit/include/eunit.hrl").
-
--compile([export_all, nowarn_export_all]).
 
 -type type_name() :: binary().
 -type type_active_status() :: boolean().
@@ -360,7 +362,7 @@ prop_btype_invariant() ->
        ).
 
 setup_cleanup() ->
-    error_logger:tty(false),
+    Level = riak_core_test_util:logger_silence(),
     meck:new(riak_core_capability, []),
     meck:expect(
         riak_core_capability, get,
@@ -369,8 +371,8 @@ setup_cleanup() ->
         end
     ),
     fun() ->
-        error_logger:tty(true),
-        meck:unload(riak_core_capability)
+        meck:unload(riak_core_capability),
+        logger:set_handler_config(default, level, Level)
     end.
 
 stop_pid(_Tag, Other) when not is_pid(Other) ->

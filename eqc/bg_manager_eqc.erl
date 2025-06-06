@@ -1,6 +1,7 @@
+%% -*- mode: erlang; erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2013-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -16,6 +17,8 @@
 %% specific language governing permissions and limitations
 %% under the License.
 %%
+%% -------------------------------------------------------------------
+%%
 %% QuickCheck may fail for both properties in this module
 %% The commands are not atomic and we cannot faithfully model
 %% the side effect of locking and freeing resources when the
@@ -25,10 +28,12 @@
 %% by mocking the call to release_resource.
 %% That however, would require a eqc_compnent specification
 %% instead of the current eqc_statem.
-
+%%
 -module(bg_manager_eqc).
 
 -ifdef(EQC).
+
+-compile([export_all, nowarn_export_all]).
 
 -include("include/riak_core_bg_manager.hrl").
 -include_lib("eqc/include/eqc.hrl").
@@ -36,8 +41,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -define(QC_OUT(P),
         eqc:on_output(fun(Str, Args) -> io:format(user, Str, Args) end, P)).
-
--compile([export_all, nowarn_export_all]).
 
 -type bg_eqc_type() :: atom().
 -type bg_eqc_limit() :: non_neg_integer().
@@ -857,11 +860,11 @@ bg_manager_monitors(Pid) ->
 
 prop_bgmgr() ->
     ?SETUP(fun() ->
-                   error_logger:tty(false),
-                   fun() ->
-                        error_logger:tty(true)
-                   end
-           end,
+        Level = riak_core_test_util:logger_silence(),
+        fun() ->
+            logger:set_handler_config(default, level, Level)
+        end
+    end,
     ?FORALL(Cmds, commands(?MODULE),
     ?SOMETIMES(2,
             aggregate(command_names(Cmds),
@@ -909,11 +912,11 @@ prop_bgmgr() ->
 
 prop_bgmgr_parallel() ->
     ?SETUP(fun() ->
-                   error_logger:tty(false),
-                   fun() ->
-                        error_logger:tty(true)
-                   end
-           end,
+        Level = riak_core_test_util:logger_silence(),
+        fun() ->
+            logger:set_handler_config(default, level, Level)
+        end
+    end,
     ?FORALL(Cmds, parallel_commands(?MODULE, (initial_state())#state{exclude = [bypass]}),
     ?SOMETIMES(2,
             aggregate(command_names(Cmds),

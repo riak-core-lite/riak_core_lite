@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
 %% Copyright (c) 2007-2016 Basho Technologies, Inc.
+%% Copyright (c) 2020-2025 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -941,36 +942,45 @@ compose_test_() ->
 
 pmap_test_() ->
     Fgood = fun(X) -> 2 * X end,
-    Fbad = fun(3) -> throw(die_on_3);
-              (X) -> Fgood(X)
-           end,
-    Lin = [1,2,3,4],
-    Lout = [2,4,6,8],
+    Fbad = fun
+        (3) -> throw(die_on_3);
+        (X) -> Fgood(X)
+    end,
+    Lin = [1, 2, 3, 4],
+    Lout = [2, 4, 6, 8],
     {setup,
-     fun() -> error_logger:tty(false) end,
-     fun(_) -> error_logger:tty(true) end,
-     [fun() ->
-              % Test simple map case
-              ?assertEqual(Lout, pmap(Fgood, Lin)),
-              % Verify a crashing process will not stall pmap
-              Parent = self(),
-              Pid = spawn(fun() ->
-                                  % Caller trapping exits causes stall!!
-                                  % TODO: Consider pmapping in a spawned proc
-                                  % process_flag(trap_exit, true),
-                                  pmap(Fbad, Lin),
-                                  ?debugMsg("pmap finished just fine"),
-                                  Parent ! no_crash_yo
-                          end),
-              MonRef = monitor(process, Pid),
-              receive
-                  {'DOWN', MonRef, _, _, _} ->
-                      ok;
-                  no_crash_yo ->
-                      ?assert(pmap_did_not_crash_as_expected)
-              end
-      end
-     ]}.
+        fun() ->
+            logger:add_primary_filter(silence_crash, {fun
+                (#{meta := #{error_logger := #{emulator := true, tag := error}}}, _) ->
+                    stop;
+                (_, _) ->
+                    ignore
+            end, ?MODULE})
+        end,
+        fun(_) -> logger:remove_primary_filter(silence_crash) end,
+        [
+            fun() ->
+                % Test simple map case
+                ?assertEqual(Lout, pmap(Fgood, Lin)),
+                % Verify a crashing process will not stall pmap
+                Parent = self(),
+                Pid = spawn(fun() ->
+                    % Caller trapping exits causes stall!!
+                    % TODO: Consider pmapping in a spawned proc
+                    % process_flag(trap_exit, true),
+                    pmap(Fbad, Lin),
+                    ?debugMsg("pmap finished just fine"),
+                    Parent ! no_crash_yo
+                end),
+                MonRef = monitor(process, Pid),
+                receive
+                    {'DOWN', MonRef, _, _, _} ->
+                        ok;
+                    no_crash_yo ->
+                        ?assert(pmap_did_not_crash_as_expected)
+                end
+            end
+        ]}.
 
 bounded_pmap_test_() ->
     Fun1 = fun(X) -> X+2 end,
