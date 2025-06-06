@@ -848,7 +848,7 @@ report_job_request_disposition(false, Class, _Mod, _Func, _Line, Client) ->
 %% Dynamic timeouts functions
 
 %% @doc Prepare consistent timeout frame for use within a node.
-%% @equiv evaluate_timeouts(Options, ?DEFAULT_TIMEOUT)
+%% @equiv evaluate_timeouts(Options, DEFAULT_TIMEOUT_MS)
 -spec evaluate_timeouts(Options)
         -> Result when
     Options :: map() | proplists:proplist(),
@@ -873,10 +873,11 @@ evaluate_timeouts(Options) ->
 %%
 %% If the environment variable `{riak_core, use_dynamic_timeouts}' is set to
 %% `false', this function will set the same timeout every time, and only return
-%% `false' for Continue if the timeout is < 1. This allows legacy functionality.
+%% `false' for Continue if the timeout is &lt; 1. This allows legacy
+%% functionality.
 %% `{riak_core, use_dynamic_timeouts}' is `true' by default
-%% 
-%% If the incoming `Options' contain a `recv_time' and does not contain a 
+%%
+%% If the incoming `Options' contain a `recv_time' and does not contain a
 %% `finish-by' time yet, then use `recv_time' as the original entry time
 %% for calculating the finish time.  If the option is not present,
 %% then use the current monotonic time as the entry time. `recv_time' can be
@@ -1172,36 +1173,45 @@ compose_test_() ->
 
 pmap_test_() ->
     Fgood = fun(X) -> 2 * X end,
-    Fbad = fun(3) -> throw(die_on_3);
-              (X) -> Fgood(X)
-           end,
-    Lin = [1,2,3,4],
-    Lout = [2,4,6,8],
+    Fbad = fun
+        (3) -> throw(die_on_3);
+        (X) -> Fgood(X)
+    end,
+    Lin = [1, 2, 3, 4],
+    Lout = [2, 4, 6, 8],
     {setup,
-     fun() -> error_logger:tty(false) end,
-     fun(_) -> error_logger:tty(true) end,
-     [fun() ->
-              % Test simple map case
-              ?assertEqual(Lout, pmap(Fgood, Lin)),
-              % Verify a crashing process will not stall pmap
-              Parent = self(),
-              Pid = spawn(fun() ->
-                                  % Caller trapping exits causes stall!!
-                                  % TODO: Consider pmapping in a spawned proc
-                                  % process_flag(trap_exit, true),
-                                  pmap(Fbad, Lin),
-                                  ?debugMsg("pmap finished just fine"),
-                                  Parent ! no_crash_yo
-                          end),
-              MonRef = monitor(process, Pid),
-              receive
-                  {'DOWN', MonRef, _, _, _} ->
-                      ok;
-                  no_crash_yo ->
-                      ?assert(pmap_did_not_crash_as_expected)
-              end
-      end
-     ]}.
+        fun() ->
+            logger:add_primary_filter(silence_crash, {fun
+                (#{meta := #{error_logger := #{emulator := true, tag := error}}}, _) ->
+                    stop;
+                (_, _) ->
+                    ignore
+            end, ?MODULE})
+        end,
+        fun(_) -> logger:remove_primary_filter(silence_crash) end,
+        [
+            fun() ->
+                % Test simple map case
+                ?assertEqual(Lout, pmap(Fgood, Lin)),
+                % Verify a crashing process will not stall pmap
+                Parent = self(),
+                Pid = spawn(fun() ->
+                    % Caller trapping exits causes stall!!
+                    % TODO: Consider pmapping in a spawned proc
+                    % process_flag(trap_exit, true),
+                    pmap(Fbad, Lin),
+                    ?debugMsg("pmap finished just fine"),
+                    Parent ! no_crash_yo
+                end),
+                MonRef = monitor(process, Pid),
+                receive
+                    {'DOWN', MonRef, _, _, _} ->
+                        ok;
+                    no_crash_yo ->
+                        ?assert(pmap_did_not_crash_as_expected)
+                end
+            end
+        ]}.
 
 bounded_pmap_test_() ->
     Fun1 = fun(X) -> X+2 end,

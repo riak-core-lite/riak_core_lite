@@ -58,6 +58,9 @@
 %%     $Id$
 %%
 -module(riak_core_gen_server).
+%%
+%% TODO: Either re-implement this module from current gen_server or eliminate it.
+%%
 
 %%% ---------------------------------------------------
 %%%
@@ -145,7 +148,7 @@
 %% Internal exports
 -export([init_it/6, print_event/3]).
 
--import(error_logger, [format/2]).
+-include_lib("kernel/include/logger.hrl").
 
 %%%=========================================================================
 %%%  API
@@ -895,34 +898,37 @@ terminate(Reason, Name, Msg, Mod, State, Debug) ->
 	    end
     end.
 
-error_info(_Reason, application_controller, _Msg, _State, _Debug) ->
-    %% OTP-5811 Don't send an error report if it's the system process
-    %% application_controller which is terminating - let init take care
-    %% of it instead
-    ok;
 error_info(Reason, Name, Msg, State, Debug) ->
-    Reason1 =
-	case Reason of
-	    {undef,[{M,F,A}|MFAs]} ->
-		case code:is_loaded(M) of
-		    false ->
-			{'module could not be loaded',[{M,F,A}|MFAs]};
-		    _ ->
-			case erlang:function_exported(M, F, length(A)) of
-			    true ->
-				Reason;
-			    false ->
-				{'function not exported',[{M,F,A}|MFAs]}
-			end
-		end;
-	    _ ->
-		Reason
-	end,
-    format("** Generic server ~0tp terminating ~n"
-           "** Last message in was ~0tp~n"
-           "** When Server state == ~0tp~n"
-           "** Reason for termination == ~n** ~0tp~n",
-	   [Name, Msg, State, Reason1]),
+    Reason1 = case Reason of
+        {undef, [{M, F, A} | _] = MFAs} ->
+            case code:is_loaded(M) of
+                false ->
+                    {'module could not be loaded', MFAs};
+                _ ->
+                    case erlang:function_exported(M, F, length(A)) of
+                        true ->
+                            Reason;
+                        _ ->
+                            {'function not exported', MFAs}
+                    end
+            end;
+        _ ->
+            Reason
+    end,
+    %% Report *similar to* current gen_server
+    Report = #{
+        label => {?MODULE, terminate},
+        message => <<?MODULE_STRING " terminating">>,
+        name => Name,
+        last_message => Msg,
+        state => State,
+        reason => Reason1
+    },
+    Meta = #{
+        domain => [riak, core],
+        error_logger => #{tag => error}
+    },
+    ?LOG_ERROR(Report, Meta),
     sys:print_log(Debug),
     ok.
 
@@ -958,8 +964,9 @@ dbg_options(Name, Opts) ->
 dbg_opts(Name, Opts) ->
     case catch sys:debug_options(Opts) of
 	{'EXIT',_} ->
-	    format("~0tp: ignoring erroneous debug options - ~0tp~n",
-		   [Name, Opts]),
+	    ?LOG_INFO(
+                "~0tp: ignoring erroneous debug options - ~0tp",
+                [Name, Opts]),
 	    [];
 	Dbg ->
 	    Dbg

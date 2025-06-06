@@ -1,6 +1,7 @@
+%% -*- mode: erlang; erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2016 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2016 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -17,6 +18,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
+%%
 -module(bprops_eqc).
 
 %%
@@ -32,10 +34,11 @@
 %%
 
 -ifdef(EQC).
--include_lib("eqc/include/eqc.hrl").
--include_lib("eqc/include/eqc_statem.hrl").
 
 -compile([export_all, nowarn_export_all]).
+
+-include_lib("eqc/include/eqc.hrl").
+-include_lib("eqc/include/eqc_statem.hrl").
 
 -type bucket_name() :: binary().
 -type orddict() :: orddict:orddict().
@@ -249,7 +252,7 @@ prop_buckets() ->
     ).
 
 setup_cleanup() ->
-    error_logger:tty(false),
+    Level = riak_core_test_util:logger_silence(),
     meck:new(riak_core_capability, []),
     meck:expect(
         riak_core_capability, get,
@@ -258,8 +261,8 @@ setup_cleanup() ->
         end
     ),
     fun() ->
-        error_logger:tty(true),
-        meck:unload(riak_core_capability)
+        meck:unload(riak_core_capability),
+        logger:set_handler_config(default, level, Level)
     end.
 
 %%

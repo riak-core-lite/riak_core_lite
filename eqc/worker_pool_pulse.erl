@@ -1,6 +1,7 @@
+%% -*- mode: erlang; erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2013 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2013 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -17,13 +18,14 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
-
+%%
 %% @doc Test riak_core_vnode_worker_pool's interaction with poolboy
 %% under PULSE. This requires that riak_core, poolboy, and this module
 %% be compiled with the 'PULSE' macro defined.
+%%
 -module(worker_pool_pulse).
-
 -behaviour(riak_core_vnode_worker).
+
 -ifdef(EQC).
 -include_lib("eqc/include/eqc.hrl").
 -endif.
@@ -123,11 +125,11 @@ all_work_gets_done(PoolSize, WorkList) ->
     length(Results) == length(WorkList).
 
 setup_and_teardown() ->
-    error_logger:tty(false),
+    Level = riak_core_test_util:logger_silence(),
     pulse:start(),
     fun() ->
-            pulse:stop(),
-            error_logger:tty(true)
+        pulse:stop(),
+        logger:set_handler_config(default, level, Level)
     end.
 
 -endif.
