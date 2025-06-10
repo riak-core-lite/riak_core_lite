@@ -35,8 +35,7 @@
          commit/0,
          clear/0,
          ring_changed/2,
-         pending_close/2
-         ]).
+         pending_close/2]).
 
 -export([reassign_indices/1]). % helpers for claim sim
 
@@ -126,13 +125,11 @@
 %%% API
 %%%===================================================================
 
-
 -ifdef(TEST).
 
 -export([stop/0]).
 
-stop() ->
-    gen_server:call(claimant(), stop).
+stop() -> gen_server:call(claimant(), stop).
 
 -endif.
 
@@ -247,6 +244,7 @@ resize_ring(NewRingSize) ->
 abort_resize() -> stage(node(), abort_resize).
 
 -spec pending_close(riak_core_ring(), any()) -> ok.
+
 pending_close(Ring, RingID) ->
     gen_server:call(?MODULE, {pending_close, Ring, RingID}).
 
@@ -360,14 +358,12 @@ handle_call(plan, _From, State) ->
 handle_call(commit, _From, State) ->
     {Reply, State2} = commit_staged(State),
     {reply, Reply, State2};
-
-handle_call({pending_close, Ring, RingID}, _From, State) ->
+handle_call({pending_close, Ring, RingID}, _From,
+            State) ->
     State2 = tick(Ring, RingID, State),
     {reply, ok, State2};
-
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
-
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -385,7 +381,9 @@ handle_cast(_Msg, State) -> {noreply, State}.
                   State :: state()) -> {noreply, state()}.
 
 handle_info(tick, State) ->
-    State2 = tick(none, riak_core_ring_manager:get_ring_id(), State),
+    State2 = tick(none,
+                  riak_core_ring_manager:get_ring_id(),
+                  State),
     {noreply, State2};
 handle_info(reset_ring_id, State) ->
     State2 = State#state{last_ring_id = undefined},
@@ -547,7 +545,8 @@ maybe_commit_staged(Ring, NextRing,
         {_, false, _} -> ignore;
         {_, _, false} -> {ignore, plan_changed};
         _ ->
-            NewRing = riak_core_ring:increment_vclock(Claimant, NextRing),
+            NewRing = riak_core_ring:increment_vclock(Claimant,
+                                                      NextRing),
             {new_ring, NewRing}
     end.
 
@@ -650,8 +649,7 @@ valid_request(Node, Action, Changes, Ring) ->
                                         Ring);
         {resize, NewRingSize} ->
             valid_resize_request(NewRingSize, Changes, Ring);
-        abort_resize ->
-            valid_resize_abort_request(Ring)
+        abort_resize -> valid_resize_abort_request(Ring)
     end.
 
 %% @private
@@ -891,22 +889,22 @@ schedule_tick() ->
 
 %% @private
 %% @doc Execute one claimant tick.
--spec tick(PreFetchRing :: riak_core_ring() | none, Ring:: riak_core_ring(), State :: state()) -> state().
+-spec tick(PreFetchRing :: riak_core_ring() | none,
+           Ring :: riak_core_ring(), State :: state()) -> state().
 
-tick(PreFetchRing, RingID, State = #state{last_ring_id = LastID}) ->
+tick(PreFetchRing, RingID,
+     State = #state{last_ring_id = LastID}) ->
     case RingID of
         LastID ->
             schedule_tick(),
             State;
         RingID ->
-            Ring =
-                case PreFetchRing of
-                    none ->
-                        {ok, Ring0} = riak_core_ring_manager:get_raw_ring(),
-                        Ring0;
-                    PreFetchRing ->
-                        PreFetchRing
-                end,
+            Ring = case PreFetchRing of
+                       none ->
+                           {ok, Ring0} = riak_core_ring_manager:get_raw_ring(),
+                           Ring0;
+                       PreFetchRing -> PreFetchRing
+                   end,
             case riak_core_ring:check_lastgasp(Ring) of
                 true ->
                     logger:info("Ingoring fresh ring as shutting down"),
@@ -915,9 +913,8 @@ tick(PreFetchRing, RingID, State = #state{last_ring_id = LastID}) ->
                     maybe_force_ring_update(Ring),
                     schedule_tick()
             end,
-            State#state{last_ring_id=RingID}
+            State#state{last_ring_id = RingID}
     end.
-
 
 maybe_force_ring_update(Ring) ->
     IsClaimant = riak_core_ring:claimant(Ring) == node(),
@@ -1500,12 +1497,12 @@ update_ring(CNode, CState, Replacing, Seed, Log,
             false) ->
     Next0 = riak_core_ring:pending_changes(CState),
     logger:debug("Members: ~p~n",
-          [riak_core_ring:members(CState,
-                                  [joining,
-                                   valid,
-                                   leaving,
-                                   exiting,
-                                   invalid])]),
+                 [riak_core_ring:members(CState,
+                                         [joining,
+                                          valid,
+                                          leaving,
+                                          exiting,
+                                          invalid])]),
     logger:debug("Updating ring :: next0 : ~p~n", [Next0]),
     %% Remove tuples from next for removed nodes
     InvalidMembers = riak_core_ring:members(CState,
@@ -1523,14 +1520,14 @@ update_ring(CNode, CState, Replacing, Seed, Log,
     {RingChanged1, CState3} = transfer_ownership(CState2,
                                                  Log),
     logger:debug("Updating ring :: next1 : ~p~n",
-          [riak_core_ring:pending_changes(CState3)]),
+                 [riak_core_ring:pending_changes(CState3)]),
     %% Ressign leaving/inactive indices
     {RingChanged2, CState4} = reassign_indices(CState3,
                                                Replacing,
                                                Seed,
                                                Log),
     logger:debug("Updating ring :: next2 : ~p~n",
-          [riak_core_ring:pending_changes(CState4)]),
+                 [riak_core_ring:pending_changes(CState4)]),
     %% Rebalance the ring as necessary. If pending changes exist ring
     %% is not rebalanced
     Next3 = rebalance_ring(CNode, CState4),

@@ -28,8 +28,6 @@
          send_command/2,
          send_command_after/2]).
 
-
-
 -export([init/1,
          started/2,
          started/3,
@@ -265,7 +263,10 @@ start_link(Mod, Index, InitialInactivityTimeout,
 %% =========================
 
 %% #1 - State started
-wait_for_init(Vnode) -> gen_fsm_compat:sync_send_event(Vnode, wait_for_init, infinity).
+wait_for_init(Vnode) ->
+    gen_fsm_compat:sync_send_event(Vnode,
+                                   wait_for_init,
+                                   infinity).
 
 %% =========================
 %% send_event
@@ -274,29 +275,42 @@ wait_for_init(Vnode) -> gen_fsm_compat:sync_send_event(Vnode, wait_for_init, inf
 %% #2.1 -
 %% Send a command message for the vnode module by Pid -
 %% typically to do some deferred processing after returning yourself
-send_command(Pid, Request) -> gen_fsm_compat:send_event(Pid, #riak_vnode_req_v1{request = Request}).
+send_command(Pid, Request) ->
+    gen_fsm_compat:send_event(Pid,
+                              #riak_vnode_req_v1{request = Request}).
 
 %% #2.2 -
-handoff_error(Vnode, Err, Reason) -> gen_fsm_compat:send_event(Vnode, {handoff_error, Err, Reason}).
+handoff_error(Vnode, Err, Reason) ->
+    gen_fsm_compat:send_event(Vnode,
+                              {handoff_error, Err, Reason}).
 
 %% #2.3 - riak_core_vnode_master - send_an_event
-send_an_event(VNode, Event) -> gen_fsm_compat:send_event(VNode, Event).
+send_an_event(VNode, Event) ->
+    gen_fsm_compat:send_event(VNode, Event).
 
 %% #2.4 - riak_core_vnode_master - handle_cast/handle_call
 %riak_core_vnode_master - command2
 %riak_core_vnode_proxy - handle_call
-send_req(VNode, Req) -> gen_fsm_compat:send_event(VNode, Req).
+send_req(VNode, Req) ->
+    gen_fsm_compat:send_event(VNode, Req).
 
 %% #2.5 - riak:core_handoff_sender - start_fold_
 -spec handoff_complete(VNode :: pid()) -> ok.
-handoff_complete(VNode) -> gen_fsm_compat:send_event(VNode, handoff_complete).
+
+handoff_complete(VNode) ->
+    gen_fsm_compat:send_event(VNode, handoff_complete).
 
 %% #2.6 - riak:core_handoff_sender - start_fold_
--spec resize_transfer_complete(VNode :: pid(), NotSentAcc :: term()) -> ok.
-resize_transfer_complete(VNode, NotSentAcc) -> gen_fsm_compat:send_event(VNode, {resize_transfer_complete, NotSentAcc}).
+-spec resize_transfer_complete(VNode :: pid(),
+                               NotSentAcc :: term()) -> ok.
+
+resize_transfer_complete(VNode, NotSentAcc) ->
+    gen_fsm_compat:send_event(VNode,
+                              {resize_transfer_complete, NotSentAcc}).
 
 %% #2.7 - riak_core_vnode_proxy - handle_cast
-unregistered(VNode) -> gen_fsm_compat:send_event(VNode, unregistered).
+unregistered(VNode) ->
+    gen_fsm_compat:send_event(VNode, unregistered).
 
 %% =========================
 %% sync_send_all_state_event
@@ -306,13 +320,17 @@ unregistered(VNode) -> gen_fsm_compat:send_event(VNode, unregistered).
 get_mod_index(VNode) ->
     gen_fsm_compat:sync_send_all_state_event(VNode,
                                              get_mod_index).
+
 %% #3.2
 core_status(VNode) ->
-    gen_fsm_compat:sync_send_all_state_event(VNode, core_status).
+    gen_fsm_compat:sync_send_all_state_event(VNode,
+                                             core_status).
 
 %% #3.3 - riak_core_handoff_receiver - process_message
 handoff_data(VNode, MsgData, VNodeTimeout) ->
-    gen_fsm_compat:sync_send_all_state_event(VNode, {handoff_data, MsgData}, VNodeTimeout).
+    gen_fsm_compat:sync_send_all_state_event(VNode,
+                                             {handoff_data, MsgData},
+                                             VNodeTimeout).
 
 %% =========================
 %% send_all_state_event
@@ -368,11 +386,6 @@ send_command_after(Time, Request) ->
     gen_fsm_compat:send_event_after(Time,
                                     #riak_vnode_req_v1{request = Request}).
 
-
-
-
-
-
 %% @doc Send a reply to a vnode request.  If
 %%      the Ref is undefined just send the reply
 %%      for compatibility with pre-0.12 requestors.
@@ -385,8 +398,8 @@ send_command_after(Time, Request) ->
 reply({fsm, ignore_ref, From}, Reply) ->
     riak_core_send_msg:send_event_unreliable(From, Reply);
 reply({fsm, Ref, From}, Reply) ->
-    riak_core_send_msg:send_event_unreliable(From, {Ref, Reply});
-
+    riak_core_send_msg:send_event_unreliable(From,
+                                             {Ref, Reply});
 reply({server, ignore_ref, From}, Reply) ->
     riak_core_send_msg:reply_unreliable(From, Reply);
 reply({server, Ref, From}, Reply) ->
@@ -1013,8 +1026,11 @@ vnode_coverage(Sender, Request, KeySpaces,
                                                     From),
             continue(State, NewModState);
         {PoolName, _Work, _From, NewModState} ->
-            logger:error("Worker pools not supported: ~p", [PoolName]),
-            {stop, not_supported, State#state{modstate = NewModState}};
+            logger:error("Worker pools not supported: ~p",
+                         [PoolName]),
+            {stop,
+             not_supported,
+             State#state{modstate = NewModState}};
         {stop, Reason, NewModState} ->
             {stop, Reason, State#state{modstate = NewModState}}
     end.

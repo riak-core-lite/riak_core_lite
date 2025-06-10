@@ -245,9 +245,9 @@ do_write_ringfile(Ring) ->
 
 do_write_ringfile(Ring, FN) ->
     ok = filelib:ensure_dir(FN),
-    try
-        false = riak_core_ring:check_lastgasp(Ring),
-        ok = riak_core_util:replace_file(FN, term_to_binary(Ring))
+    try false = riak_core_ring:check_lastgasp(Ring),
+        ok = riak_core_util:replace_file(FN,
+                                         term_to_binary(Ring))
     catch
         _:Err ->
             logger:error("Unable to write ring to \"~s\" - ~p\n",
@@ -287,8 +287,7 @@ read_ringfile(RingFile) ->
             R = binary_to_term(Binary),
             false = riak_core_ring:check_lastgasp(R),
             R;
-        {error, Reason} ->
-            {error, Reason}
+        {error, Reason} -> {error, Reason}
     end.
 
 %% @spec prune_ringfiles() -> ok | {error, Reason}
@@ -393,8 +392,9 @@ handle_call({set_my_ring, Ring}, _From, State) ->
 handle_call(refresh_my_ring, _From, State) ->
     %% Pompt the claimant before creating a fresh ring for shutdown, so that
     %% any final actions can be taken
-    ok = riak_core_claimant:pending_close(State#state.raw_ring, get_ring_id()),
-
+    ok =
+        riak_core_claimant:pending_close(State#state.raw_ring,
+                                         get_ring_id()),
     %% This node is leaving the cluster so create a fresh ring file
     FreshRing = riak_core_ring:fresh(),
     LastGaspRing = riak_core_ring:set_lastgasp(FreshRing),

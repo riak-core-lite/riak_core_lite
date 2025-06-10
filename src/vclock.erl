@@ -194,11 +194,13 @@ get_timestamp(Node, VClock) ->
     end.
 
 % @doc Get the last timestamp from a clock in a friendly format
--spec last_modified(VClock :: vclock()) -> calendar:datetime() | undefined.
-last_modified([]) ->
-    undefined;
+-spec last_modified(VClock ::
+                        vclock()) -> calendar:datetime() | undefined.
+
+last_modified([]) -> undefined;
 last_modified(VClock) ->
-    TSL = lists:map(fun({_, {_Ctr, TS}}) -> TS end, VClock),
+    TSL = lists:map(fun ({_, {_Ctr, TS}}) -> TS end,
+                    VClock),
     calendar:gregorian_seconds_to_datetime(lists:last(lists:sort(TSL))).
 
 % @doc Get the entry `dot()' for `vclock_node()' from `vclock()'.
@@ -415,11 +417,12 @@ last_modified_test() ->
     DT1 = {{1972, 5, 6}, {16, 13, 0}},
     DT2 = {{2020, 7, 12}, {15, 14, 0}},
     VC0 = vclock:fresh(),
-    ?assertMatch(undefined, last_modified(VC0)),
-    VC1 =
-        [{<<"Clarke!">>, {1, calendar:datetime_to_gregorian_seconds(DT1)}},
-            {<<"Pablo!">>, {1, calendar:datetime_to_gregorian_seconds(DT2)}}],
-    ?assertMatch(DT2, last_modified(VC1)).
+    ?assertMatch(undefined, (last_modified(VC0))),
+    VC1 = [{<<"Clarke!">>,
+            {1, calendar:datetime_to_gregorian_seconds(DT1)}},
+           {<<"Pablo!">>,
+            {1, calendar:datetime_to_gregorian_seconds(DT2)}}],
+    ?assertMatch(DT2, (last_modified(VC1))).
 
 merge_test() ->
     VC1 = [{<<"1">>, {1, 1}},

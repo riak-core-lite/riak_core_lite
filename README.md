@@ -7,7 +7,7 @@ Build upon the essence of Riak KV's core with an up-to-date, modular and extensi
 # riak_core_lite
 
 ![Language](https://img.shields.io/badge/language-erlang-blue.svg)
-![Release](https://img.shields.io/badge/release-R21+-9cf.svg)
+![Release](https://img.shields.io/badge/release-R25+-9cf.svg)
 ![Release](https://img.shields.io/badge/formatter-erlang_otp-33d.svg)
 ![Build](https://img.shields.io/badge/build-rebar3%203.15.1-brightgreen.svg)
 

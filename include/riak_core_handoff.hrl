@@ -50,10 +50,9 @@
          type :: ho_type() | undefined,
          req_origin :: node(),
          filter_mod_fun :: {module(), atom()} | undefined,
-         size = {0, objects}::
+         size = {0, objects} ::
              {function(), dynamic} |
-             {non_neg_integer(), bytes | objects}
-        }).
+             {non_neg_integer(), bytes | objects}}).
 
 -type handoff_status() :: #handoff_status{}.
 

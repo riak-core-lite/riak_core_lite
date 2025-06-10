@@ -69,7 +69,8 @@ stop(Reason) ->
     % we just stop the application.
     application:stop(riak_core).
 
--else.
+- else .
+
 
 %% @doc Stop the riak core lite application with a given reason.
 %% @param Reason Reason to be logged on stop.
@@ -216,8 +217,10 @@ standard_join(Node, Rejoin, Auto) when is_atom(Node) ->
 %% `started', or `stopping'. We only want to allow join actions if all
 %% applications have finished starting to avoid ring status race
 %% conditions.
--spec init_complete(Status :: {init:internal_status(),
-                               term()}) -> boolean().
+-spec init_complete(Status :: {starting |
+                               started |
+                               stopping,
+                               term()}) -> boolean(). % FIXME init:internal_status() is not a public type
 
 init_complete({started, _}) -> true;
 init_complete(_) -> false.

@@ -61,14 +61,16 @@
 -record(chashbin,
         {size :: pos_integer(),
          owners :: owners_bin(),
-         nodes :: erlang:tuple(node())}).
+         nodes ::
+             tuple()}). % tuples as arrays, was tuple(node()) before
 
--else.
+- else .
+
 
 -record(chashbin,
         {size :: pos_integer(),
          owners :: owners_bin(),
-         nodes :: erlang:tuple(node())}).
+         nodes :: tuple()}).
 
 -endif.
 
