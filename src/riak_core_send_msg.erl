@@ -22,8 +22,7 @@
 
 -module(riak_core_send_msg).
 
--export([reply_unreliable/2,
-         send_event_unreliable/2]).
+-export([reply_unreliable/2, send_event_unreliable/2]).
 
 %% NOTE: We'ed peeked inside gen_server.erl's guts to see its internals.
 reply_unreliable({To, Tag}, Reply) ->

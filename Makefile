@@ -1,6 +1,6 @@
 PULSE_TESTS = worker_pool_pulse
 COVERPATH = ./_build/test/cover
-REBAR ?= ./rebar3
+REBAR ?= rebar3
 
 .PHONY: deps test docs xref dialyzer format
 
@@ -57,5 +57,3 @@ xref: compile
 dialyzer:
 	${REBAR} dialyzer
 
-lint:
-	${REBAR} lint

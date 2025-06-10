@@ -238,10 +238,12 @@ start_fold_(TargetNode, Module, Type, Opts, ParentPid,
     %% otherwise it will wait forever but vnode crash will be
     %% caught by handoff manager.  I know, this is confusing, a
     %% new handoff system will be written soon enough.
-    AccRecord0 = riak_core_vnode_master:sync_command({SrcPartition, SrcNode},
-                                                    Req,
-                                                    VMaster, infinity),
-
+    AccRecord0 =
+        riak_core_vnode_master:sync_command({SrcPartition,
+                                             SrcNode},
+                                            Req,
+                                            VMaster,
+                                            infinity),
     %% Send any straggler entries remaining in the buffer:
     AccRecord = send_objects(AccRecord0#ho_acc.item_queue,
                              AccRecord0),
@@ -621,7 +623,7 @@ get_handoff_receive_timeout() ->
 %% @doc Compute the time from the start time to now in seconds.
 %% @param StartFoldTime Timestamp of when the fold started.
 -spec end_fold_time(StartFoldTime ::
-                        os:timestamp()) -> float().
+                        erlang:timestamp()) -> float().
 
 end_fold_time(StartFoldTime) ->
     EndFoldTime = os:timestamp(),

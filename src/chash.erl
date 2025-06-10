@@ -103,7 +103,10 @@ fresh(NumPartitions, SeedNode) ->
     Inc = ring_increment(NumPartitions),
     {NumPartitions,
      [{IndexAsInt, SeedNode}
-      || IndexAsInt <- lists:seq(0, (?RINGTOP) -1 -(?RINGTOP rem NumPartitions), Inc)]}.
+      || IndexAsInt
+             <- lists:seq(0,
+                          (?RINGTOP) - 1 - (?RINGTOP) rem NumPartitions,
+                          Inc)]}.
 
 %% @doc Find the Node that owns the partition identified by IndexAsInt.
 -spec lookup(IndexAsInt :: index_as_int(),
@@ -111,7 +114,8 @@ fresh(NumPartitions, SeedNode) ->
 
 lookup(IndexAsInt, CHash) ->
     {_NumPartitions, NodeEntries} = CHash,
-    {IndexAsInt, Node} = proplists:lookup(IndexAsInt, NodeEntries),
+    {IndexAsInt, Node} = proplists:lookup(IndexAsInt,
+                                          NodeEntries),
     Node.
 
 sha(Bin) -> crypto:hash(sha, Bin).
@@ -141,7 +145,8 @@ merge_rings(CHashA, CHashB) ->
     {NumPartitions, NodeEntriesB} = CHashB,
     {NumPartitions,
      [{I, random_node(NodeA, NodeB)}
-      || {{I, NodeA}, {I, NodeB}} <- lists:zip(NodeEntriesA, NodeEntriesB)]}.
+      || {{I, NodeA}, {I, NodeB}}
+             <- lists:zip(NodeEntriesA, NodeEntriesB)]}.
 
 %% @doc Given the integer representation of a chash key,
 %%      return the next ring index integer value.
@@ -166,7 +171,10 @@ nodes(CHash) ->
 ordered_from(Index, {NumPartitions, NodeEntries}) ->
     <<IndexAsInt:160/integer>> = Index,
     Inc = ring_increment(NumPartitions),
-    {NodeEntriesA, NodeEntriesB} = lists:split(IndexAsInt div Inc + 1, NodeEntries),
+    {NodeEntriesA, NodeEntriesB} = lists:split(IndexAsInt
+                                                   div Inc
+                                                   + 1,
+                                               NodeEntries),
     NodeEntriesB ++ NodeEntriesA.
 
 %% @doc Given an object key, return all NodeEntries in reverse order
@@ -236,9 +244,9 @@ successors(Index, CHash, N) ->
 update(IndexAsInt, Name, CHash) ->
     {NumPartitions, NodeEntries} = CHash,
     NewNodeEntries = lists:keyreplace(IndexAsInt,
-                                1,
-                                NodeEntries,
-                                {IndexAsInt, Name}),
+                                      1,
+                                      NodeEntries,
+                                      {IndexAsInt, Name}),
     {NumPartitions, NewNodeEntries}.
 
 %% ====================================================================
@@ -268,9 +276,12 @@ random_node(NodeA, NodeB) ->
 -ifdef(TEST).
 
 fresh_sizes_test() ->
-    lists:foreach(fun(I) ->
-        ?assertEqual(I, (length(chash:nodes(chash:fresh(I, the_node)))))
-    end, [1, 10000]).
+    lists:foreach(fun (I) ->
+                          ?assertEqual(I,
+                                       (length(chash:nodes(chash:fresh(I,
+                                                                       the_node)))))
+                  end,
+                  [1, 10000]).
 
 update_test() ->
     Node = old@host,
@@ -281,14 +292,13 @@ update_test() ->
                           {Index, _} = lists:nth(N, NodeEntries),
                           Index
                   end,
-
     {5,
      [{_, Node},
       {_, Node},
       {_, Node},
       {_, Node},
-      {_, Node}]} = CHash,
-
+      {_, Node}]} =
+        CHash,
     % Test update...
     FirstIndex = GetNthIndex(1, CHash),
     ThirdIndex = GetNthIndex(3, CHash),

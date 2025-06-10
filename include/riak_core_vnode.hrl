@@ -1,6 +1,8 @@
--type sender_type() :: fsm | server .
+-type sender_type() :: fsm | server.
 
--type sender() :: {sender_type(), reference() | tuple() | ignore_ref , pid()} | ignore.
+-type sender() :: {sender_type(),
+                   reference() | tuple() | ignore_ref, pid()} |
+                  ignore.
 
 -type partition() :: chash:index_as_int().
 

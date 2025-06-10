@@ -141,6 +141,9 @@ compare_dates(A, B) when is_list(A) ->
 compare_dates(A, B) when is_list(B) ->
     compare_dates(A, rfc1123_to_now(B)).
 
+% TODO httpd_utils:convert_request_date/1 exists, why can't dialyzer find it?
+-dialyzer({nowarn_function, [{rfc1123_to_now, 1}]}).
+
 rfc1123_to_now(String) when is_list(String) ->
     GSec =
         calendar:datetime_to_gregorian_seconds(httpd_util:convert_request_date(String)),

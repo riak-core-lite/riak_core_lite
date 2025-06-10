@@ -178,7 +178,7 @@ service_down(Id) ->
 service_down(Id, true) ->
     gen_server:call(?MODULE,
                     {service_down, Id, health_check},
-                    infinitiy);
+                    infinity);
 service_down(Id, false) -> service_down(Id).
 
 node_up() ->

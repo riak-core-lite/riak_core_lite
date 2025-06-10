@@ -225,23 +225,25 @@ check_tainted(Ring = #chstate{}, Msg) ->
     end.
 
 -spec unset_tainted(chstate()) -> chstate().
+
 unset_tainted(Ring) ->
     update_meta(riak_core_ring_tainted, false, Ring).
 
 -spec set_lastgasp(chstate()) -> chstate().
+
 set_lastgasp(Ring) ->
     update_meta(riak_core_ring_lastgasp, true, Ring).
 
 -spec check_lastgasp(chstate()) -> boolean().
+
 check_lastgasp(Ring) ->
     case get_meta(riak_core_ring_lastgasp, Ring) of
-        {ok, true} ->
-            true;
-        _ ->
-            false
+        {ok, true} -> true;
+        _ -> false
     end.
 
 -spec unset_lastgasp(chstate()) -> chstate().
+
 unset_lastgasp(Ring) ->
     update_meta(riak_core_ring_lastgasp, false, Ring).
 
@@ -536,17 +538,14 @@ reconcile(ExternState, MyState) ->
                   "Error: riak_core_ring/reconcile :: reconcilin"
                   "g tainted external ring"),
     check_tainted(MyState,
-                  "Error: riak_core_ring/reconcile :: "
-                  "reconciling tainted internal ring"),
+                  "Error: riak_core_ring/reconcile :: reconcilin"
+                  "g tainted internal ring"),
     case check_lastgasp(ExternState) of
-        true ->
-            {no_change, MyState};
+        true -> {no_change, MyState};
         false ->
             case internal_reconcile(MyState, ExternState) of
-                {false, State} ->
-                    {no_change, State};
-                {true, State} ->
-                    {new_ring, State}
+                {false, State} -> {no_change, State};
+                {true, State} -> {new_ring, State}
             end
     end.
 
@@ -2013,11 +2012,12 @@ equal_cstate(StateA, StateB, false) ->
     T4 = equal_rings(StateA, StateB),
     %% Clear fields checked manually and test remaining through equality.
     %% Note: We do not consider cluster name in equality.
-    T5 = (remaining_fields(StateA) =:= remaining_fields(StateB)),
-
+    T5 = remaining_fields(StateA) =:=
+             remaining_fields(StateB),
     T1 andalso T2 andalso T3 andalso T4 andalso T5.
 
-remaining_fields(#chstate{next = Next, claimant = Claimant}) ->
+remaining_fields(#chstate{next = Next,
+                          claimant = Claimant}) ->
     {Next, Claimant}.
 
 %% @private
@@ -2336,12 +2336,14 @@ lasgasp_test() ->
     RingA = fresh(4, a),
     RingB = fresh(4, b),
     RingA1 = set_lastgasp(RingA),
-    ?assertMatch(false, check_lastgasp(RingA)),
-    ?assertMatch(true, check_lastgasp(RingA1)),
-    ?assertMatch({no_change, RingB}, reconcile(RingA1, RingB)),
-
-    ?assertMatch(true, nearly_equal(RingA, unset_lastgasp(RingA1))),
-    ?assertMatch(false, check_lastgasp(unset_lastgasp(RingA1))).
+    ?assertMatch(false, (check_lastgasp(RingA))),
+    ?assertMatch(true, (check_lastgasp(RingA1))),
+    ?assertMatch({no_change, RingB},
+                 (reconcile(RingA1, RingB))),
+    ?assertMatch(true,
+                 (nearly_equal(RingA, unset_lastgasp(RingA1)))),
+    ?assertMatch(false,
+                 (check_lastgasp(unset_lastgasp(RingA1)))).
 
 resize_xfer_test_() ->
     {setup,
