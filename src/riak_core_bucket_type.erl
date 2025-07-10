@@ -163,6 +163,7 @@ common_defaults() ->
      {notfound_ok, true},
      {n_val,3},
      {last_write_wins,false},
+     {aae_tree_exclude, false},
      {precommit, []},
      {postcommit, []},
      {chash_keyfun, {riak_core_util, chash_std_keyfun}}].

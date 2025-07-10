@@ -188,6 +188,8 @@ resolve_prop({sync_on_write, _}, {sync_on_write, one}) ->
     one;
 resolve_prop({sync_on_write, one}, {sync_on_write, _}) ->
     one;
+resolve_prop({aae_tree_exclude, Excl1}, {aae_tree_exclude, Excl2}) ->
+    Excl1 andalso Excl2;
 resolve_prop({_, V1}, {_, _V2}) ->
     V1.
 
