@@ -32,6 +32,8 @@
          add_source/4, del_source/2,
          add_grant/3, add_revoke/3, check_permission/2, check_permissions/2,
          get_username/1, is_enabled/0, enable/0, disable/0, status/0,
+         get_users/0, get_groups/0,
+         get_user_grants/1, get_group_grants/1,
          get_ciphers/0, set_ciphers/1, print_ciphers/0]).
 
 -include_lib("kernel/include/logger.hrl").
@@ -111,14 +113,17 @@ print_user(User) ->
             print_users([{Name, [Details]}])
     end.
 
-print_users() ->
-    Users = riak_core_metadata:fold(fun({_Username, [?TOMBSTONE]}, Acc) ->
-                                            Acc;
-                                        ({Username, Options}, Acc) ->
+-spec get_users() -> [string()].
+get_users() ->
+    riak_core_metadata:fold(fun({_Username, [?TOMBSTONE]}, Acc) ->
+                                    Acc;
+                               ({Username, Options}, Acc) ->
                                     [{Username, Options}|Acc]
-                            end, [], {<<"security">>, <<"users">>}),
-    print_users(Users).
+                            end, [], {<<"security">>, <<"users">>}).
 
+print_users() ->
+    Users = get_users(),
+    print_users(Users).
 
 print_users(Users) ->
     riak_core_console_table:print([{username, 10}, {'member of', 15}, {password, 40}, {options, 30}],
@@ -157,12 +162,16 @@ print_group(Group) ->
             print_groups([{Name, [Details]}])
     end.
 
-print_groups() ->
-    Groups = riak_core_metadata:fold(fun({_Groupname, [?TOMBSTONE]}, Acc) ->
-                                             Acc;
-                                        ({Groupname, Options}, Acc) ->
+-spec get_groups() -> [string()].
+get_groups() ->
+    riak_core_metadata:fold(fun({_Groupname, [?TOMBSTONE]}, Acc) ->
+                                    Acc;
+                               ({Groupname, Options}, Acc) ->
                                     [{Groupname, Options}|Acc]
-                            end, [], {<<"security">>, <<"groups">>}),
+                            end, [], {<<"security">>, <<"groups">>}).
+
+print_groups() ->
+    Groups = get_groups(),
     print_groups(Groups).
 
 print_groups(Groups) ->
@@ -923,6 +932,16 @@ concat_role(group, Name) ->
 get_context(Username) when is_binary(Username) ->
     Grants = group_grants(accumulate_grants(Username, user)),
     #context{username=Username, grants=Grants, epoch=os:timestamp()}.
+
+
+-spec get_user_grants(string()) -> [permission()].
+get_user_grants(User) ->
+    accumulate_grants(User, user).
+
+-spec get_group_grants(string()) -> [permission()].
+get_group_grants(User) ->
+    accumulate_grants(User, group).
+
 
 accumulate_grants(Role, Type) ->
     %% The 'all' grants always apply
