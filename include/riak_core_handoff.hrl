@@ -20,7 +20,7 @@
 -type predicate() :: fun((any()) -> boolean()).
 
 -type index() :: chash:index_as_int().
--type mod_src_tgt() :: {module(), index(), index()} | {undefined, undefined, undefined}.
+-type mod_src_tgt() :: {module(), index(), index()}.
 -type mod_partition() :: {module(), index()}.
 
 -type db_dynamic_size_fun()
@@ -30,7 +30,7 @@
   :: {db_dynamic_size_fun(), dynamic} | db_size_result().
 
 -record(handoff_status,
-        { mod_src_tgt           :: mod_src_tgt(),
+        { mod_src_tgt           :: mod_src_tgt()|undefined,
           src_node              :: node(),
           target_node           :: node(),
           direction             :: inbound | outbound,

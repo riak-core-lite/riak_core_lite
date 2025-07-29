@@ -286,10 +286,11 @@ handle_cast({kill_xfer, ModSrcTarget, Reason}, State) ->
 handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
     case lists:keytake(Ref, #handoff_status.transport_mon, HS) of
         {value,
-         #handoff_status{mod_src_tgt={M, S, I}, direction=Dir, vnode_pid=Vnode,
+         #handoff_status{mod_src_tgt=ModSrcTarget, direction=Dir, vnode_pid=Vnode,
                          vnode_mon=VnodeM, req_origin=Origin},
          NewHS
         } ->
+            {M, S, I} = expand_mod_source_target(ModSrcTarget),
             WarnVnode =
                 case Reason of
                     %% if the reason the handoff process died was anything other
@@ -299,10 +300,26 @@ handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
                     X when X == max_concurrency orelse
                            (element(1, X) == shutdown andalso
                             element(2, X) == max_concurrency) ->
-                        ?LOG_INFO("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
+                        ShouldILog =
+                        application:get_env(
+                            riak_core, handoff_log_max_concurrency, false),
+                        case ShouldILog of
+                            true ->
+                                ?LOG_INFO(
+                                    "An ~w handoff of partition ~w ~w "
+                                    "was terminated for reason: ~w",
+                                    [Dir, M, I, Reason]
+                                );
+                            false ->
+                                ok
+                        end,
                         true;
                     _ ->
-                        ?LOG_ERROR("An ~w handoff of partition ~w ~w was terminated for reason: ~w~n", [Dir,M,I,Reason]),
+                        ?LOG_ERROR(
+                            "An ~w handoff of partition ~w ~w "
+                            "was terminated for reason: ~w",
+                            [Dir, M, I, Reason]
+                        ),
                         true
                 end,
 
@@ -334,9 +351,10 @@ handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
         false ->
             case lists:keytake(Ref, #handoff_status.vnode_mon, HS) of
                 {value,
-                 #handoff_status{mod_src_tgt={M,_,I}, direction=Dir,
+                 #handoff_status{mod_src_tgt=ModSrcTarget, direction=Dir,
                                  transport_pid=Trans, transport_mon=TransM},
                  NewHS} ->
+                    {M, _, I} = expand_mod_source_target(ModSrcTarget),
                     %% In this case the vnode died and the handoff
                     %% sender must be killed.
                     ?LOG_ERROR("An ~w handoff of partition ~w ~w was "
@@ -363,8 +381,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Private
 %%%===================================================================
 
+-ifdef(TEST).
+expand_mod_source_target(undefined) ->
+    {undefined, undefined, undefined};
+expand_mod_source_target(ModSourceTarget) ->
+    ModSourceTarget.
+-else.
+expand_mod_source_target(ModSourceTarget) ->
+    ModSourceTarget.
+-endif.
+
 build_status(HO) ->
-    #handoff_status{mod_src_tgt={Mod, SrcP, TargetP},
+    #handoff_status{mod_src_tgt=ModSrcTarget,
                     src_node=SrcNode,
                     target_node=TargetNode,
                     direction=Dir,
@@ -372,6 +400,7 @@ build_status(HO) ->
                     timestamp=StartTS,
                     transport_pid=TPid,
                     type=Type}=HO,
+    {Mod, SrcP, TargetP} = expand_mod_source_target(ModSrcTarget),
     {status_v2, [{mod, Mod},
                  {src_partition, SrcP},
                  {target_partition, TargetP},
@@ -528,34 +557,40 @@ send_handoff(HOType, {Mod, Src, Target}, Node, Vnode, HS, {Filter, FilterModFun}
                             HOAcc0 = undefined,
                             HONotSentFun = undefined
                     end,
-                    HOOpts = [{filter, HOFilter},
-                              {notsent_acc0, HOAcc0},
-                              {notsent_fun, HONotSentFun} | BaseOpts],
-                    {ok, Pid} = riak_core_handoff_sender_sup:start_sender(HOType,
-                                                                          Mod,
-                                                                          Node,
-                                                                          Vnode,
-                                                                          HOOpts),
+                    HOOpts =
+                        [
+                            {filter, HOFilter},
+                            {notsent_acc0, HOAcc0},
+                            {notsent_fun, HONotSentFun},
+                            {origin, Origin}
+                        ] ++
+                        BaseOpts,
+                    {ok, Pid} =
+                        riak_core_handoff_sender_sup:start_sender(
+                            HOType, Mod, Node, Vnode, HOOpts),
                     PidM = monitor(process, Pid),
                     Size = validate_size(proplists:get_value(size, Opts)),
 
                     %% successfully started up a new sender handoff
-                    {ok, #handoff_status{ transport_pid=Pid,
-                                          transport_mon=PidM,
-                                          direction=outbound,
-                                          timestamp=os:timestamp(),
-                                          src_node=node(),
-                                          target_node=Node,
-                                          mod_src_tgt={Mod, Src, Target},
-                                          vnode_pid=Vnode,
-                                          vnode_mon=VnodeM,
-                                          status=[],
-                                          stats=dict:new(),
-                                          type=HOType,
-                                          req_origin=Origin,
-                                          filter_mod_fun=FilterModFun,
-                                          size=Size
-                                        }
+                    {
+                        ok, 
+                        #handoff_status{
+                            transport_pid=Pid,
+                            transport_mon=PidM,
+                            direction=outbound,
+                            timestamp=os:timestamp(),
+                            src_node=node(),
+                            target_node=Node,
+                            mod_src_tgt={Mod, Src, Target},
+                            vnode_pid=Vnode,
+                            vnode_mon=VnodeM,
+                            status=[],
+                            stats=dict:new(),
+                            type=HOType,
+                            req_origin=Origin,
+                            filter_mod_fun=FilterModFun,
+                            size=Size
+                        }
                     };
 
                 %% handoff already going, just return it
@@ -578,7 +613,6 @@ receive_handoff (SSLOpts) ->
                                   transport_mon=PidM,
                                   direction=inbound,
                                   timestamp=os:timestamp(),
-                                  mod_src_tgt={undefined, undefined, undefined},
                                   src_node=undefined,
                                   target_node=undefined,
                                   status=[],

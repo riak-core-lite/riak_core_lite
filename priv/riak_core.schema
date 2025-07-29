@@ -37,6 +37,26 @@
   Size >= 8
  end}.
 
+%% @doc span of vnodes to be involved in repair.
+%% Minimum requirement is for a pair of vnodes, but when nval is set to 3 or
+%% higher, a double_pair can be requested - and 4 nodes will be asked to
+%% contribute to each repair.
+%% Within repair negative filters are used so that overlapping sources for the
+%% repair will not pass the same key through their handoff filter function. 
+%% This avoids double-sending, but not any work done by the backend fold to
+%% return the object.
+%% In Riak KV double_pair should only be used with the repair_deferred option,
+%% so that filtered keys avoid a fetch (as the fetch is deferred until after
+%% after the filter has been passed).  Without support (the leveled backend is
+%% required) and configuration of this option, increasing the repair span will
+%% still lead to the majority of effort in repair being duplicated, despite the
+%% use of negative filters.
+{mapping, "repair_span", "riak_core.repair_span", [
+  {datatype, {enum, [pair, double_pair]}},
+  {default, pair},
+  {commented, pair}
+]}.
+
 %% @doc Whether the erlang kernel `global` application should prevent
 %% overlapping partitions.
 %% Without disabling, this will default to `on` in OTP 25.  As Riak is

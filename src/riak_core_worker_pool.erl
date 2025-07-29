@@ -244,15 +244,21 @@ handle_info(log_timer, StateName, State) ->
             _ = 
                 ?LOG_INFO(
                     "worker_pool=~w has qlen=~w with last_checkout=~w ms ago",
-                    [State#state.pool_name,
+                    [
+                        State#state.pool_name,
                         QL,
-                        LastCheckout  div 1000]),
+                        LastCheckout div 1000
+                    ],
+                    #{log_type => metric}
+                ),
             ok;
         {true, []} ->
             _ =
                 ?LOG_INFO(
                     "worker_pool=~w has qlen=0 and no items checked out",
-                    [State#state.pool_name]);
+                    [State#state.pool_name],
+                #{log_type => metric}
+                );
         _ ->
             ok
     end,

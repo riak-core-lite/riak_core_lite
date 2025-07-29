@@ -51,12 +51,17 @@
                     [Type, Module, SrcNode, SrcPartition, TargetNode,
                      TargetPartition] ++ Args)).
 
+-type filter_fun() :: fun((term()) -> boolean()).
+-type encoder_fun() :: fun((term(), term()) -> corrupted|ignore|binary()).
+
+
 %% Accumulator for the visit item HOF
 -record(ho_acc,
         {
           ack                  :: non_neg_integer(),
           error                :: ok | {error, any()},
-          filter               :: function(),
+          filter               :: filter_fun(),
+          encoder              :: encoder_fun(),
           module               :: module(),
           parent               :: pid(),
           socket               :: any(),
@@ -66,6 +71,7 @@
 
           total_objects        :: non_neg_integer(),
           total_bytes          :: non_neg_integer(),
+          filtered_objects = 0 :: non_neg_integer(),
 
           item_queue           :: [binary()],
           item_queue_length    :: non_neg_integer(),
@@ -118,9 +124,17 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
 
     try
         %% Give workers one more chance to abort or get a lock or whatever.
-        FoldOpts = maybe_call_handoff_started(Module, SrcPartition),
+        %% Also can pass options {[OptKey, OptVal}] or a list of
+        %% [{OptKey, OptVal}] options specific to one type of handoff using:
+        %% {HandoffType, [{OptKey, OptVal}]}
+        FoldOpts =
+            filter_foldopts(
+                Type,
+                maybe_call_handoff_started(Module, SrcPartition)
+            ),
 
         Filter = get_filter(Opts),
+        Encoder = get_encoder(Module, Type, {TargetNode, TargetPartition}),
         [_Name,Host] = string:tokens(atom_to_list(TargetNode), "@"),
         {ok, Port} = get_handoff_port(TargetNode),
         TNHandoffIP =
@@ -159,6 +173,7 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                 ack=0,
                 error=ok,
                 filter=Filter,
+                encoder=Encoder,
                 module=Module,
                 parent=ParentPid,
                 socket=Socket,
@@ -195,13 +210,57 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                     "Initial sync message returned ~w error timeout "
                     "between src_partition=~p trg_partition=~p "
                     "type=~w module=~w ",
-                    [DirectionS,
-                        SrcPartition, TargetPartition,
-                        Type, Module]),
+                    [
+                        DirectionS,
+                        SrcPartition,
+                        TargetPartition,
+                        Type,
+                        Module
+                    ]
+                ),
                 exit({shutdown, timeout});
             {error, _, closed} ->
                 exit({shutdown, max_concurrency})
         end,
+
+        UpdFilter =
+            case {Type, lists:keyfind(origin, 1, Opts)} of
+                {repair, {origin, Origin}} ->
+                    NegativeFilters = 
+                        riak_core_vnode_manager:xfer_request_filter(
+                            Origin, 
+                            {Module, SrcPartition, TargetPartition}
+                        ),
+                    case NegativeFilters of
+                        ok ->
+                            put(last_hash, no_cache),
+                            Filter;
+                        NegativeFilters when is_list(NegativeFilters) ->
+                            ?LOG_INFO(
+                                "~w negative filters to be used in repair "
+                                "between ~w and ~w for ~w",
+                                [
+                                    length(NegativeFilters),
+                                    SrcPartition,
+                                    TargetPartition,
+                                    Module
+                                ]
+                            ),
+                            fun(K) ->
+                                case Filter(K) of
+                                    true ->
+                                        lists:all(
+                                            fun(F) -> not F(K) end,
+                                            NegativeFilters
+                                        );
+                                    false ->
+                                        false
+                                end
+                            end
+                    end;
+                _ ->
+                    Filter
+            end,
 
         ?LOG_INFO("Starting ~p transfer of ~p from ~p ~p to ~p ~p",
                 [Type, Module, SrcNode, SrcPartition,
@@ -212,7 +271,11 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
 
         Req = 
             riak_core_util:make_fold_req(
-                fun visit_item/3, HandoffAcc, false, FoldOpts),
+                fun visit_item/3,
+                HandoffAcc#ho_acc{filter=UpdFilter},
+                false,
+                FoldOpts
+            ),
 
         %% IFF the vnode is using an async worker to perform the fold
         %% then sync_command will return error on vnode crash,
@@ -239,9 +302,11 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
             module=Module,
             parent=ParentPid,
             tcp_mod=TcpMod,
-            total_objects=TotalObjects,
+            total_objects=TotalObjs,
             total_bytes=TotalBytes,
-            stats=FinalStats,
+            filtered_objects = SkippedObjs,
+            item_queue_length = LastBatchLength,
+            item_queue_byte_size = LastBatchByteSize,
             notsent_acc=NotSentAcc,
             rcv_timeout=RecvTimeout} = AccRecord,
 
@@ -263,29 +328,46 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                             "Final sync message returned ~w error timeout "
                             "between src_partition=~p trg_partition=~p "
                             "type=~w module=~w ",
-                            [DirectionE,
-                                SrcPartition, TargetPartition,
-                                Type, Module]
+                            [
+                                DirectionE,
+                                SrcPartition,
+                                TargetPartition,
+                                Type,
+                                Module
+                            ]
                         ),
                         exit({shutdown, timeout})
                 end,
 
                 FoldTimeDiff = end_fold_time(StartFoldTime),
-                ThroughputBytes = TotalBytes/FoldTimeDiff,
+                ThroughputBytes =
+                    (TotalBytes + LastBatchByteSize)/FoldTimeDiff,
 
                 ok = 
                     ?LOG_INFO(
                         "~p transfer of ~p from ~p ~p to ~p ~p"
                         " completed: sent ~s bytes in ~p of ~p objects"
                         " in ~.2f seconds (~s/second)",
-                        [Type, Module,
-                            SrcNode, SrcPartition,
-                            TargetNode, TargetPartition,
-                        riak_core_format:human_size_fmt(
-                            "~.2f", TotalBytes),
-                        FinalStats#ho_stats.objs, TotalObjects, FoldTimeDiff,
-                        riak_core_format:human_size_fmt(
-                            "~.2f", ThroughputBytes)]),
+                        [
+                            Type,
+                            Module,
+                            SrcNode,
+                            SrcPartition,
+                            TargetNode,
+                            TargetPartition,
+                            riak_core_format:human_size_fmt(
+                                "~.2f",
+                                TotalBytes + LastBatchByteSize
+                            ),
+                            TotalObjs + LastBatchLength - SkippedObjs,
+                            TotalObjs + LastBatchLength,
+                            FoldTimeDiff,
+                            riak_core_format:human_size_fmt(
+                                "~.2f",
+                                ThroughputBytes
+                            )
+                        ]
+                    ),
                 case Type of
                     repair ->
                         ok;
@@ -324,6 +406,22 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                        [Class, Reason, Stacktrace]),
              gen_fsm:send_event(ParentPid, {handoff_error, Class, Reason})
      end.
+
+-spec filter_foldopts(ho_type(), proplists:proplist()) -> proplists:proplist().
+filter_foldopts(HoType, FoldOpts) ->
+    filter_foldopts(HoType, FoldOpts, []).
+
+filter_foldopts(_HoType, [], FilteredOps) ->
+    FilteredOps;
+filter_foldopts(HoType, [{HoType, TypeOpts}|Rest], FilteredOpts)
+        when is_list(TypeOpts) ->
+    filter_foldopts(HoType, Rest, TypeOpts ++ FilteredOpts);
+filter_foldopts(HoType, [{_AltHoType, TypeOpts}|Rest], FilteredOpts)
+        when is_list(TypeOpts) ->
+    filter_foldopts(HoType, Rest, FilteredOpts);
+filter_foldopts(HoType, [{OptKey, OptVal}|Rest], FilteredOpts) ->
+    filter_foldopts(HoType, Rest, [{OptKey, OptVal}|FilteredOpts]).
+
 
 -spec set_timeouts_and_thresholds(ho_acc()) -> ho_acc().
 set_timeouts_and_thresholds(HoAcc) ->
@@ -366,7 +464,7 @@ set_timeouts_and_thresholds(HoAcc) ->
 visit_item(K, V, Acc0) ->
     Acc = maybe_keepalive_receiver(Acc0),
     #ho_acc{filter=Filter,
-            module=Module,
+            encoder=Encoder,
             total_objects=TotalObjects,
             item_queue=ItemQueue,
             item_queue_length=ItemQueueLength,
@@ -377,11 +475,13 @@ visit_item(K, V, Acc0) ->
             notsent_acc=NotSentAcc} = Acc,
     case Filter(K) of
         true ->
-            case Module:encode_handoff_item(K, V) of
+            case Encoder(K, V) of
                 corrupted ->
                     {Bucket, Key} = K,
                     ?LOG_WARNING(
                         "Unreadable object ~p/~p discarded", [Bucket, Key]),
+                    Acc;
+                ignore ->
                     Acc;
                 BinObj ->
                     ItemQueue2 = [BinObj | ItemQueue],
@@ -407,8 +507,10 @@ visit_item(K, V, Acc0) ->
             NewNotSentAcc = handle_not_sent_item(NotSentFun, NotSentAcc, K),
             Acc#ho_acc{
                 error=ok,
+                filtered_objects=Acc#ho_acc.filtered_objects + 1,
                 total_objects=TotalObjects+1,
-                notsent_acc=NewNotSentAcc}
+                notsent_acc=NewNotSentAcc
+            }
     end.
 
 handle_not_sent_item(NotSentFun, Acc, Key) when is_function(NotSentFun) ->
@@ -526,7 +628,7 @@ send_objects(ItemsReverseList, Acc) ->
     case TcpMod:send(Socket, M) of
         ok ->
             Acc0#ho_acc{ack=Ack+1, error=ok, stats=Stats3,
-                       total_objects=TotalObjects+NObjects,
+                       total_objects=TotalObjects+BatchCount,
                        total_bytes=TotalBytes+NumBytes,
                        keepalive_next=next_keepalive_time(),
                        item_queue=[],
@@ -695,6 +797,15 @@ get_filter(Opts) ->
     case proplists:get_value(filter, Opts) of
         none -> fun(_) -> true end;
         Filter -> Filter
+    end.
+
+-spec get_encoder(module(), ho_type(), {node(), integer()}) -> encoder_fun().
+get_encoder(Module, Type, Target) ->
+    case lists:member({handoff_encoding_fun, 2}, Module:module_info(exports)) of
+        true ->
+            Module:handoff_encoding_fun(Type, Target);
+        _ ->
+            fun Module:encode_handoff_item/2
     end.
 
 -spec send_sync(
