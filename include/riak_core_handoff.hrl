@@ -23,6 +23,12 @@
 -type mod_src_tgt() :: {module(), index(), index()}.
 -type mod_partition() :: {module(), index()}.
 
+-type db_dynamic_size_fun()
+  :: fun(() -> db_size()).
+-type db_size_result() :: {non_neg_integer(), bytes | objects}.
+-type db_size()
+  :: {db_dynamic_size_fun(), dynamic} | db_size_result().
+
 -record(handoff_status,
         { mod_src_tgt           :: mod_src_tgt()|undefined,
           src_node              :: node(),
@@ -38,7 +44,7 @@
           type = undefined      :: ho_type() | undefined,
           req_origin            :: node(),
           filter_mod_fun        :: {module(), atom()} | undefined,
-          size = {0, objects}   :: {function(), dynamic} | {non_neg_integer(), bytes | objects}
+          size = {0, objects}   :: db_size() | undefined
         }).
 -type handoff_status() :: #handoff_status{}.
 
