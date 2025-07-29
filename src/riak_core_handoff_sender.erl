@@ -253,8 +253,8 @@ start_fold(TargetNode, Module, {Type, Opts}, ParentPid, SslOpts) ->
                                             fun(F) -> not F(K) end,
                                             NegativeFilters
                                         );
-                                    NotTrue ->
-                                        NotTrue
+                                    false ->
+                                        false
                                 end
                             end
                     end;
