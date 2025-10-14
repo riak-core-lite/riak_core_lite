@@ -17,15 +17,15 @@ The [riak_core_lite](https://riak-core-lite.github.io/) project also provides a 
 
 Riak is built on top of the [Erlang/OTP platform](https://github.com/erlang/otp).  Supported versions for this release are:
 
-![OTP Recommended](https://img.shields.io/badge/OTP_Recommended_Version-_OTP_24_-blue)
+![OTP Recommended](https://img.shields.io/badge/OTP_Recommended_Version-_OTP_26_-green)
 
-For later OTP versions, an alternative `openriak-<release>` branch will be required e.g. [`openriak-3.4` for OTP 26](https://github.com/OpenRiak/riak_core/tree/openriak-3.4).  See [the roadmap discussion](https://github.com/orgs/OpenRiak/discussions/19) for further details.
+![OTP Supported](https://img.shields.io/badge/OTP_Backwards_Compatible-_OTP_24_-blue)
+
+For later OTP versions, an alternative `openriak-<release>` branch will be required.  See [the roadmap discussion](https://github.com/orgs/OpenRiak/discussions/19) for further details.
 
 ## Contributing
 
-We love community code, bug fixes, and other forms of contribution. We
-use GitHub Issues and Pull Requests for contributions to this and all
-other code. To get started:
+We love community code, bug fixes, and other forms of contribution. We use GitHub Issues and Pull Requests for contributions to this and all other code. To get started:
 
 1. Fork this repository.
 2. Clone your fork or add the remote if you already have a clone of the repository.
