@@ -76,17 +76,29 @@ fresh(Node, Count) ->
 
 % @doc Return true if Va is a direct descendant of Vb, else false -- remember, a vclock is its own descendant!
 -spec descends(Va :: vclock(), Vb :: vclock()) -> boolean().
-descends(_, []) ->
+descends(A, B) ->
+    descends(A, B, false).
+
+descends(_, [], _) ->
     % all vclocks descend from the empty vclock
     true;
-descends(Va, Vb) ->
-    [{NodeB, {CtrB, _T}}|RestB] = Vb,
-    case lists:keyfind(NodeB, 1, Va) of
-        false ->
-            false;
-        {_, {CtrA, _TSA}} ->
-            (CtrA >= CtrB) andalso descends(Va,RestB)
-        end.
+descends(A, B, _) when length(B) > length(A) ->
+    false;
+descends(A, B, true) ->
+    descends_sorted(A, B);
+descends(A, B, false) ->
+    descends_sorted(lists:sort(A), lists:sort(B)).
+
+descends_sorted(_A, []) ->
+    true;
+descends_sorted([{Node, {CtrA, _TA}}|RestA], [{Node, {CtrB, _TB}}|RestB])
+        when CtrA >= CtrB ->
+    descends_sorted(RestA, RestB);
+descends_sorted([{NodeA, {_CtrA, _TA}}|RestA], [{NodeB, {CtrB, TB}}|RestB])
+        when NodeA < NodeB ->
+    descends_sorted(RestA, [{NodeB, {CtrB, TB}}|RestB]);
+descends_sorted(_A, _B) ->
+    false.
 
 %% @doc does the given `vclock()' descend from the given `dot()'. The
 %% `dot()' can be any vclock entry returned from
@@ -125,7 +137,9 @@ dominates(A, B) ->
     %% and not equal(A, B). Do not "optimise" this to dodge the second
     %% descends call! I know that the laws of causality say that each
     %% actor must act serially, but Riak breaks that.
-    descends(A, B) andalso not descends(B, A).
+    AS = lists:sort(A),
+    BS = lists:sort(B),
+    descends(AS, BS, true) andalso not descends(BS, AS, true).
 
 % @doc Combine all VClocks in the input list into their least possible
 %      common descendant.
@@ -203,13 +217,14 @@ increment(Node, VClock) ->
 -spec increment(Node :: vclock_node(), IncTs :: timestamp(),
                 VClock :: vclock()) -> vclock().
 increment(Node, IncTs, VClock) ->
-    {{_Ctr, _TS}=C1,NewV} = case lists:keytake(Node, 1, VClock) of
-                                false ->
-                                    {{1, IncTs}, VClock};
-                                {value, {_N, {C, _T}}, ModV} ->
-                                    {{C + 1, IncTs}, ModV}
-                            end,
-    [{Node,C1}|NewV].
+    {{_Ctr, _TS}=C1,NewV} =
+        case lists:keytake(Node, 1, VClock) of
+            false ->
+                {{1, IncTs}, VClock};
+            {value, {_N, {C, _T}}, ModV} ->
+                {{C + 1, IncTs}, ModV}
+        end,
+    lists:sort([{Node,C1}|NewV]).
 
 
 % @doc Return the list of all nodes that have ever incremented VClock.
@@ -263,7 +278,9 @@ prune_vclock1(V,Now,BProps,HeadTime) ->
         false -> V
     end.
 
-get_property(Key, PairList) ->
+get_property(Key, PropertyMap) when is_map(PropertyMap) ->
+    maps:get(Key, PropertyMap);
+get_property(Key, PairList) when is_list(PairList) ->
     case lists:keyfind(Key, 1, PairList) of
       {_Key, Value} ->
         Value;
@@ -431,5 +448,60 @@ valid_entry_test() ->
     ?assertNot(valid_dot(undefined)),
     ?assertNot(valid_dot("huffle-puff")),
     ?assertNot(valid_dot([])).
+
+vclock_dominates_speed_test() ->
+    %% used for speed comparison with previous descends function
+    %% Running this test on an M1 macbook (clocks length of 16)
+    %% - previous 14ms
+    %% - this 7 ms
+    %% 
+    %% Using larger vclocks (length of 32)
+    %% - previous 47ms
+    %% - this 14 ms
+    %% 
+    %% Appears to have the quality of being faster, but also scaling linearly
+    %% 
+    %% For the minimum size (assuming some mutation and n=3) i.e 3 - the two
+    %% versions have the same performance
+    ClockSize = 16,
+    N1 = 'node1@127.0.0.1',
+    N2 = 'node2@127.0.0.1',
+    N3 = 'node3@127.0.0.1',
+    VnodeIDs =
+        lists:map(
+            fun(I) ->
+                Node = erlang:crc32(term_to_binary(lists:nth((I rem 3) + 1, [N1, N2, N3]))),
+                VNID = I bsl 16,
+                <<Node:32/integer, VNID:32/integer>>
+            end,
+            lists:seq(1, ClockSize)
+        ),
+    VCA =
+        lists:foldl(
+            fun(VID, Acc) ->
+                increment(VID, Acc)
+            end,
+            vclock:fresh(),
+            VnodeIDs
+        ),
+    VCB = increment(hd(VnodeIDs), VCA),
+    VCC = increment(lists:last(VnodeIDs), VCA),
+    VCAsort = lists:sort(VCA),
+    VCBsort = lists:sort(VCB),
+    VCCsort = lists:sort(VCC),
+    
+    SpeedTestFun =
+        fun(_I) ->
+            ?assert(dominates(VCB, VCA)),
+            ?assert(dominates(VCC, VCA)),
+            ?assert(dominates(VCBsort, VCAsort)),
+            ?assert(dominates(VCCsort, VCAsort)),
+            ?assert(not dominates(VCA, VCB))
+        end,
+    io:format(
+        user,
+        "Speed test result ~w~n",
+        [timer:tc(fun() -> lists:foreach(SpeedTestFun, lists:seq(1,1000)) end)]
+    ).
 
 -endif.

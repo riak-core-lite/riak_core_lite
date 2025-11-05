@@ -91,9 +91,7 @@ get({Prefix, SubPrefix}=FullPrefix, Key, Opts)
   when (is_binary(Prefix) orelse is_atom(Prefix)) andalso
        (is_binary(SubPrefix) orelse is_atom(SubPrefix)) ->
     PKey = prefixed_key(FullPrefix, Key),
-    Default = get_option(default, Opts, undefined),
-    ResolveMethod = get_option(resolver, Opts, lww),
-    AllowPut = get_option(allow_put, Opts, true),
+    {Default, ResolveMethod, AllowPut} = get_options(Opts, undefined, lww, true),
     case riak_core_metadata_manager:get(PKey) of
         undefined -> Default;
         Existing ->
@@ -385,5 +383,18 @@ broadcast(PKey, Obj) ->
 prefixed_key(FullPrefix, Key) ->
     {FullPrefix, Key}.
 
+%% Not refactored for iterators, but could be
+%% ... however lack of tests so not worth it, as not on critical path
 get_option(Key, Opts, Default) ->
     proplists:get_value(Key, Opts, Default).
+
+get_options([], DK, RM, AP) ->
+    {DK, RM, AP};
+get_options([{default, DK}|Opts], _DK, RM, AP) ->
+    get_options(Opts, DK, RM, AP);
+get_options([{resolver, RM}|Opts], DK, _RM, AP) ->
+    get_options(Opts, DK, RM, AP);
+get_options([{allow_put, AP}|Opts], DK, RM, _AP) ->
+    get_options(Opts, DK, RM, AP);
+get_options([_Opt|Opts], DK, RM, AP) ->
+    get_options(Opts, DK, RM, AP).

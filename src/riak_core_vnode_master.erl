@@ -48,10 +48,17 @@
 
 -define(LONG_TIMEOUT, 120*1000).
 
-make_name(VNodeMod,Suffix) -> list_to_atom(atom_to_list(VNodeMod)++Suffix).
-reg_name(VNodeMod) ->  make_name(VNodeMod, "_master").
+make_name(riak_kv_vnode, "_master") ->
+    riak_kv_vnode_master;
+make_name(VNodeMod, Suffix) ->
+    list_to_atom(atom_to_list(VNodeMod) ++ Suffix).
+
+reg_name(VNodeMod) -> 
+    make_name(VNodeMod, "_master").
 
 %% Given atom 'riak_kv_vnode_master', return 'riak_kv_vnode'.
+vmaster_to_vmod(riak_kv_vnode_master) ->
+    riak_kv_vnode;
 vmaster_to_vmod(VMaster) ->
     L = atom_to_list(VMaster),
     list_to_atom(lists:sublist(L,length(L)-7)).
@@ -126,13 +133,8 @@ coverage(Msg, {Index, Node}, Keyspaces, Sender, VMaster) ->
 %% VnodePid}'.
 command_return_vnode({Index,Node}, Msg, Sender, VMaster) ->
     Req = make_request(Msg, Sender, Index),
-    case riak_core_capability:get({riak_core, vnode_routing}, legacy) of
-        legacy ->
-            gen_server:call({VMaster, Node}, {return_vnode, Req}, ?LONG_TIMEOUT);
-        proxy ->
-            Mod = vmaster_to_vmod(VMaster),
-            riak_core_vnode_proxy:command_return_vnode({Mod,Index,Node}, Req)
-    end.
+    Mod = vmaster_to_vmod(VMaster),
+    riak_core_vnode_proxy:command_return_vnode({Mod,Index,Node}, Req).
 
 %% Send a synchronous command to an individual Index/Node combination.
 %% Will not return until the vnode has returned

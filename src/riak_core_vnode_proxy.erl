@@ -50,10 +50,19 @@
 -define(DEFAULT_CHECK_INTERVAL, 5000).
 -define(DEFAULT_OVERLOAD_THRESHOLD, 10000).
 
-reg_name(Mod, Index) ->
-    ModBin = atom_to_binary(Mod, latin1),
+reg_name(Mod, Index) when is_atom(Mod), is_integer(Index) ->
+    case persistent_term:get({?MODULE, {Mod, Index}}, undefined) of
+        undefined ->
+            ModBin = atom_to_binary(Mod),
+            Name = reg_name(<<$p,$r,$o,$x,$y,$_, ModBin/binary, $_>>, Index),
+            persistent_term:put({?MODULE, {Mod, Index}}, Name),
+            Name;
+        Name ->
+            Name
+    end;
+reg_name(ProxyModBin, Index) when is_binary(ProxyModBin)->
     IdxBin = list_to_binary(integer_to_list(Index)),
-    AllBin = <<$p,$r,$o,$x,$y,$_, ModBin/binary, $_, IdxBin/binary>>,
+    AllBin = <<ProxyModBin/binary, IdxBin/binary>>,
     binary_to_atom(AllBin, latin1).
 
 reg_name(Mod, Index, Node) ->
