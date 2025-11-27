@@ -19,14 +19,14 @@ Build upon the essence of Riak KV's core with an up-to-date, modular and extensi
 To get started with riak_core_lite you can follow Mariano Guerra's tutorials.
 They are based on the full riak_core, but are still applicable to riak_core_lite.
 
-1. [Setup](http://marianoguerra.org/posts/riak-core-tutorial-part-1-setup.html)
-2. [Starting](http://marianoguerra.org/posts/riak-core-tutorial-part-2-starting.html)
-3. [Ping Command](http://marianoguerra.org/posts/riak-core-tutorial-part-3-ping-command.html)
-4. [First Commands](http://marianoguerra.org/posts/riak-core-tutorial-part-4-first-commands.html)
-5. [Quorum Requests](http://marianoguerra.org/posts/riak-core-tutorial-part-5-quorum-requests.html)
-6. [Handoff](http://marianoguerra.org/posts/riak-core-tutorial-part-6-handoff.html)
-7. [HTTP API](http://marianoguerra.org/posts/riak-core-tutorial-part-8-http-api.html)
-9. [Persistent KV with leveled backend](http://marianoguerra.org/posts/riak-core-tutorial-part-9-persistent-kv-with-leveled-backend.html)
+1. [Setup](http://marianoguerra.org/posts/riak-core-tutorial-part-1-setup)
+2. [Starting](http://marianoguerra.org/posts/riak-core-tutorial-part-2-starting)
+3. [Ping Command](http://marianoguerra.org/posts/riak-core-tutorial-part-3-ping-command)
+4. [First Commands](http://marianoguerra.org/posts/riak-core-tutorial-part-4-first-commands)
+5. [Quorum Requests](http://marianoguerra.org/posts/riak-core-tutorial-part-5-quorum-requests)
+6. [Handoff](http://marianoguerra.org/posts/riak-core-tutorial-part-6-handoff)
+7. [HTTP API](http://marianoguerra.org/posts/riak-core-tutorial-part-8-http-api)
+9. [Persistent KV with leveled backend](http://marianoguerra.org/posts/riak-core-tutorial-part-9-persistent-kv-with-leveled-backend)
 
 ## Contributing
 
