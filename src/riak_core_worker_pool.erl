@@ -249,7 +249,7 @@ handle_info(log_timer, StateName, State) ->
                         QL,
                         LastCheckout div 1000
                     ],
-                    #{log_type => metric}
+                    #{domain => [background, metric]}
                 ),
             ok;
         {true, []} ->
@@ -257,7 +257,7 @@ handle_info(log_timer, StateName, State) ->
                 ?LOG_INFO(
                     "worker_pool=~w has qlen=0 and no items checked out",
                     [State#state.pool_name],
-                #{log_type => metric}
+                #{domain => [background, metric]}
                 );
         _ ->
             ok
