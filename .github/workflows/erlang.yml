@@ -3,10 +3,10 @@ name: Erlang CI
 on:
   push:
     branches:
-      - openriak-3.4
+      - openriak-4.0
   pull_request:
     branches:
-      - openriak-3.4
+      - openriak-4.0
 
 jobs:
 
@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        otp: [24, 26]
+        otp: [26, 28]
         os: [ubuntu-latest]
 
     steps:

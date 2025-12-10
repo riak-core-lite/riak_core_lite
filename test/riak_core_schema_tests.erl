@@ -21,7 +21,6 @@ basic_schema_test() ->
     cuttlefish_unit:assert_config(Config, "riak_core.handoff_ip", "0.0.0.0"),
     cuttlefish_unit:assert_config(Config, "riak_core.handoff_port", 8099 ),
     cuttlefish_unit:assert_not_configured(Config, "riak_core.handoff_ssl_options"),
-    cuttlefish_unit:assert_config(Config, "riak_core.dtrace_support", false),
     cuttlefish_unit:assert_config(Config, "riak_core.platform_bin_dir", "./bin"),
     cuttlefish_unit:assert_config(Config, "riak_core.platform_data_dir", "./data"),
     cuttlefish_unit:assert_config(Config, "riak_core.platform_etc_dir", "./etc"),
@@ -75,7 +74,6 @@ override_schema_test() ->
         {["handoff", "port"], 8888},
         {["handoff", "ssl", "certfile"], "/tmp/erlserver.pem"},
         {["handoff", "ssl", "keyfile"], "/tmp/erlkey/pem"},
-        {["dtrace"], on},
         %% Platform-specific installation paths (substituted by rebar)
         {["platform_bin_dir"], "/absolute/bin"},
         {["platform_data_dir"],"/absolute/data" },
@@ -100,7 +98,6 @@ override_schema_test() ->
     cuttlefish_unit:assert_config(Config, "riak_core.handoff_port", 8888),
     cuttlefish_unit:assert_config(Config, "riak_core.handoff_ssl_options.certfile", "/tmp/erlserver.pem"),
     cuttlefish_unit:assert_config(Config, "riak_core.handoff_ssl_options.keyfile", "/tmp/erlkey/pem"),
-    cuttlefish_unit:assert_config(Config, "riak_core.dtrace_support", true),
     cuttlefish_unit:assert_config(Config, "riak_core.platform_bin_dir", "/absolute/bin"),
     cuttlefish_unit:assert_config(Config, "riak_core.platform_data_dir", "/absolute/data"),
     cuttlefish_unit:assert_config(Config, "riak_core.platform_etc_dir", "/absolute/etc"),

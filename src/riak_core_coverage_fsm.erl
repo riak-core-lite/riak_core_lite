@@ -66,9 +66,18 @@
 
 -behaviour(gen_fsm).
 
--compile({nowarn_deprecated_function, 
-            [{gen_fsm, start_link, 3},
-                {gen_fsm, start_timer, 2}]}).
+-compile(
+    [
+        {
+            nowarn_deprecated_function, 
+            [
+                {gen_fsm, start_link, 3},
+                {gen_fsm, start_timer, 2}
+            ]
+        },
+        nowarn_deprecated_callback
+    ]
+).
 
 -export([start_link/3]).
 

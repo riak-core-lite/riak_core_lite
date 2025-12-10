@@ -6,7 +6,6 @@
   {vsn, git},
   {modules, []},
   {registered, []},
-  {included_applications, [riak_ensemble]},
   {applications, [
                   kernel,
                   stdlib,

@@ -646,7 +646,7 @@ send_objects(ItemsReverseList, Acc) ->
             throw_error(Acc0#ho_acc{stats=Stats3}, {error, SendFailure})
     end.
 
--spec throw_error(ho_acc(), {error, term()}) -> ok.
+-spec throw_error(ho_acc(), {error, term()}) -> no_return().
 throw_error(Acc, {error, Reason}) ->
     % The item_queue may be large, and hence obfuscate interesting information
     % in logs - so empty the queue before throwing an exception

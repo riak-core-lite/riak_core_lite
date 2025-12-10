@@ -1,6 +1,6 @@
 # Riak Core
 
-![Riak Core OpenRiak Status](https://github.com/OpenRiak/riak_core/actions/workflows/erlang.yml/badge.svg?branch=openriak-3.4)
+![Riak Core OpenRiak Status](https://github.com/OpenRiak/riak_core/actions/workflows/erlang.yml/badge.svg?branch=openriak-4.0)
 
 Riak Core is the distributed systems framework that forms the basis of how [Riak](https://github.com/OpenRiak/riak) distributes data and scales.
 More generally, it can be thought of as a toolkit for building distributed, scalable, fault-tolerant applications.
@@ -17,9 +17,9 @@ The [riak_core_lite](https://riak-core-lite.github.io/) project also provides a 
 
 Riak is built on top of the [Erlang/OTP platform](https://github.com/erlang/otp).  Supported versions for this release are:
 
-![OTP Recommended](https://img.shields.io/badge/OTP_Recommended_Version-_OTP_26_-green)
+![OTP Recommended](https://img.shields.io/badge/OTP_Recommended_Version-_OTP_28_-green)
 
-![OTP Supported](https://img.shields.io/badge/OTP_Backwards_Compatible-_OTP_24_-blue)
+![OTP Supported](https://img.shields.io/badge/OTP_Backwards_Compatible-_OTP_26_-blue)
 
 For later OTP versions, an alternative `openriak-<release>` branch will be required.  See [the roadmap discussion](https://github.com/orgs/OpenRiak/discussions/19) for further details.
 

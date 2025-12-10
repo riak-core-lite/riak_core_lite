@@ -41,11 +41,20 @@
 
 -behaviour(gen_fsm).
 
--compile({nowarn_deprecated_function, 
-            [{gen_fsm, start_link, 3},
+-compile(
+    [
+        {
+            nowarn_deprecated_function, 
+            [
+                {gen_fsm, start_link, 3},
                 {gen_fsm, send_event, 2},
                 {gen_fsm, sync_send_all_state_event, 2},
-                {gen_fsm, sync_send_all_state_event, 3}]}).
+                {gen_fsm, sync_send_all_state_event, 3}
+            ]
+        },
+        nowarn_deprecated_callback
+    ]
+).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3,

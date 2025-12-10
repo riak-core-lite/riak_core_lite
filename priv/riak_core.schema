@@ -212,15 +212,6 @@
   hidden
 ]}.
 
-%% @doc DTrace support Do not enable 'dtrace' unless your Erlang/OTP
-%% runtime is compiled to support DTrace.  DTrace is available in
-%% R15B01 (supported by the Erlang/OTP official source package) and in
-%% R14B04 via a custom source repository & branch.
-{mapping, "dtrace", "riak_core.dtrace_support", [
-  {default, off},
-  {datatype, flag}
-]}.
-
 %% @doc Platform-specific installation paths (substituted by rebar)
 {mapping, "platform_bin_dir", "riak_core.platform_bin_dir", [
   {datatype, directory},
