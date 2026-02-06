@@ -175,8 +175,22 @@ initiate_plan(ReqId, NVal, PartitionCount, UnavailableVnodes, PVC) ->
     % to always start at the front of the ring then those vnodes that cover the
     % tail of the ring will be involved in a disproportionate number of
     % queries.
-    OrderedVnodes =
-        get_ordered_vnodes(ReqId rem PartitionCount, PartitionCount, NVal),
+    {L1, L2} =
+        lists:split(ReqId rem PartitionCount,
+                        lists:seq(0, PartitionCount - 1)),
+    % Use an array to hold a list for each offset, before flattening the array
+    % back to a list to rejoin together
+    A0 = array:new(NVal, {default, []}),
+    {A1, _} =
+        lists:foldl(
+            fun(I, {A, Offset}) ->
+                    {array:set(Offset, [I|array:get(Offset, A)], A),
+                        (Offset + 1) rem NVal}
+            end,
+            {A0, 0},
+            L2 ++ L1
+        ),
+    OrderedVnodes = lists:flatten(array:to_list(A1)),
 
     % Setup an array for tracking which partition has "Wants" left, starting
     % with a value of PVC
@@ -189,56 +203,18 @@ initiate_plan(ReqId, NVal, PartitionCount, UnavailableVnodes, PVC) ->
 
     develop_plan(AvailableVnodes, NVal, PartitionWants, Countdown, []).
 
-get_ordered_vnodes(Split, PartitionCount, NVal) ->
-    CachedResult =
-        persistent_term:get({?MODULE, Split, PartitionCount, NVal}, undefined),
-    case CachedResult of
-        undefined ->
-            {L1, L2} =
-                lists:split(Split, lists:seq(0, PartitionCount - 1)),
-            % Use an array to hold a list for each offset, before flattening the array
-            % back to a list to rejoin together
-            A0 = array:new(NVal, {default, []}),
-            {A1, _} =
-                lists:foldl(
-                    fun(I, {A, Offset}) ->
-                        CurrentL =
-                            case
-                                array:get(Offset, A) of L when is_list(L) -> L
-                            end,
-                        {
-                            array:set(Offset, [I|CurrentL], A),
-                            (Offset + 1) rem NVal
-                        }
-                    end,
-                    {A0, 0},
-                    L2 ++ L1
-                ),
-            Vnodes = lists:flatten(array:to_list(A1)),
-            persistent_term:put(
-                {?MODULE, Split, PartitionCount, NVal},
-                Vnodes
-            ),
-            Vnodes;
-        CachedResult ->
-            CachedResult
-    end.
 
 develop_plan(_UnusedVnodes, _NVal, _PartitionWants, 0, VnodeCovers) ->
     % Use the countdown to know when to stop, rather than having the cost of
     % checking each entry in the PartitionWants array each loop
-    {ok, lists:sort(VnodeCovers)};
+    {ok, VnodeCovers};
 develop_plan([], _NVal, _PartitionWants, _N, VnodeCovers) ->
     % The previous function coverage_plan/7 returns "KeySpaces" as the second
     % element, which is then ignored - so we don't bother calculating this here
-    {insufficient_vnodes_available, [], lists:sort(VnodeCovers)};
-develop_plan(
-    [HeadVnode|RestVnodes],
-    NVal,
-    PartitionWants,
-    PartitionCountdown,
-    VnodeCovers
-) ->
+    {insufficient_vnodes_available, [], VnodeCovers};
+develop_plan([HeadVnode|RestVnodes], NVal,
+                PartitionWants, PartitionCountdown,
+                VnodeCovers) ->
     PartitionCount = array:size(PartitionWants),
     % Need to find what partitions are covered by this vnode
     LookBackFun =
@@ -248,40 +224,32 @@ develop_plan(
     % For these partitions covered by the vnode, are there any partitions with
     % non-zero wants
     PartsCoveredAndWanted =
-        lists:filter(
-            fun(P) -> array:get(P, PartitionWants) > 0 end,
-            PartsCoveredByHeadNode
-        ),
+        lists:filter(fun(P) -> array:get(P, PartitionWants) > 0 end,
+                        PartsCoveredByHeadNode),
     % If there are partitions that are covered by the vnode and have wants,
     % then we should include this vnode in the coverage plan for these
     % partitions.  Otherwise, skip the vnode.
     case length(PartsCoveredAndWanted) of
         L when L > 0 ->
-            % Reduce the wants
+            % Add the vnode to the coverage plan
+            VnodeCovers0 =
+                lists:sort([{HeadVnode, PartsCoveredAndWanted}|VnodeCovers]),
+            % Update the wants, for each partition that has been added to the
+            % coverage plan
+            UpdateWantsFun =
+                fun(P, PWA) -> array:set(P, array:get(P, PWA) - 1, PWA) end,
             PartitionWants0 =
-                lists:foldl(
-                    fun(P, PWA) ->
-                        array:set(P, array:get(P, PWA) - 1, PWA)
-                    end,
-                    PartitionWants,
-                    PartsCoveredAndWanted
-                ),
+                lists:foldl(UpdateWantsFun,
+                            PartitionWants,
+                            PartsCoveredAndWanted),
             % Now loop, to find use of the remaining vnodes
-            develop_plan(
-                RestVnodes,
-                NVal,
-                PartitionWants0,
-                PartitionCountdown - L,
-                [{HeadVnode, PartsCoveredAndWanted}|VnodeCovers]
-            );
+            develop_plan(RestVnodes, NVal,
+                            PartitionWants0, PartitionCountdown - L,
+                            VnodeCovers0);
         _L ->
-            develop_plan(
-                RestVnodes,
-                NVal,
-                PartitionWants,
-                PartitionCountdown,
-                VnodeCovers
-            )
+            develop_plan(RestVnodes, NVal,
+                            PartitionWants, PartitionCountdown,
+                            VnodeCovers)
     end.
 
 -spec find_coverage(non_neg_integer(),
@@ -706,60 +674,21 @@ all_refactor_1024_ring_tester() ->
             PC1 =
                 lists:foldl(
                     fun({_I, L}, Acc) ->
-                        lists:foldl(
-                            fun(P, IA) ->
-                                array:set(P, array:get(P, IA) + 1, IA)
-                            end,
-                            Acc,
-                            L
-                        )
+                        lists:foldl(fun(P, IA) ->
+                                            array:set(P,
+                                                        array:get(P, IA) + 1,
+                                                        IA)
+                                        end,
+                                        Acc,
+                                        L)
                     end,
                     PC,
-                    VnodeCovers
-                ),
+                    VnodeCovers),
             lists:foreach(fun(C) -> ?assertEqual(PVC, C) end, array:to_list(PC1))
         end,
 
     lists:foreach(fun(I) -> TestFun(I) end, lists:seq(0, 1023)).
 
-timed_ring_test_() ->
-    {timeout, 1200, fun timed_ring_tester/0}.
-
-timed_ring_tester() ->
-    io:format(user, "Timing tests:~n", []),
-    timed_ring_test(512, 1000),
-    timed_ring_test(1024, 1000),
-    timed_ring_test(2048, 300),
-    timed_ring_test(4096, 200),
-    timed_ring_test(8092, 200).
-
-timed_ring_test(RingSize, TestCount) ->
-    TT =
-        lists:sum(
-            lists:map(
-                fun(_I) ->
-                    {T, ok} =
-                        timer:tc(
-                            fun() ->
-                                bare_ring_tester(RingSize, fun initiate_plan/5)
-                            end
-                        ),
-                    T
-                end,
-                lists:seq(1, TestCount)
-            )
-        ),
-    io:format(
-        user,
-        "Average time to get coverage with ring_size=~w ~w~n",
-        [RingSize, TT div TestCount]
-    ).
-
-refactor_8192ring_test() ->
-    ring_tester(8192, fun initiate_plan/5).
-
-refactor_4096ring_test() ->
-    ring_tester(4096, fun initiate_plan/5).
 
 refactor_2048ring_test() ->
     ring_tester(2048, fun initiate_plan/5).
@@ -813,37 +742,16 @@ compare_tester(RingSize) ->
     ?assertMatch(true, RFC =< (PFC +  1)).
 
 
-bare_ring_tester(PartitionCount, CoverageFun) ->
-    ReqID = 100 * rand:uniform(10),
-    NVal = 3,
-    UnavailableKeySpaces = [],
-    PVC = 1,
-    {ok, _VnodeCovers0} =
-        CoverageFun(
-            ReqID,
-            NVal,
-            PartitionCount,
-            UnavailableKeySpaces,
-            PVC
-        ),
-    ok.
-
 ring_tester(PartitionCount, CoverageFun) ->
-    ring_tester(PartitionCount, CoverageFun, 100 * rand:uniform(10)).
+    ring_tester(PartitionCount, CoverageFun, 0).
 
 ring_tester(PartitionCount, CoverageFun, ReqId) ->
     NVal = 3,
     UnavailableKeySpaces = [],
     PVC = 1,
     {Vnodes, CoveredKeySpaces} =
-        ring_tester(
-            PartitionCount,
-            CoverageFun,
-            ReqId,
-            NVal,
-            UnavailableKeySpaces,
-            PVC
-        ),
+        ring_tester(PartitionCount, CoverageFun,
+                    ReqId, NVal, UnavailableKeySpaces, PVC),
     ExpVnodeCount = (PartitionCount div NVal) +  2,
     KeySpaces = lists:seq(0, PartitionCount - 1),
     ?assertMatch(KeySpaces, CoveredKeySpaces),
@@ -852,13 +760,9 @@ ring_tester(PartitionCount, CoverageFun, ReqId) ->
 ring_tester(PartitionCount, CoverageFun,
             Offset, NVal, UnavailableKeySpaces, PVC) ->
     {ok, VnodeCovers0} =
-        CoverageFun(
-            Offset,
-            NVal,
-            PartitionCount,
-            UnavailableKeySpaces,
-            PVC
-        ),
+        CoverageFun(Offset, NVal, PartitionCount,
+                        UnavailableKeySpaces,
+                        PVC),
     AccFun =
         fun({A, L}, {VnodeAcc, CoverAcc}) -> {[A|VnodeAcc], CoverAcc ++ L} end,
     {Vnodes, Coverage} = lists:foldl(AccFun, {[], []}, VnodeCovers0),
@@ -872,26 +776,20 @@ nonstandardring_tester(PartitionCount, CoverageFun) ->
     UnavailableKeySpaces = [OneDownVnode],
     PVC = 2,
     {ok, VnodeCovers} =
-        CoverageFun(
-            Offset,
-            NVal,
-            PartitionCount,
-            UnavailableKeySpaces,
-            PVC
-        ),
+        CoverageFun(Offset, NVal, PartitionCount,
+                        UnavailableKeySpaces,
+                        PVC),
 
     PC = array:new(PartitionCount, {default, 0}),
     PC1 =
         lists:foldl(
             fun({I, L}, Acc) ->
                 ?assertNotEqual(OneDownVnode, I),
-                lists:foldl(
-                    fun(P, IA) ->
-                        array:set(P, array:get(P, IA) + 1, IA)
-                    end,
-                    Acc,
-                    L
-                )
+                lists:foldl(fun(P, IA) ->
+                                    array:set(P, array:get(P, IA) + 1, IA)
+                                end,
+                                Acc,
+                                L)
             end,
             PC,
             VnodeCovers),
