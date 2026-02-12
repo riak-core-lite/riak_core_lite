@@ -45,6 +45,11 @@
 -type coverage_vnodes() :: [{index(), node()}].
 -type vnode_filters() :: [{node(), [{index(), [index()]}]}].
 -type coverage_plan() :: {coverage_vnodes(), vnode_filters()}.
+-type position() :: non_neg_integer().
+    % non_neg_integer() is 0 .. RingSize
+-type positions() :: list(position()).
+-type vnode_covers() :: {position(), list(position())}.
+
 
 %% ===================================================================
 %% Public API
@@ -52,70 +57,104 @@
 
 %% @doc Create a coverage plan to distribute work to a set
 %%      covering VNodes around the ring.
--spec create_plan(all | allup, pos_integer(), pos_integer(),
-                  req_id(), atom()) ->
-                         {error, term()} | coverage_plan().
+-spec create_plan(
+    all | allup, pos_integer(), pos_integer(), req_id(), atom()
+) ->
+    {error, term()} | coverage_plan().
 create_plan(VNodeSelector, NVal, PVC, ReqId, Service) ->
     {ok, CHBin} = riak_core_ring_manager:get_chash_bin(),
     PartitionCount = chashbin:num_partitions(CHBin),
     {ok, Ring} = riak_core_ring_manager:get_my_ring(),
-    %% Create a coverage plan with the requested primary
-    %% preference list VNode coverage.
-    %% Get a list of the VNodes owned by any unavailble nodes
-    Members = riak_core_ring:all_members(Ring),
-    NonCoverageNodes = [Node || Node <- Members,
-                                      riak_core_ring:get_member_meta(Ring, Node, participate_in_coverage) == false],
-
-    DownVNodes = [Index ||
-                     {Index, _Node}
-                         <- riak_core_apl:offline_owners(Service, CHBin, NonCoverageNodes)],
-
+    NonCoverageNodes =
+        lists:filter(
+            fun(Node) ->
+                ParticipatingInCoverage =
+                    riak_core_ring:get_member_meta(
+                        Ring,
+                        Node,
+                        participate_in_coverage
+                    ),
+                ParticipatingInCoverage == false
+            end,
+            riak_core_ring:all_members(Ring)
+        ),
+        % Nodes that have participate in coverage disabled, so are
+        % administratively blocked in participating
+    DownVNodes =
+        lists:map(
+            fun({Idx, _Node}) -> Idx end,
+            riak_core_apl:offline_owners(Service, CHBin, NonCoverageNodes)
+        ),
+        % Idx references for all primary partitions on nodes currently offline
     RingIndexInc = chash:ring_increment(PartitionCount),
-    UnavailableKeySpaces = [(DownVNode div RingIndexInc) || DownVNode <- DownVNodes],
-    %% Create function to map coverage keyspaces to
-    %% actual VNode indexes and determine which VNode
-    %% indexes should be filtered.
-    CoverageVNodeFun =
-        fun({Position, KeySpaces}, Acc) ->
-                %% Calculate the VNode index using the
-                %% ring position and the increment of
-                %% ring index values.
-                VNodeIndex = (Position rem PartitionCount) * RingIndexInc,
-                Node = chashbin:index_owner(VNodeIndex, CHBin),
-                CoverageVNode = {VNodeIndex, Node},
-                case length(KeySpaces) < NVal of
-                    true ->
-                        %% Get the VNode index of each keyspace to
-                        %% use to filter results from this VNode.
-                        KeySpaceIndexes = [(((KeySpaceIndex+1) rem
-                                             PartitionCount) * RingIndexInc) ||
-                                              KeySpaceIndex <- KeySpaces],
-                        {CoverageVNode, [{VNodeIndex, KeySpaceIndexes} | Acc]};
-                    false ->
-                        {CoverageVNode, Acc}
-                end
-        end,
+        % See https://github.com/OpenRiak/riak_core/issues/10
+        % It easier to handle the vnodes as a list of small integers 0..(RS-1)
+        % But all Idx's are stored in the ring with lots of 0s
+        % 
+        % Convert the list of DownVnodes into a list of small integers (i.e. 
+        % positions) by dividing by the ring_increment
+    UnavailableKeySpaces =
+        lists:map(
+            fun(Idx) -> Idx div RingIndexInc end,
+            DownVNodes
+        ),
+        % Unavailable indexes as small integers
 
-    CoveragePlanFun =
+    CoverageResult =
         case application:get_env(riak_core, legacy_coverage_planner, false) of
             true ->
                 % Safety net for refactoring, we can still go back to old
-                % function if necessary.  Note 35 x performance degradation
+                % function if necessary.  Note 100 x performance degradation
                 % with this function with ring_size of 1024
-                fun find_coverage/5;
+                find_coverage(
+                    ReqId,
+                    NVal,
+                    PartitionCount,
+                    UnavailableKeySpaces,
+                    lists:min([PVC, NVal])
+                );
             false ->
-                fun initiate_plan/5
+                initiate_plan(
+                    ReqId,
+                    NVal,
+                    PartitionCount,
+                    UnavailableKeySpaces,
+                    lists:min([PVC, NVal])
+                )
         end,
 
-    %% The ReqId value serves as a tiebreaker in the
-    %% compare_next_vnode function and is used to distribute
-    %% work to different sets of VNodes.
-    CoverageResult =
-        CoveragePlanFun(ReqId,
-                        NVal,
-                        PartitionCount,
-                        UnavailableKeySpaces,
-                        lists:min([PVC, NVal])),
+    CoverageVNodeFun =
+        fun({Position, KeySpaces}, Acc) ->
+            VNodeIndex = expand_index(Position, PartitionCount, RingIndexInc),
+            Node = chashbin:index_owner(VNodeIndex, CHBin),
+            CoverageVNode = {VNodeIndex, Node},
+            case length(KeySpaces) of
+                L when L < NVal ->
+                    KeySpaceIndexes =
+                        lists:map(
+                            fun(KSI) ->
+                                expand_index(
+                                    KSI + 1,
+                                    PartitionCount,
+                                    RingIndexInc
+                                )
+                            end,
+                            KeySpaces
+                        ),
+                    {CoverageVNode, [{VNodeIndex, KeySpaceIndexes} | Acc]};
+                _ ->
+                    
+                    {CoverageVNode, Acc}
+            end
+        end,
+        % A function to convert the positions (the small integers) into
+        % index/node pairings, and if the vnode is not required to cover all
+        % n_val partitions add the vnode to a list of filtered vnodes to return
+        % partial results
+        % 
+        % There is some duplicate effort as chashbin:index_owner/2 will revert
+        % the index back to a position.
+
     case CoverageResult of
         {ok, CoveragePlan} ->
             %% Assemble the data structures required for
@@ -136,7 +175,18 @@ create_plan(VNodeSelector, NVal, PVC, ReqId, Service) ->
 %% Internal functions
 %% ====================================================================
 
--type vnode_covers() :: {non_neg_integer(), list(non_neg_integer())}.
+%% Note
+%% There is an issue with ELS if there is `rem` within an anonymous function,
+%% and so some integer manipulation helper functions added to ease syntax
+%% highlighting issues.
+-spec expand_index(position(), pos_integer(), pos_integer()) -> index().
+expand_index(Position, RingSize, RingIncrement) ->
+    (Position rem RingSize) * RingIncrement.
+
+-spec lookback_position(pos_integer(), integer()) -> non_neg_integer().
+lookback_position(PartitionCount, Position) ->
+    % Handle negative positions when looking back.
+    (PartitionCount + Position) rem PartitionCount.
 
 %% @doc Produce a coverage plan
 %% The coverage plan should include all partitions at least PVC times
@@ -148,15 +198,19 @@ create_plan(VNodeSelector, NVal, PVC, ReqId, Service) ->
 %% UnavailableVnodes - any primary vnodes not available, as either the node is
 %% down, or set not to participate_in_coverage
 %% PVC - Primary Vnode Count, in effect the r value for the query
--spec initiate_plan(non_neg_integer(),
-                    pos_integer(),
-                    pos_integer(),
-                    list(non_neg_integer()),
-                    pos_integer()) ->
-                        {ok, list(vnode_covers())} |
-                            {insufficient_vnodes_available,
-                                list(non_neg_integer()),
-                                list(vnode_covers())}.
+-spec initiate_plan(
+    non_neg_integer(),
+    pos_integer(),
+    pos_integer(),
+    list(position()),
+    pos_integer())
+->
+    {ok, list(vnode_covers())} |
+    {
+        insufficient_vnodes_available,
+        any(),
+        list(vnode_covers())
+    }.
 initiate_plan(ReqId, NVal, PartitionCount, UnavailableVnodes, PVC) ->
     % Order the vnodes for the fold.  Will number each vnode in turn between
     % 0 and NVal - 1.  Then sort by this Offset, so that by default we visit
@@ -189,6 +243,33 @@ initiate_plan(ReqId, NVal, PartitionCount, UnavailableVnodes, PVC) ->
 
     develop_plan(AvailableVnodes, NVal, PartitionWants, Countdown, []).
 
+%% @doc
+%% Order the vnodes to reduce the time to calculate the plan.
+%% the vnodes are a list of positions 0 .. RingSize - 1
+%% For a given NVal, the most efficient plan will be every NValth position
+%% e.g. if RingSize = 16, NVal = 3
+%% 0, 2, 5, 8, 11, 14
+%% However if we take the positions 0 .. RingSize - 1 as the input before
+%% selecting then a third of the NVals would do almost all of the work - it is
+%% required to balance evenly around the cluster.
+%% It would be simpler to have just NVal plans, one for each offset - however
+%% there is always a remainder when RingSize rem NVal is not 0.  The filter
+%% vnodes that run a partial query to pick up the remainder in this case would
+%% be concentrated towards the end of the sequence, and this would be a further
+%% imbalance.
+%% So instead the initial position sequence 0 .. RingSize - 1 is split at a
+%% random point - to full distribute work across all possible plans.
+%% 
+%% On a node PartitionCount is constant, NVal will normally be fixed (or have
+%% very limited variation), so the Split is the only variable.
+%% 
+%% Typically there will be RingSize variations in this calculation, so rather
+%% than repeat the calculation each time, each variation is stored as a
+%% persistent term.
+-spec get_ordered_vnodes(
+    non_neg_integer(), pos_integer(), pos_integer())
+->
+    list(non_neg_integer()).
 get_ordered_vnodes(Split, PartitionCount, NVal) ->
     CachedResult =
         persistent_term:get({?MODULE, Split, PartitionCount, NVal}, undefined),
@@ -196,8 +277,8 @@ get_ordered_vnodes(Split, PartitionCount, NVal) ->
         undefined ->
             {L1, L2} =
                 lists:split(Split, lists:seq(0, PartitionCount - 1)),
-            % Use an array to hold a list for each offset, before flattening the array
-            % back to a list to rejoin together
+                % Split the list and loop around at a mark.  This means that
+                % the filtered vnodes will vary position. 
             A0 = array:new(NVal, {default, []}),
             {A1, _} =
                 lists:foldl(
@@ -224,16 +305,31 @@ get_ordered_vnodes(Split, PartitionCount, NVal) ->
             CachedResult
     end.
 
-develop_plan(_UnusedVnodes, _NVal, _PartitionWants, 0, VnodeCovers) ->
-    % Use the countdown to know when to stop, rather than having the cost of
-    % checking each entry in the PartitionWants array each loop
+-spec develop_plan(
+    positions(),
+    pos_integer(),
+    array:array(non_neg_integer()),
+    non_neg_integer(),
+        % A countdown of covered partitions, to stop the loop without
+        % the need to recount the covered partitions each loop
+        % Countdown should start at NVal * PartitionCount
+    list(vnode_covers()))
+->
+    {ok, list(vnode_covers())} |
+    {insufficient_vnodes_available, any(), list(vnode_covers())}.
+develop_plan(_UnusedPositions, _NVal, _PartitionWants, 0, VnodeCovers) ->
     {ok, lists:sort(VnodeCovers)};
 develop_plan([], _NVal, _PartitionWants, _N, VnodeCovers) ->
-    % The previous function coverage_plan/7 returns "KeySpaces" as the second
-    % element, which is then ignored - so we don't bother calculating this here
-    {insufficient_vnodes_available, [], lists:sort(VnodeCovers)};
+    {
+        insufficient_vnodes_available,
+        [],
+            % The previous function coverage_plan/7 returns "KeySpaces" as the
+            % second element, which is then ignored
+            % - so we don't bother calculating this here
+        lists:sort(VnodeCovers)
+    };
 develop_plan(
-    [HeadVnode|RestVnodes],
+    [HeadPos|RestPositions],
     NVal,
     PartitionWants,
     PartitionCountdown,
@@ -242,7 +338,7 @@ develop_plan(
     PartitionCount = array:size(PartitionWants),
     % Need to find what partitions are covered by this vnode
     LookBackFun =
-        fun(I) -> (PartitionCount + HeadVnode - I) rem PartitionCount end,
+        fun(I) -> lookback_position(PartitionCount, HeadPos - I) end,
     PartsCoveredByHeadNode =
         lists:sort(lists:map(LookBackFun, lists:seq(1, NVal))),
     % For these partitions covered by the vnode, are there any partitions with
@@ -268,15 +364,15 @@ develop_plan(
                 ),
             % Now loop, to find use of the remaining vnodes
             develop_plan(
-                RestVnodes,
+                RestPositions,
                 NVal,
                 PartitionWants0,
                 PartitionCountdown - L,
-                [{HeadVnode, PartsCoveredAndWanted}|VnodeCovers]
+                [{HeadPos, PartsCoveredAndWanted}|VnodeCovers]
             );
         _L ->
             develop_plan(
-                RestVnodes,
+                RestPositions,
                 NVal,
                 PartitionWants,
                 PartitionCountdown,
