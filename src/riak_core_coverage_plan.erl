@@ -47,7 +47,6 @@
 -type coverage_plan() :: {coverage_vnodes(), vnode_filters()}.
 -type position() :: non_neg_integer().
     % non_neg_integer() is 0 .. RingSize
--type positions() :: list(position()).
 -type vnode_covers() :: {position(), list(position())}.
 
 
@@ -229,19 +228,19 @@ initiate_plan(ReqId, NVal, PartitionCount, UnavailableVnodes, PVC) ->
     % to always start at the front of the ring then those vnodes that cover the
     % tail of the ring will be involved in a disproportionate number of
     % queries.
-    OrderedVnodes =
-        get_ordered_vnodes(ReqId rem PartitionCount, PartitionCount, NVal),
+    ShuffledPositions =
+        get_shuffled_positions(ReqId rem PartitionCount, PartitionCount, NVal),
 
     % Setup an array for tracking which partition has "Wants" left, starting
     % with a value of PVC
     PartitionWants = array:new(PartitionCount, {default, PVC}),
     Countdown = PartitionCount * PVC,
 
-    % Subtract any Unavailable vnodes.  Must only assign available primary
-    % vnodes a role in the coverage plan
-    AvailableVnodes = lists:subtract(OrderedVnodes, UnavailableVnodes),
+    % Subtract any Unavailable vnodes (actually positions).  Must only assign
+    % available primary vnodes a role in the coverage plan
+    AvailablePositions = lists:subtract(ShuffledPositions, UnavailableVnodes),
 
-    develop_plan(AvailableVnodes, NVal, PartitionWants, Countdown, []).
+    develop_plan(AvailablePositions, NVal, PartitionWants, Countdown, []).
 
 %% @doc
 %% Order the vnodes to reduce the time to calculate the plan.
@@ -266,11 +265,11 @@ initiate_plan(ReqId, NVal, PartitionCount, UnavailableVnodes, PVC) ->
 %% Typically there will be RingSize variations in this calculation, so rather
 %% than repeat the calculation each time, each variation is stored as a
 %% persistent term.
--spec get_ordered_vnodes(
+-spec get_shuffled_positions(
     non_neg_integer(), pos_integer(), pos_integer())
 ->
-    list(non_neg_integer()).
-get_ordered_vnodes(Split, PartitionCount, NVal) ->
+    list(position()).
+get_shuffled_positions(Split, PartitionCount, NVal) ->
     CachedResult =
         persistent_term:get({?MODULE, Split, PartitionCount, NVal}, undefined),
     case CachedResult of
@@ -306,7 +305,7 @@ get_ordered_vnodes(Split, PartitionCount, NVal) ->
     end.
 
 -spec develop_plan(
-    positions(),
+    list(position()),
     pos_integer(),
     array:array(non_neg_integer()),
     non_neg_integer(),
