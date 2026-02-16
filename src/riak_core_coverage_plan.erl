@@ -142,7 +142,6 @@ create_plan(VNodeSelector, NVal, PVC, ReqId, Service) ->
                         ),
                     {CoverageVNode, [{VNodeIndex, KeySpaceIndexes} | Acc]};
                 _ ->
-                    
                     {CoverageVNode, Acc}
             end
         end,
