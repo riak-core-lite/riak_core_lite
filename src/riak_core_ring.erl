@@ -378,14 +378,13 @@ get_cluster_lock(State) ->
       Rest -> Rest
   end.
 
--spec delete_cluster_lock(string(), chstate()) -> chstate() |
-                                                  {error, wrong_ticket} |
-                                                  {error, no_change}.
+-spec delete_cluster_lock(string(), chstate()) -> chstate() | {error, wrong_ticket}.
 delete_cluster_lock(Ticket, State) ->
   case get_cluster_lock(State) of
-      {ok, {Ticket, _, _}} -> remove_meta('$lock', State);
-      {ok, _Lock} -> {error, wrong_ticket};
-      _ -> {error, no_change}
+        {ok, {Ticket, _, _}} ->
+            remove_meta('$lock', State);
+        {ok, _Lock} ->
+            {error, wrong_ticket}
   end.
 
 %% @doc Produce a list of all active (not marked as down) cluster members

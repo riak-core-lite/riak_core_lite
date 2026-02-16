@@ -147,8 +147,8 @@ lock_acquire_register() ->
      fun lock_acquire/3].
 
 lock_acquire([_, _, _, _, _, TicketStr, DescriptionStr], _, _) ->
-    Ticket = list_to_binary(TicketStr),
-    Description = list_to_binary(DescriptionStr),
+    Ticket = convert_string(TicketStr),
+    Description = convert_string(DescriptionStr),
     try
         %% TODO aef- make actions blocking if possible with some timeout
         case riak_core_claimant:acquire_cluster_lock(Ticket, Description) of
@@ -158,7 +158,7 @@ lock_acquire([_, _, _, _, _, TicketStr, DescriptionStr], _, _) ->
                                     "Cluster has a lock:\n",
                                     io_lib:format("Ticket:      ~s~n", [TicketStr]),
                                     io_lib:format("Description: ~s~n", [DescriptionStr])
-                                   ])];
+                                ])];
             {error, lock_unavailable} ->
                 make_alert("Cluster already has lock.");
             {error, ring_not_ready} ->
@@ -188,7 +188,7 @@ lock_release_register() ->
      fun lock_release/3].
 
 lock_release([_, _, _, _, _, TicketStr], _, _) ->
-    Ticket = list_to_binary(TicketStr),
+    Ticket = convert_string(TicketStr),
     try
         case riak_core_claimant:release_cluster_lock(Ticket) of
             {ok, no_lock} ->
@@ -214,6 +214,15 @@ lock_release([_, _, _, _, _, TicketStr], _, _) ->
             ?LOG_ERROR("Releasing lock failed ~p ~p", [Exception, Reason]),
             make_alert("Releasing lock failed, see log for details.")
   end.
+
+-spec convert_string(list()) -> unicode:chardata()|unexpected_string_input.
+convert_string(InputText) ->
+    case unicode:characters_to_binary(InputText) of
+        CharData when is_binary(CharData) ->
+            CharData;
+        _ ->
+            unexpected_string_input
+    end.
 
 format_utc_timestamp(TS) ->
     {{Year,Month,Day}, {Hour,Minute,_Second}} = calendar:now_to_universal_time(TS),

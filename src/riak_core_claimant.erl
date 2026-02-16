@@ -213,6 +213,8 @@ clear() ->
 ring_changed(Node, Ring) ->
     internal_ring_changed(Node, Ring).
 
+-type string_input() :: unicode:chardata()|unexpected_string_input.
+
 %% @doc A cluster lock is not a proper two-phase lock. It cannot
 %% guarantee that a lock action has been propagated to all nodes
 %% successfully.
@@ -227,11 +229,11 @@ ring_changed(Node, Ring) ->
 %% and a new node is set as claimant, the lock will be lost even
 %% though it has been "acquired". This also happens with release.
 %%
--spec acquire_cluster_lock(string(), string()) -> ok | {error, term()}.
+-spec acquire_cluster_lock(string_input(), string_input()) -> {ok, lock_acquired} | {error, term()}.
 acquire_cluster_lock(Ticket, Description) ->
     acquire_cluster_lock(Ticket, Description, ?CLUSTER_LOCK_ATTEMPTS).
 
--spec acquire_cluster_lock(string(), string(), integer()) -> {ok, term()} |
+-spec acquire_cluster_lock(string_input(), string_input(), integer()) -> {ok, term()} |
                                                              {error, term()}.
 acquire_cluster_lock(Ticket, Description, _) when not is_binary(Ticket) or
                                                   not is_binary(Description) ->
@@ -263,11 +265,11 @@ acquire_cluster_lock(Ticket, Description, Attempts) ->
             {error, not_capable}
     end.
 
--spec release_cluster_lock(string()) -> {ok, term()} | {error, term()}.
+-spec release_cluster_lock(string_input()) -> {ok, term()} | {error, term()}.
 release_cluster_lock(Ticket) ->
     release_cluster_lock(Ticket, ?CLUSTER_LOCK_ATTEMPTS).
 
--spec release_cluster_lock(string(), integer()) -> {ok, term()} |
+-spec release_cluster_lock(string_input(), integer()) -> {ok, term()} |
                                                    {error, term()}.
 release_cluster_lock(_Ticket, 0) ->
     {error, ring_not_ready};
