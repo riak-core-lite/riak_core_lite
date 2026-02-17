@@ -283,8 +283,16 @@ create_ring(RingSize, NumNodes) ->
 
 create_ring(RingSize, NumNodes, TargetNVal) ->
     SingletonRing = riak_core_ring:fresh(RingSize, 'test@127.0.0.1'),
-    application:set_env(riak_core, wants_claim_fun, {riak_core_claim, default_wants_claim}),
-    application:set_env(riak_core, choose_claim_fun, {riak_core_claim, default_choose_claim}),
+    application:set_env(
+        riak_core,
+        wants_claim_fun,
+        {riak_core_membership_claim, default_wants_claim}
+    ),
+    application:set_env(
+        riak_core,
+        choose_claim_fun,
+        {riak_core_membership_claim, default_choose_claim}
+    ),
     Commands = generate_commands(NumNodes - 1),
     run_simulator(Commands, SingletonRing, TargetNVal).
 
