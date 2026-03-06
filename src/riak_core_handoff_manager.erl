@@ -11,6 +11,8 @@
 %% KIND, either express or implied.  See the License for the
 %% specific language governing permissions and limitations
 %% under the License.
+%%
+%% -------------------------------------------------------------------
 
 %% Copyright (c) 2007-2012 Basho Technologies, Inc.  All Rights Reserved.
 -module(riak_core_handoff_manager).
@@ -306,8 +308,8 @@ handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
                         case ShouldILog of
                             true ->
                                 ?LOG_INFO(
-                                    "An ~w handoff of partition ~w ~w "
-                                    "was terminated for reason: ~w",
+                                    "An ~0tp handoff of partition ~0tp ~0tp "
+                                    "was terminated for reason: ~0tp",
                                     [Dir, M, I, Reason]
                                 );
                             false ->
@@ -316,8 +318,8 @@ handle_info({'DOWN', Ref, process, _Pid, Reason}, State=#state{handoffs=HS}) ->
                         true;
                     _ ->
                         ?LOG_ERROR(
-                            "An ~w handoff of partition ~w ~w "
-                            "was terminated for reason: ~w",
+                            "An ~0tp handoff of partition ~0tp ~0tp "
+                            "was terminated for reason: ~0tp",
                             [Dir, M, I, Reason]
                         ),
                         true
@@ -659,13 +661,16 @@ kill_xfer_i(ModSrcTarget, Reason, HS) ->
                             src_node=SrcNode,
                             transport_pid=TP
                            } = Xfer,
-            Msg = "~p transfer of ~p from ~p ~p to ~p ~p killed for reason ~p",
             case Type of
                 undefined ->
                     ok;
                 _ ->
-                    ?LOG_INFO(Msg, [Type, Mod, SrcNode, SrcPartition,
-                                     TargetNode, TargetPartition, Reason])
+                    ?LOG_INFO(
+                        "~0tp transfer of ~0tp from ~0tp ~0tp to"
+                        " ~0tp ~0tp killed for reason ~tp",
+                        [Type, Mod, SrcNode, SrcPartition,
+                            TargetNode, TargetPartition, Reason]
+                    )
             end,
             exit(TP, {kill_xfer, Reason}),
             kill_xfer_i(ModSrcTarget, Reason, HS2)

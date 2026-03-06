@@ -1,6 +1,7 @@
+%% -*- mode: erlang; erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2011 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -18,11 +19,11 @@
 %%
 %% -------------------------------------------------------------------
 -module(worker_pool_test).
-
 -behaviour(riak_core_vnode_worker).
--include_lib("eunit/include/eunit.hrl").
 
 -export([init_worker/3, handle_work/3]).
+
+-include_lib("eunit/include/eunit.hrl").
 
 init_worker(_VnodeIndex, Noreply, _WorkerProps) ->
     {ok, Noreply}.
@@ -86,7 +87,7 @@ simple_node_worker_pool() ->
     [ ?assertEqual(true, receive_result(N)) || N <- lists:seq(1, 10)],
     unlink(BestEffortPool),
     riak_core_node_worker_pool:stop(BestEffortPool, normal),
-    
+
     {ok, AssuredForwardingPool} =
         riak_core_node_worker_pool:start_link(?MODULE,
                                                 5,
@@ -131,16 +132,14 @@ simple_noreply_worker_pool() ->
 
 pool_test_() ->
     {setup,
-        fun() ->
-                error_logger:tty(false)
-        end,
-        fun(_) ->
-                error_logger:tty(true)
+        fun riak_core_test_util:logger_silence/0,
+        fun(Level) ->
+            logger:set_handler_config(default, level, Level)
         end,
         [
             fun simple_worker_pool/0,
             fun simple_noreply_worker_pool/0,
-			fun simple_node_worker_pool/0
+            fun simple_node_worker_pool/0
         ]
     }.
 

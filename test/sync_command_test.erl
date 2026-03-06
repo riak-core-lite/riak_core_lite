@@ -1,6 +1,7 @@
+%% -*- mode: erlang; erlang-indent-level: 4; indent-tabs-mode: nil -*-
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2013-2014 Basho Technologies, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -25,7 +26,7 @@
 sync_test_() ->
     {foreach,
      fun setup_simple/0,
-     fun stop_servers/1,
+     fun cleanup_simple/1,
      [ {<<"Assert ok throw">>,
         fun() ->
             ?assertEqual(ok, mock_vnode:sync_error({0, node()}, goodthrow))
@@ -55,14 +56,14 @@ sync_test_() ->
 
 
 setup_simple() ->
-    stop_servers(self()),
+    LogLevel = riak_core_test_util:logger_silence(),
+    stop_servers(),
     Vars = [{ring_creation_size, 8},
             {ring_state_dir, "<nostore>"},
             %% Don't allow rolling start of vnodes as it will cause a
             %% race condition with `all_nodes'.
             {core_vnode_eqc_pool_size, 0},
             {vnode_rolling_start, 0}],
-    error_logger:tty(false),
     _ = [begin
         Old = app_helper:get_env(riak_core, AppKey),
         ok = application:set_env(riak_core, AppKey, Val),
@@ -84,17 +85,22 @@ setup_simple() ->
     %%       the vnode mgr before this call have been handled.  This
     %%       guarantees that the vnode mgr ets tab is up-to-date
 
-    riak_core:register([{vnode_module, mock_vnode}]).
+    riak_core:register([{vnode_module, mock_vnode}]),
+    LogLevel.
 
+cleanup_simple(LogLevel) ->
+    stop_servers(),
+    logger:set_handler_config(default, level, LogLevel).
 
-stop_servers(_Pid) ->
+stop_servers() ->
     %% Make sure VMaster is killed before sup as start_vnode is a cast
     %% and there may be a pending request to start the vnode.
     stop_pid(whereis(mock_vnode_master)),
     stop_pid(whereis(riak_core_vnode_manager)),
     stop_pid(whereis(riak_core_vnode_events)),
     stop_pid(whereis(riak_core_vnode_sup)),
-    application:stop(exometer).
+    application:stop(exometer),
+    logger:remove_primary_filter(silence_logs).
 
 stop_pid(undefined) ->
     ok;

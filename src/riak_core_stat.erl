@@ -1,6 +1,7 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
+%% Copyright (c) 2007-2011 Basho Technologies, Inc.
+%% Copyright (c) 2018-2024 Workday, Inc.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -28,16 +29,26 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, get_stats/0, get_stats/1, update/1,
-         register_stats/0, vnodeq_stats/0,
-	 register_stats/2,
-	 register_vnode_stats/3, unregister_vnode_stats/2,
-	 vnodeq_stats/1,
-	 prefix/0]).
+-export([
+    get_stats/0, get_stats/1,
+    prefix/0,
+    register_stats/0, register_stats/2,
+    register_vnode_stats/3, unregister_vnode_stats/2,
+    start_link/0,
+    update/1
+]).
+
+%% exometer callbacks
+-export([
+    vnodeq_stats/0, vnodeq_stats/1
+]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2
+]).
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -155,15 +166,6 @@ handle_cast({update, Arg}, State) ->
 handle_cast(_Req, State) ->
     {noreply, State}.
 
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
 
 exometer_update(Name, Value) ->
     case exometer:update(Name, Value) of
@@ -209,11 +211,11 @@ stats() ->
 
 nwp_stats() ->
     PoolNames = [vnode_pool, unregistered] ++ riak_core_node_worker_pool:pools(),
-    
+
     [nwp_stat(Pool) || Pool <- PoolNames] ++
-    
+
     [nwpqt_stat(Pool) || Pool <- PoolNames] ++
-    
+
     [nwpwt_stat(Pool) || Pool <- PoolNames].
 
 nwp_stat(Pool) ->
@@ -232,25 +234,54 @@ nwpwt_stat(Pool) ->
 
 system_stats() ->
     [
-     {cpu_stats, cpu, [{sample_interval, 5000}], [{nprocs, cpu_nprocs},
-                                                  {avg1  , cpu_avg1},
-                                                  {avg5  , cpu_avg5},
-                                                  {avg15 , cpu_avg15}]},
-     {mem_stats, {function, memsup, get_memory_data, [], match, {total, allocated, '_'}},
-      [], [{total, mem_total},
-           {allocated, mem_allocated}]},
-     {memory_stats, {function, erlang, memory, [], proplist, [total, processes, processes_used,
-                                                              system, atom, atom_used, binary,
-                                                              code, ets]},
-      [], [{total         , memory_total},
-           {processes     , memory_processes},
-           {processes_used, memory_processes_used},
-           {system        , memory_system},
-           {atom          , memory_atom},
-           {atom_used     , memory_atom_used},
-           {binary        , memory_binary},
-           {code          , memory_code},
-           {ets           , memory_ets}]}
+        {cpu_stats, cpu, [{sample_interval, 5000}], [
+            {nprocs,    cpu_nprocs},
+            {avg1,      cpu_avg1},
+            {avg5,      cpu_avg5},
+            {avg15,     cpu_avg15}
+        ]},
+        {mem_stats,
+            {function, memsup, get_memory_data, [],
+                match, {total, allocated, '_'}
+            }, [], [
+            {total,     mem_total},
+            {allocated, mem_allocated}
+        ]},
+        {memory_stats,
+            {function, erlang, memory, [], proplist, [
+                total, processes, processes_used, system,
+                atom, atom_used, binary, code, ets
+            ]}, [], [
+            {total,             memory_total},
+            {processes,         memory_processes},
+            {processes_used,    memory_processes_used},
+            {system,            memory_system},
+            {atom,              memory_atom},
+            {atom_used,         memory_atom_used},
+            {binary,            memory_binary},
+            {code,              memory_code},
+            {ets,               memory_ets}
+        ]},
+        {vm_stats,
+            {function, riak_core_vm_mon, vm_stats, [], match, {
+                atom_lim, atom_cnt, atom_pct,
+                ets_lim,  ets_cnt,  ets_pct,
+                port_lim, port_cnt, port_pct,
+                proc_lim, proc_cnt, proc_pct
+            }}, [], [
+            {atom_lim, vm_atom_limit},
+            {atom_cnt, vm_atom_count},
+            {atom_pct, vm_atom_percent},
+            {ets_lim,  vm_ets_limit},
+            {ets_cnt,  vm_ets_count},
+            {ets_pct,  vm_ets_percent},
+            {port_lim, vm_port_limit},
+            {port_cnt, vm_port_count},
+            {port_pct, vm_port_percent},
+            {proc_lim, vm_proc_limit},
+            {proc_cnt, vm_proc_count},
+            {proc_pct, vm_proc_percent}
+        ]}
     ].
 
 %% Provide aggregate stats for vnode queues.  Compute instantaneously for now,
