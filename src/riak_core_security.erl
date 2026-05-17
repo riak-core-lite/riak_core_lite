@@ -1085,15 +1085,15 @@ match_source([{UserName, {IP,Mask}, Source, Options}|Tail], User, PeerIP) ->
 
 sort_sources(Sources) ->
     %% sort sources first by userlist, so that 'all' matches come last
-    %% and then by CIDR, so that most sprcific masks come first
+    %% and then by CIDR, so that most specific masks come first
     Sources1 = lists:sort(fun({UserA, _, _, _}, {UserB, _, _, _}) ->
                     case {UserA, UserB} of
                         {all, all} ->
                             true;
-                        {all, _} ->
-                            %% anything is greater than 'all'
-                            true;
                         {_, all} ->
+                            %% anything should come before 'all'
+                            true;
+                        {all, _} ->
                             false;
                         {_, _} ->
                             true
