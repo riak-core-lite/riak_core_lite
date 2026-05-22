@@ -1129,10 +1129,10 @@ group_sources(Sources) ->
                     case {UserA, UserB} of
                         {[all], [all]} ->
                             true;
-                        {[all], _} ->
-                            %% anything is greater than 'all'
-                            true;
                         {_, [all]} ->
+                            %% anything should come before 'all'
+                            true;
+                        {[all], _} ->
                             false;
                         {_, _} ->
                             true
