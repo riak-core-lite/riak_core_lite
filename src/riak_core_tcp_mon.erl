@@ -499,9 +499,6 @@ ssl_test_() ->
                 "localhost",
                 Port,
                 [{active, true},
-                    {customize_hostname_check,
-                        [{match_fun,
-                            fun("localhost", {cn,"site1.basho.com"}) -> true end}]},
                     {certfile, "test/site2.crt"},
                     {keyfile, "test/site2.key"},
                     {cacertfile, "test/ca.crt"}
