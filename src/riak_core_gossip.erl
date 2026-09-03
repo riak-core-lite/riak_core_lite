@@ -333,7 +333,7 @@ remove_from_cluster(Ring, ExitingNode, Seed) ->
     % Get a list of indices owned by the ExitingNode...
     AllOwners = riak_core_ring:all_owners(Ring),
     % Transfer indexes to other nodes...
-    ExitRing = case attempt_simple_transfer(Seed,
+    ExitRing = case attempt_simple_transfer(rand_state(Seed),
                                             Ring,
                                             AllOwners,
                                             ExitingNode)
@@ -357,6 +357,13 @@ remove_from_cluster(Ring, ExitingNode, Seed) ->
                        riak_core_claim:claim_rebalance_n(TempRing, Other)
                end,
     ExitRing.
+
+%% riak_core_claimant calls `erlang:timestamp/0` and passes it as the seed.
+%% We transform that `{A,B,C}` data structure into a `rand` state.
+rand_state({A, B, C} = Seed)
+    when is_integer(A), is_integer(B), is_integer(C) ->
+    rand:seed_s(exsss, Seed);
+rand_state(State) -> State.
 
 attempt_simple_transfer(Seed, Ring, Owners,
                         ExitingNode) ->
@@ -426,3 +433,29 @@ attempt_simple_transfer(Seed, Ring, [{_, N} | Rest],
                             lists:keyreplace(N, 1, Last, {N, Idx}));
 attempt_simple_transfer(_, Ring, [], _, _, _, _) ->
     {ok, Ring}.
+
+%% ===================================================================
+%% EUnit tests
+%% ===================================================================
+
+-ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
+
+%% Removing a node reassigns its partitions through
+%% attempt_simple_transfer/4, seeded by the claimant with a timestamp. After
+%% the random -> rand migration that seed crashed rand:uniform_s/2, so a
+%% remove could crash the claimant's ring transaction.
+remove_from_cluster_seed_test() ->
+    %% target_n 2 on a round-robin ring of 5 is what makes a simple transfer
+    %% find a qualifying candidate; at 4 it falls through to the rebalance
+    %% path and never draws.
+    application:set_env(riak_core, target_n_val, 2),
+    Ring = riak_core_test_util:fake_ring(64, 5),
+    Exiting = lists:last(riak_core_ring:all_members(Ring)),
+    ExitRing = remove_from_cluster(Ring, Exiting, erlang:timestamp()),
+    ?assertEqual([], [I || {I, N} <- riak_core_ring:all_owners(ExitRing), N =:= Exiting]),
+    ?assertEqual(riak_core_ring:num_partitions(Ring),
+                 riak_core_ring:num_partitions(ExitRing)).
+
+-endif.

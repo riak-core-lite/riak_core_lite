@@ -1701,10 +1701,14 @@ handle_down_nodes(CState, Next) ->
                  NextDown = lists:member(NO, DownMembers),
                  case OwnerLeaving and NextDown of
                      true ->
-                         Active = riak_core_ring:active_members(CState) -- [O],
-                         RNode = lists:nth(rand:uniform(length(Active)),
-                                           Active),
-                         {Idx, O, RNode, Mods, Status};
+                         case riak_core_ring:active_members(CState) -- [O] of
+                             [] ->
+                                 T;
+                             Active ->
+                                 RNode = lists:nth(rand:uniform(length(Active)),
+                                                   Active),
+                                 {Idx, O, RNode, Mods, Status}
+                         end;
                      _ -> T
                  end
              end
@@ -1874,3 +1878,27 @@ log(next, {Idx, Owner, NewOwner}) ->
     logger:debug("(pending) ~b :: ~p -> ~p~n",
                  [Idx, Owner, NewOwner]);
 log(_, _) -> ok.
+
+%% ===================================================================
+%% EUnit tests
+%% ===================================================================
+
+-ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
+
+%% A two-node cluster whose leaving owner has a pending transfer to a node
+%% marked down leaves nobody active to reassign the transfer to.
+handle_down_nodes_nobody_left_test() ->
+    A = 'a@127.0.0.1',
+    B = 'b@127.0.0.1',
+    Ring0 = riak_core_ring:fresh(8, A),
+    Ring1 = riak_core_ring:add_member(A, Ring0, B),
+    Ring2 = riak_core_ring:set_member(A, Ring1, B, valid, same_vclock),
+    Ring3 = riak_core_ring:leave_member(A, Ring2, A),
+    Ring = riak_core_ring:down_member(A, Ring3, B),
+    Next = [{0, A, B, [], awaiting}],
+    %% Nothing to reassign to and the target is down: the transfer goes.
+    ?assertEqual([], handle_down_nodes(Ring, Next)).
+
+-endif.
