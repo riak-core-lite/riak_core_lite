@@ -181,18 +181,10 @@ startable_vnodes(Mod, Ring) ->
 
 maybe_start_vnode_proxies(Ring) ->
     Mods = [M || {_, M} <- riak_core:vnode_modules()],
-    Size = riak_core_ring:num_partitions(Ring),
-    FutureSize = riak_core_ring:future_num_partitions(Ring),
-    Larger = Size < FutureSize,
-    case Larger of
-        true ->
-            FutureIdxs =
-                riak_core_ring:all_owners(riak_core_ring:future_ring(Ring)),
-            _ = [riak_core_vnode_proxy_sup:start_proxy(Mod, Idx)
-                 || {Idx, _} <- FutureIdxs, Mod <- Mods],
-            ok;
-        false -> ok
-    end.
+    FutureIdxs = riak_core_ring:all_owners(riak_core_ring:future_ring(Ring)),
+    _ = [riak_core_vnode_proxy_sup:start_proxy(Mod, Idx)
+         || {Idx, _} <- FutureIdxs, Mod <- Mods],
+    ok.
 
 maybe_stop_vnode_proxies(Ring) ->
     Mods = [M || {_, M} <- riak_core:vnode_modules()],
