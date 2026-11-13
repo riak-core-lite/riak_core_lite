@@ -171,9 +171,8 @@ nodes(CHash) ->
 ordered_from(Index, {NumPartitions, NodeEntries}) ->
     <<IndexAsInt:160/integer>> = Index,
     Inc = ring_increment(NumPartitions),
-    {NodeEntriesA, NodeEntriesB} = lists:split(IndexAsInt
-                                                   div Inc
-                                                   + 1,
+    {NodeEntriesA, NodeEntriesB} = lists:split(min(IndexAsInt div Inc + 1,
+                                                   NumPartitions),
                                                NodeEntries),
     NodeEntriesB ++ NodeEntriesA.
 
@@ -345,6 +344,11 @@ inverse_pred_test() ->
          || {I, _}
                 <- chash:predecessors(chash:key_of(4), CHash)],
     ?assertEqual(S, (lists:reverse(P))).
+
+predecessors_wrap_test() ->
+    CHash = chash:fresh(96, the_node),
+    {LastIdx, LastNode} = lists:last(chash:nodes(CHash)),
+    ?assertEqual([{LastIdx, LastNode}], chash:predecessors(-1, CHash, 1)).
 
 merge_test() ->
     CHashA = chash:fresh(8, node_one),
